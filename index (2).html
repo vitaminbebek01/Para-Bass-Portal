@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Para Bass | Komuta Merkezi</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #ffffff; /* Bembeyaz Ana Ekran */
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .card {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0, 191, 255, 0.15); /* Açık mavi gölge */
+            border-top: 6px solid #40E0D0; /* Turkuaz Üst Çizgi */
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+        }
+        h1 {
+            color: #00BFFF; /* Açık Mavi Başlık */
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 15px;
+        }
+        input[type="text"] {
+            width: 90%;
+            padding: 16px;
+            border: 2px solid #ADD8E6; /* Çok açık mavi çerçeve */
+            border-radius: 10px;
+            font-size: 15px;
+            margin-bottom: 20px;
+            outline: none;
+            transition: 0.3s;
+        }
+        input[type="text"]:focus {
+            border-color: #40E0D0; /* Tıklanınca Turkuaz çerçeve */
+            box-shadow: 0 0 10px rgba(64, 224, 208, 0.2);
+        }
+        button {
+            background-color: #40E0D0; /* Turkuaz Buton */
+            color: white;
+            border: none;
+            padding: 16px;
+            width: 100%;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover {
+            background-color: #00BFFF; /* Üzerine gelince Açık Mavi */
+            box-shadow: 0 5px 15px rgba(0, 191, 255, 0.3);
+        }
+        #status-msg {
+            margin-top: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            display: none;
+        }
+        .success { color: #40E0D0; }
+        .error { color: #ff4d4d; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>Para Bass </h1>
+        <p>AI Destekli E-Ticaret Asistanı<br>İşlenecek Trendyol linkini aşağıya yapıştırın.</p>
+        
+        <input type="text" id="productUrl" placeholder="https://www.trendyol.com/urun-linki...">
+        <button onclick="sendToMake()">Ürünü Çek ve İşle</button>
+
+        <div id="status-msg"></div>
+    </div>
+
+    <script>
+        function sendToMake() {
+            const urlInput = document.getElementById("productUrl").value;
+            const statusBox = document.getElementById("status-msg");
+            
+            // Senin Make.com'dan aldığın webhook linki
+            const webhookUrl = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
+
+            if (!urlInput) {
+                statusBox.innerHTML = "Lütfen önce bir Trendyol linki yapıştırın!";
+                statusBox.className = "error";
+                statusBox.style.display = "block";
+                return;
+            }
+
+            statusBox.innerHTML = "Sinyal gönderiliyor, lütfen bekleyin...";
+            statusBox.style.color = "#00BFFF";
+            statusBox.style.display = "block";
+
+            // Sinyali Make.com'a fırlatıyoruz
+            fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ "trendyolUrl": urlInput })
+            })
+            .then(response => {
+                if (response.ok) {
+                    statusBox.innerHTML = "✅ Sinyal Make.com'a ulaştı! İşlem Başladı.";
+                    statusBox.className = "success";
+                } else {
+                    statusBox.innerHTML = "❌ Sinyal gitti ama Make.com cevap vermedi.";
+                    statusBox.className = "error";
+                }
+            })
+            .catch(error => {
+                statusBox.innerHTML = "❌ İnternet bağlantısı veya sistem hatası!";
+                statusBox.className = "error";
+            });
+        }
+    </script>
+
+</body>
+</html>
