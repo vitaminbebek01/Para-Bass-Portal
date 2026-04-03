@@ -20,7 +20,6 @@
         .result-content { font-size: 15px; color: #333; word-wrap: break-word; white-space: pre-wrap; }
         .copy-btn { position: absolute; top: 10px; right: 10px; background-color: #00bfff; color: white; border: none; padding: 5px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; width: auto; }
         .copy-btn:hover { background-color: #009acd; }
-        /* Resimlerin yan yana durması için */
         #resImages { display: flex; flex-wrap: wrap; justify-content: flex-start; }
     </style>
 </head>
@@ -69,7 +68,7 @@
 
     <script>
         // KANKA DİKKAT: MAKE WEBHOOK LİNKİNİ AŞAĞIYA YAPIŞTIRMAYI UNUTMA!
-        const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
+        const MAKE_WEBHOOK_URL = "BURAYA_MAKE_WEBHOOK_LINKINI_YAPISTIR";
 
         async function startProcess() {
             const url = document.getElementById('urlInput').value;
@@ -105,7 +104,7 @@
                     document.getElementById('resPrice').innerText = parts[2] ? parts[2].trim() : "Bulunamadı";
                     document.getElementById('resVideo').innerText = parts[3] ? parts[3].trim() : "Video Bulunamadı";
 
-                    // Resimleri Kanlı Canlı Ekrana Basma (Sürükle Bırak)
+                    // Resimleri kanlı canlı ekrana basma ve anında JPG'ye çevirme
                     let rawImages = parts[4] ? parts[4].trim() : "";
                     let cleanImages = rawImages.match(/https?:\/\/[^\s"',]+/g);
                     
@@ -115,7 +114,10 @@
                     if (cleanImages && cleanImages.length > 0) {
                         cleanImages.forEach(imgUrl => {
                             let imgElement = document.createElement("img");
-                            imgElement.src = imgUrl;
+                            
+                            // SİHİRLİ DOKUNUŞ BURADA: wsrv.nl proxy'si ile .webp'yi anında .jpg'ye çeviriyoruz
+                            imgElement.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`;
+                            
                             imgElement.style.width = "100px"; 
                             imgElement.style.height = "100px";
                             imgElement.style.objectFit = "contain";
@@ -123,7 +125,7 @@
                             imgElement.style.borderRadius = "8px";
                             imgElement.style.border = "1px solid #ccc";
                             imgElement.style.cursor = "grab"; 
-                            imgElement.draggable = true; // Sürükle bırak aktif!
+                            imgElement.draggable = true; 
                             imgContainer.appendChild(imgElement);
                         });
                     } else {
