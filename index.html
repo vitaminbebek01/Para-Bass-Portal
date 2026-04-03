@@ -145,7 +145,7 @@
         </div>
     </div>
 
-    <script>
+   <script>
         // KANKA DİKKAT: Aşağıdaki tırnakların içine Make.com'daki Webhook linkini yapıştır!
         const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
 
@@ -160,7 +160,6 @@
                 return;
             }
 
-            // Ekranı hazırlama
             btn.disabled = true;
             btn.style.backgroundColor = "#ccc";
             resultPanel.style.display = "none";
@@ -176,23 +175,16 @@
                 });
 
                 if (response.ok) {
-                    const data = await response.json();
+                    // JSON yerine düz metin olarak alıp ||| işaretlerinden parçalıyoruz
+                    const dataText = await response.text();
+                    const parts = dataText.split('|||');
                     
-                    // Gelen verileri kutulara yerleştir
-                    document.getElementById('resTitle').innerText = data.baslik || "Bulunamadı";
-                    document.getElementById('resDesc').innerText = data.aciklama || "Bulunamadı";
-                    document.getElementById('resPrice').innerText = data.fiyat || "Bulunamadı";
-                    
-                    // Resimleri alt alta düzgün formatla
-                    if(data.resimler && Array.isArray(data.resimler)) {
-                        document.getElementById('resImages').innerText = data.resimler.join('\n');
-                    } else {
-                        document.getElementById('resImages').innerText = data.resimler || "Bulunamadı";
-                    }
+                    document.getElementById('resTitle').innerText = parts[0] ? parts[0].trim() : "Bulunamadı";
+                    document.getElementById('resDesc').innerText = parts[1] ? parts[1].trim() : "Bulunamadı";
+                    document.getElementById('resPrice').innerText = parts[2] ? parts[2].trim() : "Bulunamadı";
+                    document.getElementById('resVideo').innerText = parts[3] ? parts[3].trim() : "Video Bulunamadı";
+                    document.getElementById('resImages').innerText = "Fotoğraflar başarıyla Airtable'a kaydedildi. (Airtable'dan bakabilirsin)";
 
-                    document.getElementById('resVideo').innerText = data.video || "Video Bulunamadı";
-
-                    // Başarı mesajı ve paneli aç
                     statusMsg.style.color = "#2e8b57";
                     statusMsg.innerText = "✅ İşlem Başarılı! Sonuçlar aşağıda.";
                     resultPanel.style.display = "block";
@@ -202,14 +194,13 @@
                 }
             } catch (error) {
                 statusMsg.style.color = "red";
-                statusMsg.innerText = "❌ Bağlantı hatası!";
+                statusMsg.innerText = "❌ Bağlantı hatası! (Güvenlik duvarı veya Ağ sorunu)";
             } finally {
                 btn.disabled = false;
                 btn.style.backgroundColor = "#48d1cc";
             }
         }
 
-        // Kopyalama Butonu Fonksiyonu
         function copyData(elementId) {
             const textToCopy = document.getElementById(elementId).innerText;
             navigator.clipboard.writeText(textToCopy).then(() => {
