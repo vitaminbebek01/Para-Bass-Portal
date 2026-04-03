@@ -208,5 +208,29 @@
             });
         }
     </script>
+    // Resimleri kanlı canlı görsel olarak ekrana basma (Sürükle-bırak için)
+                    let rawImages = parts[4] ? parts[4].trim() : "";
+                    let cleanImages = rawImages.match(/https?:\/\/[^\s"',]+/g);
+                    
+                    const imgContainer = document.getElementById('resImages');
+                    imgContainer.innerHTML = ""; // Önceki yazıları temizle
+                    
+                    if (cleanImages && cleanImages.length > 0) {
+                        cleanImages.forEach(imgUrl => {
+                            let imgElement = document.createElement("img");
+                            imgElement.src = imgUrl;
+                            imgElement.style.width = "120px"; // Resim boyutu
+                            imgElement.style.height = "120px";
+                            imgElement.style.objectFit = "cover";
+                            imgElement.style.margin = "5px";
+                            imgElement.style.borderRadius = "8px";
+                            imgElement.style.border = "1px solid #ddd";
+                            imgElement.style.cursor = "grab"; // Fareyle tutma işareti
+                            imgElement.draggable = true; // SÜRÜKLE-BIRAK ÖZELLİĞİ AKTİF!
+                            imgContainer.appendChild(imgElement);
+                        });
+                    } else {
+                        imgContainer.innerText = "Resim bulunamadı veya link formatı hatalı.";
+                    }
 </body>
 </html>
