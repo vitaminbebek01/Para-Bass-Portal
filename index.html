@@ -3,130 +3,219 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Para Bass | Komuta Merkezi</title>
+    <title>Para Bass - Portal</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #ffffff; /* Bembeyaz Ana Ekran */
-            margin: 0;
+            background-color: #f0f8ff;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 40px 20px;
         }
-        .card {
-            background-color: #ffffff;
+        .container {
+            background-color: white;
             padding: 40px;
-            border-radius: 16px;
-            box-shadow: 0 8px 30px rgba(0, 191, 255, 0.15); /* Açık mavi gölge */
-            border-top: 6px solid #40E0D0; /* Turkuaz Üst Çizgi */
-            width: 100%;
-            max-width: 450px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
             text-align: center;
+            width: 100%;
+            max-width: 600px;
         }
-        h1 {
-            color: #00BFFF; /* Açık Mavi Başlık */
-            margin-bottom: 10px;
-            font-size: 28px;
-        }
-        p {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 15px;
-        }
+        h1 { color: #00bfff; margin-bottom: 5px; font-size: 32px; }
+        p { color: #666; margin-bottom: 25px; font-size: 14px; }
         input[type="text"] {
             width: 90%;
-            padding: 16px;
-            border: 2px solid #ADD8E6; /* Çok açık mavi çerçeve */
-            border-radius: 10px;
-            font-size: 15px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
             margin-bottom: 20px;
             outline: none;
-            transition: 0.3s;
+            transition: border-color 0.3s;
         }
-        input[type="text"]:focus {
-            border-color: #40E0D0; /* Tıklanınca Turkuaz çerçeve */
-            box-shadow: 0 0 10px rgba(64, 224, 208, 0.2);
-        }
+        input[type="text"]:focus { border-color: #48d1cc; }
         button {
-            background-color: #40E0D0; /* Turkuaz Buton */
+            background-color: #48d1cc;
             color: white;
             border: none;
-            padding: 16px;
-            width: 100%;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 10px;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 18px;
             cursor: pointer;
-            transition: 0.3s;
+            width: 95%;
+            font-weight: bold;
+            transition: background-color 0.3s;
         }
-        button:hover {
-            background-color: #00BFFF; /* Üzerine gelince Açık Mavi */
-            box-shadow: 0 5px 15px rgba(0, 191, 255, 0.3);
-        }
-        #status-msg {
+        button:hover { background-color: #40e0d0; }
+        #statusMessage {
             margin-top: 20px;
             font-weight: bold;
-            font-size: 14px;
+            color: #2e8b57;
             display: none;
         }
-        .success { color: #40E0D0; }
-        .error { color: #ff4d4d; }
+        /* Sonuç Paneli Stilleri */
+        #resultPanel {
+            display: none;
+            margin-top: 30px;
+            text-align: left;
+            border-top: 2px solid #eee;
+            padding-top: 20px;
+        }
+        .result-box {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+        .result-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .result-content {
+            font-size: 15px;
+            color: #333;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #00bfff;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: auto;
+        }
+        .copy-btn:hover { background-color: #009acd; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h1>Para Bass </h1>
+    <div class="container">
+        <h1>Para Bass</h1>
         <p>AI Destekli E-Ticaret Asistanı<br>İşlenecek Trendyol linkini aşağıya yapıştırın.</p>
         
-        <input type="text" id="productUrl" placeholder="https://www.trendyol.com/urun-linki...">
-        <button onclick="sendToMake()">Ürünü Çek ve İşle</button>
+        <input type="text" id="urlInput" placeholder="https://www.trendyol.com/...">
+        <button onclick="startProcess()" id="submitBtn">Ürünü Çek ve İşle</button>
+        
+        <div id="statusMessage"></div>
 
-        <div id="status-msg"></div>
+        <div id="resultPanel">
+            <div class="result-box">
+                <button class="copy-btn" onclick="copyData('resTitle')">Kopyala</button>
+                <div class="result-title">SEO Başlığı (EN)</div>
+                <div class="result-content" id="resTitle">-</div>
+            </div>
+
+            <div class="result-box">
+                <button class="copy-btn" onclick="copyData('resDesc')">SEO Açıklaması (EN)</button>
+                <div class="result-title">SEO Açıklaması (EN)</div>
+                <div class="result-content" id="resDesc">-</div>
+            </div>
+
+            <div class="result-box">
+                <button class="copy-btn" onclick="copyData('resPrice')">Kopyala</button>
+                <div class="result-title">Maliyet (TL)</div>
+                <div class="result-content" id="resPrice">-</div>
+            </div>
+
+            <div class="result-box">
+                <button class="copy-btn" onclick="copyData('resImages')">Kopyala</button>
+                <div class="result-title">Fotoğraf Linkleri</div>
+                <div class="result-content" id="resImages">-</div>
+            </div>
+            
+            <div class="result-box">
+                <button class="copy-btn" onclick="copyData('resVideo')">Kopyala</button>
+                <div class="result-title">Video Linki</div>
+                <div class="result-content" id="resVideo">-</div>
+            </div>
+        </div>
     </div>
 
     <script>
-        function sendToMake() {
-            const urlInput = document.getElementById("productUrl").value;
-            const statusBox = document.getElementById("status-msg");
-            
-            // Senin Make.com'dan aldığın webhook linki
-            const webhookUrl = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
+        // KANKA DİKKAT: Aşağıdaki tırnakların içine Make.com'daki Webhook linkini yapıştır!
+        const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
 
-            if (!urlInput) {
-                statusBox.innerHTML = "Lütfen önce bir Trendyol linki yapıştırın!";
-                statusBox.className = "error";
-                statusBox.style.display = "block";
+        async function startProcess() {
+            const url = document.getElementById('urlInput').value;
+            const statusMsg = document.getElementById('statusMessage');
+            const resultPanel = document.getElementById('resultPanel');
+            const btn = document.getElementById('submitBtn');
+
+            if (!url) {
+                alert("Lütfen bir Trendyol linki gir!");
                 return;
             }
 
-            statusBox.innerHTML = "Sinyal gönderiliyor, lütfen bekleyin...";
-            statusBox.style.color = "#00BFFF";
-            statusBox.style.display = "block";
+            // Ekranı hazırlama
+            btn.disabled = true;
+            btn.style.backgroundColor = "#ccc";
+            resultPanel.style.display = "none";
+            statusMsg.style.display = "block";
+            statusMsg.style.color = "#ff8c00";
+            statusMsg.innerText = "⏳ Sinyal gönderildi. AI ürünü işliyor, lütfen bekle... (20-30 sn sürebilir)";
 
-            // Sinyali Make.com'a fırlatıyoruz
-            fetch(webhookUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ "trendyolUrl": urlInput })
-            })
-            .then(response => {
+            try {
+                const response = await fetch(MAKE_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
                 if (response.ok) {
-                    statusBox.innerHTML = "✅ Sinyal Make.com'a ulaştı! İşlem Başladı.";
-                    statusBox.className = "success";
+                    const data = await response.json();
+                    
+                    // Gelen verileri kutulara yerleştir
+                    document.getElementById('resTitle').innerText = data.baslik || "Bulunamadı";
+                    document.getElementById('resDesc').innerText = data.aciklama || "Bulunamadı";
+                    document.getElementById('resPrice').innerText = data.fiyat || "Bulunamadı";
+                    
+                    // Resimleri alt alta düzgün formatla
+                    if(data.resimler && Array.isArray(data.resimler)) {
+                        document.getElementById('resImages').innerText = data.resimler.join('\n');
+                    } else {
+                        document.getElementById('resImages').innerText = data.resimler || "Bulunamadı";
+                    }
+
+                    document.getElementById('resVideo').innerText = data.video || "Video Bulunamadı";
+
+                    // Başarı mesajı ve paneli aç
+                    statusMsg.style.color = "#2e8b57";
+                    statusMsg.innerText = "✅ İşlem Başarılı! Sonuçlar aşağıda.";
+                    resultPanel.style.display = "block";
                 } else {
-                    statusBox.innerHTML = "❌ Sinyal gitti ama Make.com cevap vermedi.";
-                    statusBox.className = "error";
+                    statusMsg.style.color = "red";
+                    statusMsg.innerText = "❌ Sunucu hatası oluştu.";
                 }
-            })
-            .catch(error => {
-                statusBox.innerHTML = "❌ İnternet bağlantısı veya sistem hatası!";
-                statusBox.className = "error";
+            } catch (error) {
+                statusMsg.style.color = "red";
+                statusMsg.innerText = "❌ Bağlantı hatası!";
+            } finally {
+                btn.disabled = false;
+                btn.style.backgroundColor = "#48d1cc";
+            }
+        }
+
+        // Kopyalama Butonu Fonksiyonu
+        function copyData(elementId) {
+            const textToCopy = document.getElementById(elementId).innerText;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                alert("Kopyalandı! 📋");
             });
         }
     </script>
-
 </body>
-
 </html>
