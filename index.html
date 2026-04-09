@@ -26,8 +26,8 @@
         
         button.action-btn { background-color: #48d1cc; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; width: 100%; }
         button.action-btn:hover { background-color: #40e0d0; }
-        button.small-btn { background-color: #3498db; padding: 8px 15px; font-size: 13px; border-radius: 4px; width: auto; }
-        button.delete-btn { background-color: #e74c3c; width: auto; padding: 6px 12px; font-size: 12px; margin-left:5px; }
+        button.small-btn { background-color: #3498db; padding: 8px 15px; font-size: 13px; border-radius: 4px; width: auto; color: white; border: none; cursor: pointer;}
+        button.delete-btn { background-color: #e74c3c; width: auto; padding: 6px 12px; font-size: 12px; margin-left:5px; color: white; border: none; border-radius: 4px; cursor: pointer;}
         button.edit-btn { background-color: #f39c12; width: auto; padding: 6px 12px; font-size: 12px; color:white; border:none; border-radius:4px; cursor:pointer;}
         
         .result-box { background: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
@@ -73,11 +73,11 @@
 
     <div class="sidebar">
         <div class="logo">PARA BASS</div>
-        <div class="menu-item active" onclick="switchTab('module-add')">🚀 Yeni Ürün Ekle</div>
-        <div class="menu-item" onclick="switchTab('module-calc')">🧮 Hesaplama Aracı</div>
-        <div class="menu-item" onclick="switchTab('module-gtip')">📦 GTIP & E-Arşiv</div>
-        <div class="menu-item" onclick="switchTab('module-mail')">✉️ Müşteri Mailleri</div>
-        <div class="menu-item" onclick="switchTab('module-history')">⏳ Geçmiş (Yakında)</div>
+        <div class="menu-item active" onclick="switchTab('module-add', this)">🚀 Yeni Ürün Ekle</div>
+        <div class="menu-item" onclick="switchTab('module-calc', this)">🧮 Hesaplama Aracı</div>
+        <div class="menu-item" onclick="switchTab('module-gtip', this)">📦 GTIP & E-Arşiv</div>
+        <div class="menu-item" onclick="switchTab('module-mail', this)">✉️ Müşteri Mailleri</div>
+        <div class="menu-item" onclick="switchTab('module-history', this)">⏳ Geçmiş (Yakında)</div>
     </div>
 
     <div class="main-content">
@@ -318,13 +318,13 @@
 
         <div id="module-history" class="module">
             <h2>Geçmiş Listelemeler</h2>
-            <p>Bu alan daha sonra Airtable vb. sistemler için kullanılabilir.</p>
+            <p>Bu alan daha sonra özel veritabanı sistemleri için kullanılabilir.</p>
         </div>
 
     </div>
 
     <script>
-        // --- MAKE WEBHOOK ---
+        // --- MAKE WEBHOOK LİNKİNİ BURAYA YAPIŞTIR! ---
         const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
 
         const shippingRates = {
@@ -342,6 +342,7 @@
             "15.0": { ali: 80.44, fedex: 83.51 }
         };
 
+        // Kargo dropdown doldurma (Sayfa yüklendiğinde Modül 1 ve 2'ye dolar)
         const weightSelectCalc = document.getElementById('calcWeight');
         const weightSelectQuick = document.getElementById('quickWeight');
         Object.keys(shippingRates).forEach(kg => {
@@ -350,16 +351,285 @@
             weightSelectCalc.appendChild(opt1); weightSelectQuick.appendChild(opt2);
         });
 
-        // --- SEKME GEÇİŞİ ---
-        function switchTab(tabId) {
+        // --- SEKME GEÇİŞİ YÖNETİMİ ---
+        function switchTab(tabId, clickedElement) {
             document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
             document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
-            event.currentTarget.classList.add('active');
+            if(clickedElement) clickedElement.classList.add('active');
         }
 
-        // --- HESAPLAMA SİSTEMİ (Modül 1 & 2) ---
+        // --- EKRANLAR ARASI SENKRONİZASYON ---
         function syncSettings(source) {
             if (source === 'quick') {
                 document.getElementById('calcWeight').value = document.getElementById('quickWeight').value;
-                document.getElementById('calc
+                document.getElementById('calcCarrier').value = document.getElementById('quickCarrier').value;
+                document.getElementById('calcPrep').value = document.getElementById('quickPrep').value;
+                document.getElementById('calcProfitType').value = document.getElementById('quickProfitType').value;
+                document.getElementById('calcProfitVal').value = document.getElementById('quickProfitVal').value;
+            } else if (source === 'calc') {
+                document.getElementById('quickWeight').value = document.getElementById('calcWeight').value;
+                document.getElementById('quickCarrier').value = document.getElementById('calcCarrier').value;
+                document.getElementById('quickPrep').value = document.getElementById('calcPrep').value;
+                document.getElementById('quickProfitType').value = document.getElementById('calcProfitType').value;
+                document.getElementById('quickProfitVal').value = document.getElementById('calcProfitVal').value;
+            }
+            calculatePrices();
+        }
+
+        function getDynamicPrepCost(wStr, prepVal) {
+            if (prepVal === '0') return 0; 
+            let w = parseFloat(wStr); let diff = 0;
+            if (w <= 1.0) diff = 0; else if (w <= 4.0) diff = 0.5; else if (w <= 8.0) diff = 1.5; else if (w <= 12.0) diff = 2.0; else if (w <= 16.0) diff = 2.5; else diff = 3.0; 
+            return (1.0 + diff) * 1.20; 
+        }
+
+        async function fetchProduct() {
+            const url = document.getElementById('urlInput').value;
+            if (!url) return alert("Link gir kanka!");
+            
+            const btn = document.getElementById('fetchBtn');
+            const status = document.getElementById('statusMessage');
+            btn.disabled = true; status.style.color = "#e67e22"; status.innerText = "⏳ AI ürünü çekiyor...";
+            document.getElementById('fetchResults').style.display = "none";
+
+            try {
+                const response = await fetch(MAKE_WEBHOOK_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (response.ok) {
+                    const dataText = await response.text();
+                    const parts = dataText.split('|||');
+                    
+                    document.getElementById('resTitle').innerText = parts[0] ? parts[0].trim() : "Yok";
+                    document.getElementById('resDesc').innerText = parts[1] ? parts[1].trim() : "Yok";
+                    
+                    let rawPriceTL = parts[2] ? parts[2].trim().replace(',', '.').replace(/[^\d.-]/g, '') : "0";
+                    document.getElementById('calcCostTL').value = rawPriceTL;
+                    calculatePrices(); 
+
+                    document.getElementById('resVideo').innerText = parts[3] ? parts[3].trim() : "Video bulunamadı";
+
+                    let rawImages = parts[4] ? parts[4].trim() : "";
+                    let cleanImages = rawImages.match(/https?:\/\/[^\s"',]+/g);
+                    const imgContainer = document.getElementById('resImages');
+                    imgContainer.innerHTML = ""; 
+                    if (cleanImages) {
+                        cleanImages.forEach(imgUrl => {
+                            let img = document.createElement("img");
+                            img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`;
+                            img.draggable = true; imgContainer.appendChild(img);
+                        });
+                    }
+                    status.style.color = "#27ae60"; status.innerText = "✅ Başarılı! Veriler alındı.";
+                    document.getElementById('fetchResults').style.display = "block";
+                }
+            } catch (e) { status.style.color = "red"; status.innerText = "❌ Hata!"; } finally { btn.disabled = false; }
+        }
+
+        function calculatePrices() {
+            let costTL = parseFloat(document.getElementById('calcCostTL').value) || 0;
+            let usdRate = parseFloat(document.getElementById('calcUsdRate').value) || 32.50;
+            let weight = document.getElementById('calcWeight').value;
+            let carrier = document.getElementById('calcCarrier').value;
+            let prepCost = getDynamicPrepCost(weight, document.getElementById('calcPrep').value);
+            
+            let coinsFeePct = parseFloat(document.getElementById('calcCoinsFee').value) || 0;
+            let couponVal = parseFloat(document.getElementById('calcCoupon').value) || 0;
+            let profitType = document.getElementById('calcProfitType').value;
+            let profitVal = parseFloat(document.getElementById('calcProfitVal').value) || 0;
+
+            let costUSD = costTL / usdRate;
+            let shipCost = shippingRates[weight] ? shippingRates[weight][carrier] : 0;
+            let totalCost = costUSD + shipCost + prepCost;
+
+            let targetProfit = profitType === 'percent' ? totalCost * (profitVal / 100) : profitVal;
+            let desiredPayout = totalCost + targetProfit + couponVal;
+            
+            let totalFeeRate = 0.16 + (coinsFeePct / 100);
+            let finalPrice = desiredPayout / (1 - totalFeeRate);
+            let strikePrice = finalPrice * 2;
+
+            let aliFee = finalPrice * 0.08;
+            let affFee = finalPrice * 0.08;
+            let coinsFeeVal = finalPrice * (coinsFeePct / 100);
+
+            // 1. Modül ve 2. Modülü Aynı Anda Güncelle
+            ['quick', 'out'].forEach(prefix => {
+                document.getElementById(prefix+'SalePrice').innerText = "$" + finalPrice.toFixed(2);
+                document.getElementById(prefix+'StrikePrice').innerText = "$" + strikePrice.toFixed(2);
+                
+                let qPrefix = prefix === 'quick' ? 'qOut' : 'out';
+                document.getElementById(qPrefix+'ProdCost').innerText = "$" + costUSD.toFixed(2);
+                document.getElementById(qPrefix+'ShipCost').innerText = "$" + shipCost.toFixed(2);
+                document.getElementById(qPrefix+'PrepCost').innerText = "$" + prepCost.toFixed(2);
+                document.getElementById(qPrefix+'Coupon').innerText = "$" + couponVal.toFixed(2);
+                document.getElementById(qPrefix+'AliFee').innerText = "-$" + aliFee.toFixed(2);
+                document.getElementById(qPrefix+'AffFee').innerText = "-$" + affFee.toFixed(2);
+                document.getElementById(qPrefix+'CoinsFee').innerText = "-$" + coinsFeeVal.toFixed(2);
+                document.getElementById(qPrefix+'NetProfit').innerText = "$" + targetProfit.toFixed(2);
+            });
+        }
+
+        // --- KOPYALAMA ASİSTANLARI ---
+        function copyDirectData(elementId) {
+            let txt = document.getElementById(elementId).innerText.replace('$', '').trim();
+            navigator.clipboard.writeText(txt).then(() => alert("Kopyalandı!"));
+        }
+        function copyRawText(text) {
+            navigator.clipboard.writeText(text).then(() => alert("Kopyalandı: " + text));
+        }
+
+        // ==========================================
+        // MODÜL 4: GTIP YÖNETİMİ (Local Storage)
+        // ==========================================
+        let gtipList = JSON.parse(localStorage.getItem('paraBassGtipDb')) || [];
+
+        function saveGtip() {
+            let name = document.getElementById('gtipName').value.trim();
+            let code = document.getElementById('gtipCode').value.trim();
+            if (!name || !code) return alert("Ürün adı ve GTIP boş bırakılamaz!");
+            
+            gtipList.unshift({ name, code }); 
+            localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList));
+            document.getElementById('gtipName').value = ""; document.getElementById('gtipCode').value = "";
+            renderGtibs();
+        }
+
+        function deleteGtip(index) {
+            if(confirm("Silmek istediğinize emin misiniz?")) {
+                gtipList.splice(index, 1);
+                localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList));
+                renderGtibs();
+            }
+        }
+
+        function renderGtibs() {
+            const container = document.getElementById('gtipContainer');
+            container.innerHTML = "";
+            if(gtipList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün eklenmedi.</p>";
+            
+            gtipList.forEach((item, i) => {
+                let div = document.createElement("div");
+                div.className = "gtip-item";
+                div.innerHTML = `
+                    <div class="gtip-info">
+                        <div class="gtip-name">${item.name}</div>
+                        <div class="gtip-code">${item.code}</div>
+                    </div>
+                    <div class="gtip-actions">
+                        <button class="small-btn" style="background:#27ae60;" onclick="copyRawText('${item.name}')">Adı Al</button>
+                        <button class="small-btn" onclick="copyRawText('${item.code}')">Kodu Al</button>
+                        <button class="delete-btn" onclick="deleteGtip(${i})">Sil</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // ==========================================
+        // MODÜL 5: MAİL ŞABLONLARI YÖNETİMİ (Local Storage)
+        // ==========================================
+        let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
+
+        function saveMail() {
+            let title = document.getElementById('mailTitle').value.trim();
+            if(!title) return alert("Şablon başlığı zorunludur!");
+            
+            let newMail = {
+                title: title,
+                tr: document.getElementById('mailTR').value.trim() || "-",
+                en: document.getElementById('mailEN').value.trim() || "-",
+                fr: document.getElementById('mailFR').value.trim() || "-",
+                es: document.getElementById('mailES').value.trim() || "-",
+                it: document.getElementById('mailIT').value.trim() || "-"
+            };
+
+            let editIndex = document.getElementById('mailEditIndex').value;
+            
+            if(editIndex === "-1") {
+                mailList.unshift(newMail);
+            } else {
+                mailList[editIndex] = newMail;
+            }
+
+            localStorage.setItem('paraBassMailDb', JSON.stringify(mailList));
+            cancelMailEdit(); 
+            renderMails();
+        }
+
+        function editMail(index) {
+            let mail = mailList[index];
+            document.getElementById('mailEditIndex').value = index;
+            document.getElementById('mailTitle').value = mail.title;
+            document.getElementById('mailTR').value = mail.tr !== "-" ? mail.tr : "";
+            document.getElementById('mailEN').value = mail.en !== "-" ? mail.en : "";
+            document.getElementById('mailFR').value = mail.fr !== "-" ? mail.fr : "";
+            document.getElementById('mailES').value = mail.es !== "-" ? mail.es : "";
+            document.getElementById('mailIT').value = mail.it !== "-" ? mail.it : "";
+            
+            document.getElementById('mailFormTitle').innerText = "✏️ Şablonu Düzenliyorsun";
+            document.getElementById('saveMailBtn').innerText = "🔄 Güncelle";
+            document.getElementById('cancelEditBtn').style.display = "inline-block";
+            
+            document.querySelector('.main-content').scrollTop = 0;
+        }
+
+        function cancelMailEdit() {
+            document.getElementById('mailEditIndex').value = "-1";
+            document.getElementById('mailTitle').value = "";
+            document.getElementById('mailTR').value = ""; document.getElementById('mailEN').value = "";
+            document.getElementById('mailFR').value = ""; document.getElementById('mailES').value = ""; document.getElementById('mailIT').value = "";
+            
+            document.getElementById('mailFormTitle').innerText = "Yeni Şablon Ekle";
+            document.getElementById('saveMailBtn').innerText = "💾 Şablonu Kaydet";
+            document.getElementById('cancelEditBtn').style.display = "none";
+        }
+
+        function deleteMail(index) {
+            if(confirm("Bu şablonu silmek istediğinize emin misiniz?")) {
+                mailList.splice(index, 1);
+                localStorage.setItem('paraBassMailDb', JSON.stringify(mailList));
+                renderMails();
+            }
+        }
+
+        function renderMails() {
+            const container = document.getElementById('mailTemplatesContainer');
+            container.innerHTML = "";
+            if(mailList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz şablon eklemedin. Yukarıdan ilk şablonunu oluştur!</p>";
+
+            mailList.forEach((mail, i) => {
+                let html = `
+                    <div class="mail-card">
+                        <div class="mail-header">
+                            <span>📌 ${mail.title}</span>
+                            <div>
+                                <button class="edit-btn" onclick="editMail(${i})">✏️ Düzenle</button>
+                                <button class="delete-btn" onclick="deleteMail(${i})">Sil</button>
+                            </div>
+                        </div>
+                        <div class="mail-body">
+                            <div class="lang-row"><div class="lang-flag">🇹🇷</div><div class="lang-text">${mail.tr}</div><button class="lang-copy" onclick="copyRawText('${mail.tr.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                            <div class="lang-row"><div class="lang-flag">🇬🇧</div><div class="lang-text">${mail.en}</div><button class="lang-copy" onclick="copyRawText('${mail.en.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                            <div class="lang-row"><div class="lang-flag">🇫🇷</div><div class="lang-text">${mail.fr}</div><button class="lang-copy" onclick="copyRawText('${mail.fr.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                            <div class="lang-row"><div class="lang-flag">🇪🇸</div><div class="lang-text">${mail.es}</div><button class="lang-copy" onclick="copyRawText('${mail.es.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                            <div class="lang-row"><div class="lang-flag">🇮🇹</div><div class="lang-text">${mail.it}</div><button class="lang-copy" onclick="copyRawText('${mail.it.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += html;
+            });
+        }
+
+        // --- AÇILIŞ KURULUMU ---
+        window.onload = () => {
+            calculatePrices();
+            renderGtibs();
+            renderMails();
+        };
+    </script>
+</body>
+</html>
