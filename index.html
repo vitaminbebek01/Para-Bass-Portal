@@ -3,172 +3,350 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Para Bass Pro - Dashboard</title>
+    <title>Para Bass Pro - E-Ticaret Paneli</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f4f8; margin: 0; display: flex; height: 100vh; }
-        /* Sol Panel: Geçmiş */
-        .sidebar { width: 300px; background: white; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
-        .history-item { background: #f9f9f9; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12px; position: relative; border: 1px solid #eee; cursor: pointer; }
-        .history-item:hover { border-color: #00bfff; }
-        .delete-btn { position: absolute; top: 5px; right: 5px; color: red; cursor: pointer; font-weight: bold; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         
-        /* Sağ Panel: Ana İşlem */
-        .main-content { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; align-items: center; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; max-width: 650px; }
-        h1 { color: #00bfff; margin-top: 0; }
+        /* Sol Menü (Sidebar) */
+        .sidebar { width: 250px; background: #2c3e50; color: white; display: flex; flex-direction: column; padding-top: 20px; }
+        .logo { font-size: 24px; font-weight: bold; text-align: center; color: #48d1cc; margin-bottom: 30px; letter-spacing: 1px; }
+        .menu-item { padding: 15px 25px; cursor: pointer; border-left: 4px solid transparent; transition: 0.3s; font-size: 15px; color: #bdc3c7; }
+        .menu-item:hover { background: #34495e; color: white; }
+        .menu-item.active { background: #34495e; border-left-color: #48d1cc; color: white; font-weight: bold; }
         
-        .form-group { margin-bottom: 15px; text-align: left; }
-        label { display: block; font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #555; }
-        input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        /* Ana İçerik Alanı */
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; background-color: #f4f7f6; }
+        .module { display: none; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); max-width: 800px; margin: 0 auto; }
+        .module.active { display: block; }
         
-        .row { display: flex; gap: 10px; margin-bottom: 20px; }
+        h2 { color: #2c3e50; margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+        
+        /* Form Elemanları */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #7f8c8d; text-transform: uppercase; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; outline: none; transition: 0.3s; }
+        input:focus, select:focus { border-color: #48d1cc; }
+        .row { display: flex; gap: 15px; margin-bottom: 15px; }
         .row > div { flex: 1; }
-
-        button.action-btn { background-color: #48d1cc; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 18px; cursor: pointer; width: 100%; font-weight: bold; }
         
-        #resultPanel { display: none; margin-top: 25px; border-top: 2px solid #eee; padding-top: 20px; }
-        .result-box { background: #f1f1f1; padding: 15px; border-radius: 8px; margin-bottom: 10px; position: relative; }
-        .copy-btn { position: absolute; top: 5px; right: 5px; background: #00bfff; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; cursor: pointer; }
-        #resImages img { width: 80px; height: 80px; object-fit: contain; margin: 5px; border: 1px solid #ddd; background: white; border-radius: 4px; }
+        button.action-btn { background-color: #48d1cc; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; width: 100%; }
+        button.action-btn:hover { background-color: #40e0d0; }
+        
+        /* Sonuç Kutuları */
+        .result-box { background: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
+        .copy-btn { position: absolute; top: 10px; right: 10px; background: #3498db; color: white; border: none; border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; }
+        
+        /* Fiyat Grid */
+        .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; margin-bottom: 20px; }
+        .price-box { padding: 20px; border-radius: 8px; text-align: center; border: 1px solid #ddd; position: relative; }
+        .price-box.sale { background: #e0ffff; border-color: #00bfff; }
+        .price-box.strike { background: #fff0f5; border-color: #ffb6c1; }
+        .price-val { font-size: 28px; font-weight: bold; margin: 10px 0; }
+        .strike .price-val { text-decoration: line-through; color: #e74c3c; }
+        .sale .price-val { color: #16a085; }
+        
+        #resImages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        #resImages img { width: 100px; height: 100px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; cursor: grab; background: white; }
+        #statusMessage { margin-top: 15px; font-weight: bold; text-align: center; }
+        
+        /* Hızlı Ayarlar Kutusu */
+        .quick-settings { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; margin-bottom: 15px; }
     </style>
 </head>
 <body>
 
     <div class="sidebar">
-        <h3>Geçmiş Ürünler</h3>
-        <div id="historyList">Yükleniyor...</div>
+        <div class="logo">PARA BASS</div>
+        <div class="menu-item active" onclick="switchTab('module-add')">🚀 Yeni Ürün Ekle</div>
+        <div class="menu-item" onclick="switchTab('module-calc')">🧮 Hesaplama Aracı</div>
+        <div class="menu-item" onclick="switchTab('module-history')">⏳ Geçmiş (Yakında)</div>
     </div>
 
     <div class="main-content">
-        <div class="card">
-            <h1>Para Bass Pro</h1>
-            <p>E-Ticaret Operasyon Merkezi</p>
-
+        
+        <div id="module-add" class="module active">
+            <h2>Yeni Ürün Çek ve Hızlı Fiyatla</h2>
+            <p style="color:#666; font-size:14px;">Trendyol linkini ve kargo detaylarını girin. AI saniyeler içinde her şeyi hazırlasın.</p>
+            
             <div class="form-group">
-                <label>Trendyol Ürün Linki</label>
+                <label>Trendyol Linki</label>
                 <input type="text" id="urlInput" placeholder="https://www.trendyol.com/...">
             </div>
 
-            <div class="row">
+            <div class="quick-settings row">
+                <div>
+                    <label>Ağırlık (KG)</label>
+                    <select id="quickWeight" onchange="syncSettings('quick')"></select>
+                </div>
                 <div>
                     <label>Kargo Firması</label>
-                    <select id="carrierSelect">
-                        <option value="aliexpress">AliExpress Standard</option>
+                    <select id="quickCarrier" onchange="syncSettings('quick')">
+                        <option value="ali">AliExpress Standard</option>
                         <option value="fedex">FedEx Global</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Ağırlık (Desi/KG)</label>
-                    <select id="weightSelect">
-                        </select>
-                </div>
-                <div>
-                    <label>Ara Depo?</label>
-                    <select id="warehouseSelect">
-                        <option value="no">Hayır</option>
-                        <option value="yes">Evet (+5$)</option>
                     </select>
                 </div>
             </div>
 
-            <button class="action-btn" onclick="startProcess()" id="submitBtn">Analiz Et ve Fiyatla</button>
-            <div id="statusMessage" style="margin-top:15px; font-weight:bold;"></div>
+            <button class="action-btn" onclick="fetchProduct()" id="fetchBtn">⚡ Ürünü İşle ve Fiyatı Gör</button>
+            <div id="statusMessage"></div>
 
-            <div id="resultPanel">
-                <div class="result-box">
-                    <div style="font-size:11px; color:#888;">HESAPLANAN SATIŞ FİYATI</div>
-                    <div id="resFinalPrice" style="font-size:24px; font-weight:bold; color:#2e8b57;">-</div>
+            <div id="fetchResults" style="display:none; margin-top:20px;">
+                
+                <div class="price-grid">
+                    <div class="price-box sale">
+                        <button class="copy-btn" onclick="copyData('quickSalePrice')">Kopyala</button>
+                        <label>Kampanyalı Fiyat (Net %50)</label>
+                        <div class="price-val" id="quickSalePrice">$0.00</div>
+                    </div>
+                    <div class="price-box strike">
+                        <button class="copy-btn" onclick="copyData('quickStrikePrice')">Kopyala</button>
+                        <label>ÇİZİK FİYAT (2x)</label>
+                        <div class="price-val" id="quickStrikePrice">$0.00</div>
+                    </div>
                 </div>
+                <div style="text-align:center; font-weight:bold; color:#27ae60; margin-bottom:20px; font-size:14px;">
+                    Garanti Edilen Net Kâr: <span id="quickNetProfit">$0.00</span>
+                </div>
+
                 <div class="result-box">
                     <button class="copy-btn" onclick="copyData('resTitle')">Kopyala</button>
-                    <div style="font-size:11px; color:#888;">SEO BAŞLIĞI</div>
-                    <div id="resTitle" style="font-size:14px;">-</div>
+                    <label>SEO BAŞLIĞI</label>
+                    <div id="resTitle" style="font-weight:bold; font-size:15px;"></div>
                 </div>
                 <div class="result-box">
-                    <div style="font-size:11px; color:#888;">RESİMLER (Sürükle Bırak)</div>
+                    <button class="copy-btn" onclick="copyData('resDesc')">Kopyala</button>
+                    <label>SEO AÇIKLAMASI</label>
+                    <div id="resDesc" style="font-size:13px; white-space:pre-wrap;"></div>
+                </div>
+                <div class="result-box">
+                    <label>FOTOĞRAFLAR (Sürükle - Bırak)</label>
                     <div id="resImages"></div>
                 </div>
             </div>
         </div>
+
+        <div id="module-calc" class="module">
+            <h2>Detaylı Fiyat Hesaplayıcı</h2>
+            <p style="color:#666; font-size:14px;">Kargo, ara depo, kur ve komisyon ayarlarını buradan yönetebilirsiniz.</p>
+            
+            <div class="row">
+                <div>
+                    <label>Ürün Maliyeti (TL)</label>
+                    <input type="number" id="calcCostTL" value="0" step="0.1" oninput="calculatePrices()">
+                </div>
+                <div>
+                    <label>Güncel Dolar Kuru (₺)</label>
+                    <input type="number" id="calcUsdRate" value="32.50" step="0.1" oninput="calculatePrices()">
+                </div>
+            </div>
+
+            <div class="row">
+                <div>
+                    <label>Ağırlık (KG)</label>
+                    <select id="calcWeight" onchange="syncSettings('calc')"></select>
+                </div>
+                <div>
+                    <label>Kargo Firması</label>
+                    <select id="calcCarrier" onchange="syncSettings('calc')">
+                        <option value="ali">AliExpress Standard</option>
+                        <option value="fedex">FedEx Global</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Ara Depo</label>
+                    <select id="calcPrep" onchange="calculatePrices()">
+                        <option value="0">Hayır ($0)</option>
+                        <option value="5">Evet (+$5.00)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row">
+                <div>
+                    <label>Kâr Türü</label>
+                    <select id="calcProfitType" onchange="calculatePrices()">
+                        <option value="fixed">Sabit Tutar ($)</option>
+                        <option value="percent">Yüzde Oranı (%)</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Hedef Kâr</label>
+                    <input type="number" id="calcProfitVal" value="10" step="0.1" oninput="calculatePrices()">
+                </div>
+            </div>
+
+            <div class="price-grid">
+                <div class="price-box sale">
+                    <button class="copy-btn" onclick="copyData('outSalePrice')">Kopyala</button>
+                    <label>Kampanyalı Fiyat (Net %50)</label>
+                    <div class="price-val" id="outSalePrice">$0.00</div>
+                </div>
+                <div class="price-box strike">
+                    <button class="copy-btn" onclick="copyData('outStrikePrice')">Kopyala</button>
+                    <label>ÇİZİK FİYAT</label>
+                    <div class="price-val" id="outStrikePrice">$0.00</div>
+                </div>
+            </div>
+
+            <div class="result-box" style="font-size:13px; line-height:1.8;">
+                <strong>Maliyet Dağılımı:</strong><br>
+                Ürün: <span id="outProdCost">$0.00</span> | Kargo: <span id="outShipCost">$0.00</span> | Depo: <span id="outPrepCost">$0.00</span><br>
+                <strong>Elinize Geçecek Net Kâr: <span id="outNetProfit" style="color:#27ae60; font-weight:bold; font-size:16px;">$0.00</span></strong>
+            </div>
+        </div>
+
+        <div id="module-history" class="module">
+            <h2>Geçmiş Listelemeler</h2>
+            <p>Airtable veritabanındaki eski ürünleriniz buraya listelenecek. Çok yakında eklenecek!</p>
+        </div>
+
     </div>
 
     <script>
+        // KANKA DİKKAT: MAKE.COM LİNKİNİ BURAYA YAPIŞTIRMAYI UNUTMA
         const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
 
-        // Ağırlık seçimini doldur
-        const weightSelect = document.getElementById('weightSelect');
-        for(let i=0.1; i<=15; i = i < 1 ? +(i + 0.1).toFixed(1) : +(i + 0.5).toFixed(1)) {
-            let opt = document.createElement('option');
-            opt.value = i;
-            opt.innerHTML = i + " kg";
-            weightSelect.appendChild(opt);
+        const shippingRates = {
+            "0.1": { ali: 9.50, fedex: 16.04 }, "0.2": { ali: 10.63, fedex: 19.63 }, "0.3": { ali: 12.83, fedex: 19.63 },
+            "0.4": { ali: 12.83, fedex: 19.63 }, "0.5": { ali: 12.83, fedex: 19.63 }, "1.0": { ali: 17.47, fedex: 21.33 },
+            "1.5": { ali: 27.45, fedex: 23.01 }, "2.0": { ali: 27.45, fedex: 24.69 }, "2.5": { ali: 29.92, fedex: 26.39 },
+            "3.0": { ali: 33.48, fedex: 34.03 }, "3.5": { ali: 37.39, fedex: 35.73 }, "4.0": { ali: 37.39, fedex: 37.43 },
+            "4.5": { ali: 41.31, fedex: 39.11 }, "5.0": { ali: 41.31, fedex: 40.81 }, "5.5": { ali: 45.22, fedex: 43.16 },
+            "6.0": { ali: 45.22, fedex: 45.50 }, "6.5": { ali: 49.13, fedex: 47.85 }, "7.0": { ali: 49.13, fedex: 50.21 },
+            "7.5": { ali: 53.05, fedex: 52.55 }, "8.0": { ali: 53.05, fedex: 54.90 }, "8.5": { ali: 56.96, fedex: 57.24 },
+            "9.0": { ali: 56.96, fedex: 59.59 }, "9.5": { ali: 60.87, fedex: 61.95 }, "10.0": { ali: 60.87, fedex: 64.29 },
+            "10.5": { ali: 64.78, fedex: 64.82 }, "11.0": { ali: 64.78, fedex: 65.09 }, "11.5": { ali: 68.70, fedex: 66.66 },
+            "12.0": { ali: 68.70, fedex: 66.93 }, "12.5": { ali: 72.61, fedex: 69.69 }, "13.0": { ali: 72.61, fedex: 72.45 },
+            "13.5": { ali: 76.52, fedex: 75.21 }, "14.0": { ali: 76.52, fedex: 77.97 }, "14.5": { ali: 80.44, fedex: 80.75 },
+            "15.0": { ali: 80.44, fedex: 83.51 }
+        };
+
+        // Kargo dropdownlarını her iki modüle de doldurma
+        const weightSelectCalc = document.getElementById('calcWeight');
+        const weightSelectQuick = document.getElementById('quickWeight');
+        Object.keys(shippingRates).forEach(kg => {
+            let opt1 = document.createElement('option'); opt1.value = kg; opt1.innerHTML = kg + " kg";
+            let opt2 = document.createElement('option'); opt2.value = kg; opt2.innerHTML = kg + " kg";
+            weightSelectCalc.appendChild(opt1);
+            weightSelectQuick.appendChild(opt2);
+        });
+
+        // Modüller arası sekme değiştirme
+        function switchTab(tabId) {
+            document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
         }
 
-        async function startProcess() {
-            const url = document.getElementById('urlInput').value;
-            const carrier = document.getElementById('carrierSelect').value;
-            const weight = document.getElementById('weightSelect').value;
-            const warehouse = document.getElementById('warehouseSelect').value;
-            
-            if(!url) return alert("Link lazım kanka!");
+        // Hızlı Ekran ile Hesaplama Ekranını Senkronize Et
+        function syncSettings(source) {
+            if (source === 'quick') {
+                document.getElementById('calcWeight').value = document.getElementById('quickWeight').value;
+                document.getElementById('calcCarrier').value = document.getElementById('quickCarrier').value;
+            } else if (source === 'calc') {
+                document.getElementById('quickWeight').value = document.getElementById('calcWeight').value;
+                document.getElementById('quickCarrier').value = document.getElementById('calcCarrier').value;
+            }
+            calculatePrices();
+        }
 
-            const btn = document.getElementById('submitBtn');
-            const status = document.getElementById('statusMessage');
+        // AI'den Ürün Çekme Modülü
+        async function fetchProduct() {
+            const url = document.getElementById('urlInput').value;
+            if (!url) return alert("Link gir kanka!");
             
+            const btn = document.getElementById('fetchBtn');
+            const status = document.getElementById('statusMessage');
             btn.disabled = true;
-            status.innerText = "⏳ İşleniyor...";
+            status.style.color = "#e67e22";
+            status.innerText = "⏳ Yapay Zeka ürünü inceliyor (20-30 sn)...";
+            document.getElementById('fetchResults').style.display = "none";
 
             try {
                 const response = await fetch(MAKE_WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ 
-                        url: url, 
-                        kargo: carrier, 
-                        kg: weight, 
-                        depo: warehouse 
-                    })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
                 });
 
-                if(response.ok) {
-                    const resText = await response.text();
-                    const parts = resText.split('|||');
+                if (response.ok) {
+                    const dataText = await response.text();
+                    const parts = dataText.split('|||');
                     
-                    document.getElementById('resTitle').innerText = parts[0];
-                    document.getElementById('resFinalPrice').innerText = parts[4] + " USD"; // Fiyatı 5. sıraya koyacağız
+                    document.getElementById('resTitle').innerText = parts[0] ? parts[0].trim() : "";
+                    document.getElementById('resDesc').innerText = parts[1] ? parts[1].trim() : "";
                     
-                    // Resimler (JPG Çeviricili)
-                    let rawImages = parts[5] || "";
+                    // Fiyatı alıp her yeri güncelle
+                    let rawPriceTL = parts[2] ? parts[2].trim().replace(',', '.').replace(/[^\d.-]/g, '') : "0";
+                    document.getElementById('calcCostTL').value = rawPriceTL;
+                    
+                    calculatePrices(); // SİHİR: Hem hızlı ekranı hem hesap ekranını anında doldurur
+
+                    // Resimleri Listele
+                    let rawImages = parts[4] ? parts[4].trim() : "";
                     let cleanImages = rawImages.match(/https?:\/\/[^\s"',]+/g);
                     const imgContainer = document.getElementById('resImages');
-                    imgContainer.innerHTML = "";
-                    cleanImages?.forEach(imgUrl => {
-                        let img = document.createElement("img");
-                        img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`;
-                        img.draggable = true;
-                        imgContainer.appendChild(img);
-                    });
+                    imgContainer.innerHTML = ""; 
+                    if (cleanImages) {
+                        cleanImages.forEach(imgUrl => {
+                            let img = document.createElement("img");
+                            img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`;
+                            img.draggable = true; 
+                            imgContainer.appendChild(img);
+                        });
+                    }
 
-                    document.getElementById('resultPanel').style.display = "block";
-                    status.innerText = "✅ Başarılı!";
-                    fetchHistory(); // Listeyi güncelle
+                    status.style.color = "#27ae60";
+                    status.innerText = "✅ Başarılı! SEO, Resimler ve Fiyat hazır.";
+                    document.getElementById('fetchResults').style.display = "block";
                 }
             } catch (e) {
-                status.innerText = "❌ Hata!";
+                status.style.color = "red"; status.innerText = "❌ Hata oluştu!";
             } finally {
                 btn.disabled = false;
             }
         }
 
-        // Airtable'dan geçmişi çeken fonksiyon (Şimdilik boş, Make ile bağlayacağız)
-        function fetchHistory() {
-            console.log("Geçmiş güncelleniyor...");
+        // Fiyat Hesaplama Modülü (Her iki ekranı da besler)
+        function calculatePrices() {
+            let costTL = parseFloat(document.getElementById('calcCostTL').value) || 0;
+            let usdRate = parseFloat(document.getElementById('calcUsdRate').value) || 32.50;
+            let weight = document.getElementById('calcWeight').value;
+            let carrier = document.getElementById('calcCarrier').value;
+            let prepCost = parseFloat(document.getElementById('calcPrep').value) || 0;
+            let profitType = document.getElementById('calcProfitType').value;
+            let profitVal = parseFloat(document.getElementById('calcProfitVal').value) || 0;
+
+            let costUSD = costTL / usdRate;
+            let shipCost = shippingRates[weight] ? shippingRates[weight][carrier] : 0;
+            let totalCost = costUSD + shipCost + prepCost;
+
+            let targetProfit = profitType === 'percent' ? totalCost * (profitVal / 100) : profitVal;
+            let desiredPayout = totalCost + targetProfit;
+            
+            let finalPrice = desiredPayout / (1 - 0.16);
+            let strikePrice = finalPrice * 2;
+
+            // 1. Modül (Hızlı Ekran) Güncellemesi
+            document.getElementById('quickSalePrice').innerText = "$" + finalPrice.toFixed(2);
+            document.getElementById('quickStrikePrice').innerText = "$" + strikePrice.toFixed(2);
+            document.getElementById('quickNetProfit').innerText = "$" + targetProfit.toFixed(2);
+
+            // 2. Modül (Detaylı Ekran) Güncellemesi
+            document.getElementById('outSalePrice').innerText = "$" + finalPrice.toFixed(2);
+            document.getElementById('outStrikePrice').innerText = "$" + strikePrice.toFixed(2);
+            document.getElementById('outProdCost').innerText = "$" + costUSD.toFixed(2);
+            document.getElementById('outShipCost').innerText = "$" + shipCost.toFixed(2);
+            document.getElementById('outPrepCost').innerText = "$" + prepCost.toFixed(2);
+            document.getElementById('outNetProfit').innerText = "$" + targetProfit.toFixed(2);
         }
 
-        function copyData(id) {
-            navigator.clipboard.writeText(document.getElementById(id).innerText);
-            alert("Kopyalandı!");
+        function copyData(elementId) {
+            let txt = document.getElementById(elementId).innerText.replace('$', '').trim();
+            navigator.clipboard.writeText(txt).then(() => alert("Kopyalandı!"));
         }
+
+        window.onload = calculatePrices;
     </script>
 </body>
 </html>
