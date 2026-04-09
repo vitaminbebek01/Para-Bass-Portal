@@ -6,25 +6,33 @@
     <title>Para Bass Pro - E-Ticaret Paneli</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 250px; background: #2c3e50; color: white; display: flex; flex-direction: column; padding-top: 20px; }
-        .logo { font-size: 24px; font-weight: bold; text-align: center; color: #48d1cc; margin-bottom: 30px; letter-spacing: 1px; }
-        .menu-item { padding: 15px 25px; cursor: pointer; border-left: 4px solid transparent; transition: 0.3s; font-size: 15px; color: #bdc3c7; }
+        .sidebar { width: 250px; background: #2c3e50; color: white; display: flex; flex-direction: column; padding-top: 20px; overflow-y: auto; }
+        .logo { font-size: 24px; font-weight: bold; text-align: center; color: #48d1cc; margin-bottom: 20px; letter-spacing: 1px; }
+        .menu-item { padding: 15px 25px; cursor: pointer; border-left: 4px solid transparent; transition: 0.3s; font-size: 14px; color: #bdc3c7; }
         .menu-item:hover { background: #34495e; color: white; }
         .menu-item.active { background: #34495e; border-left-color: #48d1cc; color: white; font-weight: bold; }
+        
         .main-content { flex: 1; padding: 40px; overflow-y: auto; background-color: #f4f7f6; }
-        .module { display: none; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); max-width: 800px; margin: 0 auto; }
+        .module { display: none; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); max-width: 850px; margin: 0 auto; }
         .module.active { display: block; }
         h2 { color: #2c3e50; margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+        
         .form-group { margin-bottom: 15px; }
         label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #7f8c8d; text-transform: uppercase; }
-        input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; outline: none; transition: 0.3s; }
-        input:focus, select:focus { border-color: #48d1cc; }
+        input, select, textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; outline: none; transition: 0.3s; font-family: inherit; }
+        input:focus, select:focus, textarea:focus { border-color: #48d1cc; }
         .row { display: flex; gap: 15px; margin-bottom: 15px; }
         .row > div { flex: 1; }
+        
         button.action-btn { background-color: #48d1cc; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; width: 100%; }
         button.action-btn:hover { background-color: #40e0d0; }
+        button.small-btn { background-color: #3498db; padding: 8px 15px; font-size: 13px; border-radius: 4px; width: auto; }
+        button.delete-btn { background-color: #e74c3c; width: auto; padding: 6px 12px; font-size: 12px; margin-left:5px; }
+        button.edit-btn { background-color: #f39c12; width: auto; padding: 6px 12px; font-size: 12px; color:white; border:none; border-radius:4px; cursor:pointer;}
+        
         .result-box { background: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
         .copy-btn { position: absolute; top: 10px; right: 10px; background: #3498db; color: white; border: none; border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; }
+        
         .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; margin-bottom: 20px; }
         .price-box { padding: 20px; border-radius: 8px; text-align: center; border: 1px solid #ddd; position: relative; }
         .price-box.sale { background: #e0ffff; border-color: #00bfff; }
@@ -32,12 +40,33 @@
         .price-val { font-size: 28px; font-weight: bold; margin: 10px 0; }
         .strike .price-val { text-decoration: line-through; color: #e74c3c; }
         .sale .price-val { color: #16a085; }
-        #resImages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
-        #resImages img { width: 100px; height: 100px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; cursor: grab; background: white; }
         #statusMessage { margin-top: 15px; font-weight: bold; text-align: center; }
         .quick-settings { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; margin-bottom: 15px; }
-        .fee-text { color: #e74c3c; font-weight: bold; }
-        .extra-fee { background: #fff3cd; padding: 10px; border-radius: 6px; border: 1px solid #ffeeba; margin-bottom: 15px; }
+        .breakdown-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+        .breakdown-table th, .breakdown-table td { padding: 8px; border-bottom: 1px solid #eee; text-align: left; }
+        .profit-row { font-weight: bold; background-color: #e8f8f5; color: #27ae60; font-size: 15px;}
+        
+        #resImages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        #resImages img { width: 110px; height: 110px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; cursor: grab; background: white; transition: 0.2s; }
+        #resImages img:hover { border-color: #48d1cc; transform: scale(1.05); }
+
+        /* GTIP CSS */
+        .gtip-item { background: #fff; border: 1px solid #ddd; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; transition: 0.2s; }
+        .gtip-item:hover { border-color: #48d1cc; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .gtip-info { flex: 1; }
+        .gtip-name { font-weight: bold; color: #2c3e50; font-size: 15px; margin-bottom: 5px; }
+        .gtip-code { color: #e67e22; font-weight: bold; font-family: monospace; font-size: 14px; background: #fdf2e9; padding: 3px 8px; border-radius: 4px; display: inline-block; }
+        .gtip-actions { display: flex; gap: 5px; }
+
+        /* MAIL CSS */
+        .mail-card { background: white; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; overflow: hidden; }
+        .mail-header { background: #f8f9fa; padding: 15px; font-weight: bold; font-size: 15px; color: #2c3e50; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .mail-body { padding: 15px; display: grid; gap: 10px; }
+        .lang-row { display: flex; align-items: center; background: #fdfdfd; border: 1px solid #eee; padding: 8px; border-radius: 6px; }
+        .lang-flag { width: 40px; font-size: 20px; text-align: center; }
+        .lang-text { flex: 1; font-size: 13px; color: #555; padding: 0 10px; }
+        .lang-copy { background: #ecf0f1; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; color: #2c3e50; transition: 0.2s; }
+        .lang-copy:hover { background: #3498db; color: white; }
     </style>
 </head>
 <body>
@@ -46,6 +75,8 @@
         <div class="logo">PARA BASS</div>
         <div class="menu-item active" onclick="switchTab('module-add')">🚀 Yeni Ürün Ekle</div>
         <div class="menu-item" onclick="switchTab('module-calc')">🧮 Hesaplama Aracı</div>
+        <div class="menu-item" onclick="switchTab('module-gtip')">📦 GTIP & E-Arşiv</div>
+        <div class="menu-item" onclick="switchTab('module-mail')">✉️ Müşteri Mailleri</div>
         <div class="menu-item" onclick="switchTab('module-history')">⏳ Geçmiş (Yakında)</div>
     </div>
 
@@ -58,24 +89,39 @@
                 <input type="text" id="urlInput" placeholder="https://www.trendyol.com/...">
             </div>
 
-            <div class="quick-settings row">
-                <div>
-                    <label>Ağırlık (KG)</label>
-                    <select id="quickWeight" onchange="syncSettings('quick')"></select>
+            <div class="quick-settings">
+                <div class="row">
+                    <div>
+                        <label>Ağırlık (KG)</label>
+                        <select id="quickWeight" onchange="syncSettings('quick')"></select>
+                    </div>
+                    <div>
+                        <label>Kargo Firması</label>
+                        <select id="quickCarrier" onchange="syncSettings('quick')">
+                            <option value="ali">AliExpress Standard</option>
+                            <option value="fedex">FedEx Global</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Ara Depo</label>
+                        <select id="quickPrep" onchange="syncSettings('quick')">
+                            <option value="0">Hayır ($0)</option>
+                            <option value="1">Evet (Dinamik Ücret)</option>
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label>Kargo Firması</label>
-                    <select id="quickCarrier" onchange="syncSettings('quick')">
-                        <option value="ali">AliExpress Standard</option>
-                        <option value="fedex">FedEx Global</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Ara Depo</label>
-                    <select id="quickPrep" onchange="syncSettings('quick')">
-                        <option value="0">Hayır ($0)</option>
-                        <option value="1">Evet (Dinamik Ücret)</option>
-                    </select>
+                <div class="row" style="margin-bottom: 0;">
+                    <div>
+                        <label>Kâr Türü</label>
+                        <select id="quickProfitType" onchange="syncSettings('quick')">
+                            <option value="fixed">Sabit Tutar ($)</option>
+                            <option value="percent">Yüzde Oranı (%)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Hedef Kâr</label>
+                        <input type="number" id="quickProfitVal" value="10" step="0.1" oninput="syncSettings('quick')">
+                    </div>
                 </div>
             </div>
 
@@ -85,32 +131,48 @@
             <div id="fetchResults" style="display:none; margin-top:20px;">
                 <div class="price-grid">
                     <div class="price-box sale">
-                        <button class="copy-btn" onclick="copyData('quickSalePrice')">Kopyala</button>
+                        <button class="copy-btn" onclick="copyDirectData('quickSalePrice')">Kopyala</button>
                         <label>Kampanyalı Fiyat (Net %50)</label>
                         <div class="price-val" id="quickSalePrice">$0.00</div>
                     </div>
                     <div class="price-box strike">
-                        <button class="copy-btn" onclick="copyData('quickStrikePrice')">Kopyala</button>
+                        <button class="copy-btn" onclick="copyDirectData('quickStrikePrice')">Kopyala</button>
                         <label>ÇİZİK FİYAT (2x)</label>
                         <div class="price-val" id="quickStrikePrice">$0.00</div>
                     </div>
                 </div>
-                <div style="text-align:center; font-weight:bold; color:#27ae60; margin-bottom:20px; font-size:14px;">
-                    Tüm Kesintiler Çıktıktan Sonra Net Kâr: <span id="quickNetProfit">$0.00</span>
+
+                <div class="result-box">
+                    <label>Kuruşu Kuruşuna Maliyet Dağılımı</label>
+                    <table class="breakdown-table">
+                        <tr><td>Ürün Maliyeti (Trendyol):</td><td id="qOutProdCost">$0.00</td></tr>
+                        <tr><td>Kargo Ücreti:</td><td id="qOutShipCost">$0.00</td></tr>
+                        <tr><td>Ara Depo Ücreti:</td><td id="qOutPrepCost">$0.00</td></tr>
+                        <tr><td style="color:#888;">Standart Mağaza Kuponu (İndirim):</td><td id="qOutCoupon" style="color:#888;">$1.00</td></tr>
+                        <tr><td style="color:#e74c3c;">AliExpress Platform Kesintisi (%8):</td><td id="qOutAliFee" style="color:#e74c3c;">-$0.00</td></tr>
+                        <tr><td style="color:#e74c3c;">Affiliate Satış Ortaklığı (%8):</td><td id="qOutAffFee" style="color:#e74c3c;">-$0.00</td></tr>
+                        <tr><td style="color:#e74c3c;">Coins Marketing Kesintisi (%2):</td><td id="qOutCoinsFee" style="color:#e74c3c;">-$0.00</td></tr>
+                        <tr class="profit-row"><td>Elinize Geçecek NET KÂR:</td><td id="qOutNetProfit">$0.00</td></tr>
+                    </table>
                 </div>
 
                 <div class="result-box">
-                    <button class="copy-btn" onclick="copyData('resTitle')">Kopyala</button>
+                    <button class="copy-btn" onclick="copyDirectData('resTitle')">Kopyala</button>
                     <label>SEO BAŞLIĞI</label>
                     <div id="resTitle" style="font-weight:bold; font-size:15px;"></div>
                 </div>
                 <div class="result-box">
-                    <button class="copy-btn" onclick="copyData('resDesc')">Kopyala</button>
+                    <button class="copy-btn" onclick="copyDirectData('resDesc')">Kopyala</button>
                     <label>SEO AÇIKLAMASI</label>
                     <div id="resDesc" style="font-size:13px; white-space:pre-wrap;"></div>
                 </div>
                 <div class="result-box">
-                    <label>FOTOĞRAFLAR (Sürükle - Bırak)</label>
+                    <button class="copy-btn" onclick="copyDirectData('resVideo')">Kopyala</button>
+                    <label>VİDEO LİNKİ</label>
+                    <div id="resVideo" style="font-size:13px; word-break: break-all;">-</div>
+                </div>
+                <div class="result-box">
+                    <label>FOTOĞRAFLAR (Tutup AliExpress'e Sürükle)</label>
                     <div id="resImages"></div>
                 </div>
             </div>
@@ -150,7 +212,7 @@
                 </div>
             </div>
 
-            <div class="extra-fee row">
+            <div class="row">
                 <div>
                     <label>Coins Fee / Ekstra Komisyon (%)</label>
                     <input type="number" id="calcCoinsFee" value="2" step="0.5" oninput="calculatePrices()">
@@ -164,53 +226,105 @@
             <div class="row">
                 <div>
                     <label>Kâr Türü</label>
-                    <select id="calcProfitType" onchange="calculatePrices()">
+                    <select id="calcProfitType" onchange="syncSettings('calc')">
                         <option value="fixed">Sabit Tutar ($)</option>
                         <option value="percent">Yüzde Oranı (%)</option>
                     </select>
                 </div>
                 <div>
                     <label>Hedef Kâr</label>
-                    <input type="number" id="calcProfitVal" value="10" step="0.1" oninput="calculatePrices()">
+                    <input type="number" id="calcProfitVal" value="10" step="0.1" oninput="syncSettings('calc')">
                 </div>
             </div>
 
             <div class="price-grid">
                 <div class="price-box sale">
-                    <button class="copy-btn" onclick="copyData('outSalePrice')">Kopyala</button>
+                    <button class="copy-btn" onclick="copyDirectData('outSalePrice')">Kopyala</button>
                     <label>Kampanyalı Fiyat (Net %50)</label>
                     <div class="price-val" id="outSalePrice">$0.00</div>
                 </div>
                 <div class="price-box strike">
-                    <button class="copy-btn" onclick="copyData('outStrikePrice')">Kopyala</button>
+                    <button class="copy-btn" onclick="copyDirectData('outStrikePrice')">Kopyala</button>
                     <label>ÇİZİK FİYAT</label>
                     <div class="price-val" id="outStrikePrice">$0.00</div>
                 </div>
             </div>
+            
+            <div class="result-box">
+                <label>Kuruşu Kuruşuna Maliyet Dağılımı</label>
+                <table class="breakdown-table">
+                    <tr><td>Ürün Maliyeti (Trendyol):</td><td id="outProdCost">$0.00</td></tr>
+                    <tr><td>Kargo Ücreti:</td><td id="outShipCost">$0.00</td></tr>
+                    <tr><td>Ara Depo Ücreti:</td><td id="outPrepCost">$0.00</td></tr>
+                    <tr><td style="color:#888;">Mağaza Kuponu (İndirim):</td><td id="outCoupon" style="color:#888;">$1.00</td></tr>
+                    <tr><td style="color:#e74c3c;">AliExpress Platform Kesintisi (%8):</td><td id="outAliFee" style="color:#e74c3c;">-$0.00</td></tr>
+                    <tr><td style="color:#e74c3c;">Affiliate Satış Ortaklığı (%8):</td><td id="outAffFee" style="color:#e74c3c;">-$0.00</td></tr>
+                    <tr><td style="color:#e74c3c;">Coins Marketing Kesintisi (<span id="outCoinsPct">%2</span>):</td><td id="outCoinsFee" style="color:#e74c3c;">-$0.00</td></tr>
+                    <tr class="profit-row"><td>Elinize Geçecek NET KÂR:</td><td id="outNetProfit">$0.00</td></tr>
+                </table>
+            </div>
+        </div>
 
-            <div class="result-box" style="font-size:13px; line-height:1.8;">
-                <strong>Sabit Maliyetler:</strong><br>
-                Ürün: <span id="outProdCost">$0.00</span> | Kargo: <span id="outShipCost">$0.00</span> | Depo: <span id="outPrepCost">$0.00</span><br>
-                <hr style="border:0; border-top:1px solid #eee; margin:8px 0;">
-                <strong>Platform ve Pazarlama Kesintileri:</strong><br>
-                AliExpress Komisyonu (%8): <span id="outAliFee" class="fee-text">$0.00</span> | 
-                Affiliate Komisyonu (%8): <span id="outAffFee" class="fee-text">$0.00</span><br>
-                Coins Marketing Fee (<span id="outCoinsPct">%2</span>): <span id="outCoinsFee" class="fee-text">$0.00</span> | 
-                Mağaza Kuponu/Promosyon: <span id="outCoupon" class="fee-text">$0.00</span>
-                <hr style="border:0; border-top:1px solid #eee; margin:8px 0;">
-                <strong>Elinize Geçecek NET KÂR: <span id="outNetProfit" style="color:#27ae60; font-weight:bold; font-size:16px;">$0.00</span></strong>
+        <div id="module-gtip" class="module">
+            <h2>📦 GTIP ve E-Arşiv Asistanı</h2>
+            <p style="font-size:13px; color:#666;">Fatura keserken zaman kaybetmeyin. Ekle, tıkla, kopyala.</p>
+            
+            <div class="result-box" style="background:#e8f8f5; border-color:#2ecc71; text-align:center;">
+                <button class="action-btn" style="background:#2ecc71; color:white; padding:15px; font-size:18px;" onclick="copyRawText('Made in Türkiye')">🇹🇷 "Made in Türkiye" Kopyala</button>
+            </div>
+
+            <div class="result-box">
+                <label>Yeni GTIP Ekle</label>
+                <div class="row">
+                    <div style="flex:2;"><input type="text" id="gtipName" placeholder="Ürün Adı (Örn: Fridge Magnet Set)"></div>
+                    <div style="flex:1;"><input type="text" id="gtipCode" placeholder="GTIP Kodu"></div>
+                </div>
+                <button class="action-btn small-btn" onclick="saveGtip()">➕ Ekle ve Kaydet</button>
+            </div>
+
+            <div>
+                <label style="margin-bottom:10px;">Kayıtlı GTIP'leriniz</label>
+                <div id="gtipContainer">
+                    </div>
+            </div>
+        </div>
+
+        <div id="module-mail" class="module">
+            <h2>✉️ Çok Dilli Şablon Yönetimi</h2>
+            <p style="font-size:13px; color:#666;">Şablonlarınızı ekleyin, dilediğiniz zaman güncelleyin ve tek tıkla kopyalayın.</p>
+            
+            <div class="result-box" style="background:#fcfcfc; border:2px dashed #ccc;">
+                <label id="mailFormTitle" style="color:#3498db; font-size:14px;">Yeni Şablon Ekle</label>
+                <input type="hidden" id="mailEditIndex" value="-1">
+                <input type="text" id="mailTitle" placeholder="Şablon Başlığı (Örn: Kargo Gecikmesi)" style="margin-bottom:10px; border-color:#3498db; font-weight:bold;">
+                <textarea id="mailTR" placeholder="Türkçe Metin" rows="2" style="margin-bottom:8px;"></textarea>
+                <textarea id="mailEN" placeholder="İngilizce Metin" rows="2" style="margin-bottom:8px;"></textarea>
+                <textarea id="mailFR" placeholder="Fransızca Metin" rows="2" style="margin-bottom:8px;"></textarea>
+                <textarea id="mailES" placeholder="İspanyolca Metin" rows="2" style="margin-bottom:8px;"></textarea>
+                <textarea id="mailIT" placeholder="İtalyanca Metin" rows="2" style="margin-bottom:15px;"></textarea>
+                
+                <div style="display:flex; gap:10px;">
+                    <button class="action-btn" id="saveMailBtn" onclick="saveMail()">💾 Şablonu Kaydet</button>
+                    <button class="action-btn" id="cancelEditBtn" onclick="cancelMailEdit()" style="background:#95a5a6; display:none;">İptal Et</button>
+                </div>
+            </div>
+
+            <div style="margin-top:30px;">
+                <label style="margin-bottom:10px;">Kayıtlı Şablonlarınız</label>
+                <div id="mailTemplatesContainer">
+                    </div>
             </div>
         </div>
 
         <div id="module-history" class="module">
             <h2>Geçmiş Listelemeler</h2>
-            <p>Airtable veritabanındaki eski ürünleriniz buraya listelenecek. Çok yakında eklenecek!</p>
+            <p>Bu alan daha sonra Airtable vb. sistemler için kullanılabilir.</p>
         </div>
 
     </div>
 
     <script>
-        // KANKA DİKKAT: MAKE WEBHOOK LİNKİNİ BURAYA YAPIŞTIR
+        // --- MAKE WEBHOOK ---
         const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
 
         const shippingRates = {
@@ -233,10 +347,10 @@
         Object.keys(shippingRates).forEach(kg => {
             let opt1 = document.createElement('option'); opt1.value = kg; opt1.innerHTML = kg + " kg";
             let opt2 = document.createElement('option'); opt2.value = kg; opt2.innerHTML = kg + " kg";
-            weightSelectCalc.appendChild(opt1);
-            weightSelectQuick.appendChild(opt2);
+            weightSelectCalc.appendChild(opt1); weightSelectQuick.appendChild(opt2);
         });
 
+        // --- SEKME GEÇİŞİ ---
         function switchTab(tabId) {
             document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
             document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
@@ -244,155 +358,8 @@
             event.currentTarget.classList.add('active');
         }
 
+        // --- HESAPLAMA SİSTEMİ (Modül 1 & 2) ---
         function syncSettings(source) {
             if (source === 'quick') {
                 document.getElementById('calcWeight').value = document.getElementById('quickWeight').value;
-                document.getElementById('calcCarrier').value = document.getElementById('quickCarrier').value;
-                document.getElementById('calcPrep').value = document.getElementById('quickPrep').value;
-            } else if (source === 'calc') {
-                document.getElementById('quickWeight').value = document.getElementById('calcWeight').value;
-                document.getElementById('quickCarrier').value = document.getElementById('calcCarrier').value;
-                document.getElementById('quickPrep').value = document.getElementById('calcPrep').value;
-            }
-            calculatePrices();
-        }
-
-        function getDynamicPrepCost(weightStr, prepSelectVal) {
-            if (prepSelectVal === '0') return 0; 
-            
-            let w = parseFloat(weightStr);
-            let base = 1.0;
-            let diff = 0;
-            
-            if (w <= 1.0) diff = 0;
-            else if (w <= 4.0) diff = 0.5;
-            else if (w <= 8.0) diff = 1.5;
-            else if (w <= 12.0) diff = 2.0;
-            else if (w <= 16.0) diff = 2.5;
-            else diff = 3.0; 
-
-            let total = base + diff;
-            return total * 1.20; 
-        }
-
-        async function fetchProduct() {
-            const url = document.getElementById('urlInput').value;
-            if (!url) return alert("Link gir kanka!");
-            
-            const btn = document.getElementById('fetchBtn');
-            const status = document.getElementById('statusMessage');
-            btn.disabled = true;
-            status.style.color = "#e67e22";
-            status.innerText = "⏳ Yapay Zeka ürünü inceliyor (20-30 sn)...";
-            document.getElementById('fetchResults').style.display = "none";
-
-            try {
-                const response = await fetch(MAKE_WEBHOOK_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url })
-                });
-
-                if (response.ok) {
-                    const dataText = await response.text();
-                    const parts = dataText.split('|||');
-                    
-                    document.getElementById('resTitle').innerText = parts[0] ? parts[0].trim() : "";
-                    document.getElementById('resDesc').innerText = parts[1] ? parts[1].trim() : "";
-                    
-                    let rawPriceTL = parts[2] ? parts[2].trim().replace(',', '.').replace(/[^\d.-]/g, '') : "0";
-                    document.getElementById('calcCostTL').value = rawPriceTL;
-                    
-                    calculatePrices(); 
-
-                    let rawImages = parts[4] ? parts[4].trim() : "";
-                    let cleanImages = rawImages.match(/https?:\/\/[^\s"',]+/g);
-                    const imgContainer = document.getElementById('resImages');
-                    imgContainer.innerHTML = ""; 
-                    if (cleanImages) {
-                        cleanImages.forEach(imgUrl => {
-                            let img = document.createElement("img");
-                            img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`;
-                            img.draggable = true; 
-                            imgContainer.appendChild(img);
-                        });
-                    }
-
-                    status.style.color = "#27ae60";
-                    status.innerText = "✅ Başarılı! SEO, Resimler ve Fiyat hazır.";
-                    document.getElementById('fetchResults').style.display = "block";
-                }
-            } catch (e) {
-                status.style.color = "red"; status.innerText = "❌ Hata oluştu!";
-            } finally {
-                btn.disabled = false;
-            }
-        }
-
-        function calculatePrices() {
-            let costTL = parseFloat(document.getElementById('calcCostTL').value) || 0;
-            let usdRate = parseFloat(document.getElementById('calcUsdRate').value) || 32.50;
-            let weight = document.getElementById('calcWeight').value;
-            let carrier = document.getElementById('calcCarrier').value;
-            
-            let prepCost = getDynamicPrepCost(weight, document.getElementById('calcPrep').value);
-            
-            // Ekstra Giderler
-            let coinsFeePct = parseFloat(document.getElementById('calcCoinsFee').value) || 0;
-            let couponVal = parseFloat(document.getElementById('calcCoupon').value) || 0;
-            
-            let profitType = document.getElementById('calcProfitType').value;
-            let profitVal = parseFloat(document.getElementById('calcProfitVal').value) || 0;
-
-            let costUSD = costTL / usdRate;
-            let shipCost = shippingRates[weight] ? shippingRates[weight][carrier] : 0;
-            let totalCost = costUSD + shipCost + prepCost;
-
-            // Kârı hesapla
-            let targetProfit = profitType === 'percent' ? totalCost * (profitVal / 100) : profitVal;
-            
-            // CEBİMİZE GİRMESİ GEREKEN TOPLAM PARA (Maliyet + Kar + Müşteriye vereceğimiz Kupon parası)
-            let desiredPayout = totalCost + targetProfit + couponVal;
-            
-            // Toplam Kesinti Oranı = %8 Ali + %8 Affiliate + %X Coins
-            let totalFeeRate = 0.16 + (coinsFeePct / 100);
-            
-            // Satış Fiyatını Bul
-            let finalPrice = desiredPayout / (1 - totalFeeRate);
-            let strikePrice = finalPrice * 2;
-
-            // Komisyon Dağılımları
-            let aliFee = finalPrice * 0.08;
-            let affFee = finalPrice * 0.08;
-            let coinsFeeVal = finalPrice * (coinsFeePct / 100);
-
-            // Ekran Güncellemeleri
-            document.getElementById('quickSalePrice').innerText = "$" + finalPrice.toFixed(2);
-            document.getElementById('quickStrikePrice').innerText = "$" + strikePrice.toFixed(2);
-            document.getElementById('quickNetProfit').innerText = "$" + targetProfit.toFixed(2);
-
-            document.getElementById('outSalePrice').innerText = "$" + finalPrice.toFixed(2);
-            document.getElementById('outStrikePrice').innerText = "$" + strikePrice.toFixed(2);
-            
-            document.getElementById('outProdCost').innerText = "$" + costUSD.toFixed(2);
-            document.getElementById('outShipCost').innerText = "$" + shipCost.toFixed(2);
-            document.getElementById('outPrepCost').innerText = "$" + prepCost.toFixed(2);
-            
-            document.getElementById('outAliFee').innerText = "$" + aliFee.toFixed(2);
-            document.getElementById('outAffFee').innerText = "$" + affFee.toFixed(2);
-            
-            document.getElementById('outCoinsPct').innerText = "%" + coinsFeePct;
-            document.getElementById('outCoinsFee').innerText = "$" + coinsFeeVal.toFixed(2);
-            document.getElementById('outCoupon').innerText = "$" + couponVal.toFixed(2);
-            
-            document.getElementById('outNetProfit').innerText = "$" + targetProfit.toFixed(2);
-        }
-
-        function copyData(elementId) {
-            let txt = document.getElementById(elementId).innerText.replace('$', '').trim();
-            navigator.clipboard.writeText(txt).then(() => alert("Kopyalandı!"));
-        }
-
-        window.onload = calculatePrices;
-    </script>
-</body>
-</html>
+                document.getElementById('calc
