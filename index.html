@@ -6,37 +6,25 @@
     <title>Para Bass Pro - E-Ticaret Paneli</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        
-        /* Sol Menü (Sidebar) */
         .sidebar { width: 250px; background: #2c3e50; color: white; display: flex; flex-direction: column; padding-top: 20px; }
         .logo { font-size: 24px; font-weight: bold; text-align: center; color: #48d1cc; margin-bottom: 30px; letter-spacing: 1px; }
         .menu-item { padding: 15px 25px; cursor: pointer; border-left: 4px solid transparent; transition: 0.3s; font-size: 15px; color: #bdc3c7; }
         .menu-item:hover { background: #34495e; color: white; }
         .menu-item.active { background: #34495e; border-left-color: #48d1cc; color: white; font-weight: bold; }
-        
-        /* Ana İçerik Alanı */
         .main-content { flex: 1; padding: 40px; overflow-y: auto; background-color: #f4f7f6; }
         .module { display: none; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); max-width: 800px; margin: 0 auto; }
         .module.active { display: block; }
-        
         h2 { color: #2c3e50; margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
-        
-        /* Form Elemanları */
         .form-group { margin-bottom: 15px; }
         label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #7f8c8d; text-transform: uppercase; }
         input, select { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; outline: none; transition: 0.3s; }
         input:focus, select:focus { border-color: #48d1cc; }
         .row { display: flex; gap: 15px; margin-bottom: 15px; }
         .row > div { flex: 1; }
-        
         button.action-btn { background-color: #48d1cc; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; width: 100%; }
         button.action-btn:hover { background-color: #40e0d0; }
-        
-        /* Sonuç Kutuları */
         .result-box { background: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
         .copy-btn { position: absolute; top: 10px; right: 10px; background: #3498db; color: white; border: none; border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; }
-        
-        /* Fiyat Grid */
         .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; margin-bottom: 20px; }
         .price-box { padding: 20px; border-radius: 8px; text-align: center; border: 1px solid #ddd; position: relative; }
         .price-box.sale { background: #e0ffff; border-color: #00bfff; }
@@ -44,12 +32,9 @@
         .price-val { font-size: 28px; font-weight: bold; margin: 10px 0; }
         .strike .price-val { text-decoration: line-through; color: #e74c3c; }
         .sale .price-val { color: #16a085; }
-        
         #resImages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
         #resImages img { width: 100px; height: 100px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; cursor: grab; background: white; }
         #statusMessage { margin-top: 15px; font-weight: bold; text-align: center; }
-        
-        /* Hızlı Ayarlar Kutusu */
         .quick-settings { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; margin-bottom: 15px; }
     </style>
 </head>
@@ -66,8 +51,6 @@
         
         <div id="module-add" class="module active">
             <h2>Yeni Ürün Çek ve Hızlı Fiyatla</h2>
-            <p style="color:#666; font-size:14px;">Trendyol linkini ve kargo detaylarını girin. AI saniyeler içinde her şeyi hazırlasın.</p>
-            
             <div class="form-group">
                 <label>Trendyol Linki</label>
                 <input type="text" id="urlInput" placeholder="https://www.trendyol.com/...">
@@ -85,13 +68,19 @@
                         <option value="fedex">FedEx Global</option>
                     </select>
                 </div>
+                <div>
+                    <label>Ara Depo</label>
+                    <select id="quickPrep" onchange="syncSettings('quick')">
+                        <option value="0">Hayır ($0)</option>
+                        <option value="1">Evet (Dinamik Ücret)</option>
+                    </select>
+                </div>
             </div>
 
             <button class="action-btn" onclick="fetchProduct()" id="fetchBtn">⚡ Ürünü İşle ve Fiyatı Gör</button>
             <div id="statusMessage"></div>
 
             <div id="fetchResults" style="display:none; margin-top:20px;">
-                
                 <div class="price-grid">
                     <div class="price-box sale">
                         <button class="copy-btn" onclick="copyData('quickSalePrice')">Kopyala</button>
@@ -127,8 +116,6 @@
 
         <div id="module-calc" class="module">
             <h2>Detaylı Fiyat Hesaplayıcı</h2>
-            <p style="color:#666; font-size:14px;">Kargo, ara depo, kur ve komisyon ayarlarını buradan yönetebilirsiniz.</p>
-            
             <div class="row">
                 <div>
                     <label>Ürün Maliyeti (TL)</label>
@@ -154,9 +141,9 @@
                 </div>
                 <div>
                     <label>Ara Depo</label>
-                    <select id="calcPrep" onchange="calculatePrices()">
+                    <select id="calcPrep" onchange="syncSettings('calc')">
                         <option value="0">Hayır ($0)</option>
-                        <option value="5">Evet (+$5.00)</option>
+                        <option value="1">Evet (Dinamik Ücret)</option>
                     </select>
                 </div>
             </div>
@@ -203,7 +190,7 @@
     </div>
 
     <script>
-        // KANKA DİKKAT: MAKE.COM LİNKİNİ BURAYA YAPIŞTIRMAYI UNUTMA
+        // KANKA DİKKAT: MAKE WEBHOOK LİNKİNİ BURAYA YAPIŞTIR
         const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
 
         const shippingRates = {
@@ -221,7 +208,6 @@
             "15.0": { ali: 80.44, fedex: 83.51 }
         };
 
-        // Kargo dropdownlarını her iki modüle de doldurma
         const weightSelectCalc = document.getElementById('calcWeight');
         const weightSelectQuick = document.getElementById('quickWeight');
         Object.keys(shippingRates).forEach(kg => {
@@ -231,7 +217,6 @@
             weightSelectQuick.appendChild(opt2);
         });
 
-        // Modüller arası sekme değiştirme
         function switchTab(tabId) {
             document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
             document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
@@ -239,19 +224,39 @@
             event.currentTarget.classList.add('active');
         }
 
-        // Hızlı Ekran ile Hesaplama Ekranını Senkronize Et
         function syncSettings(source) {
             if (source === 'quick') {
                 document.getElementById('calcWeight').value = document.getElementById('quickWeight').value;
                 document.getElementById('calcCarrier').value = document.getElementById('quickCarrier').value;
+                document.getElementById('calcPrep').value = document.getElementById('quickPrep').value;
             } else if (source === 'calc') {
                 document.getElementById('quickWeight').value = document.getElementById('calcWeight').value;
                 document.getElementById('quickCarrier').value = document.getElementById('calcCarrier').value;
+                document.getElementById('quickPrep').value = document.getElementById('calcPrep').value;
             }
             calculatePrices();
         }
 
-        // AI'den Ürün Çekme Modülü
+        // Dinamik Ara Depo Fiyat Hesaplama Formülü
+        function getDynamicPrepCost(weightStr, prepSelectVal) {
+            if (prepSelectVal === '0') return 0; // Ara depo seçilmemişse 0
+            
+            let w = parseFloat(weightStr);
+            let base = 1.0;
+            let diff = 0;
+            
+            if (w <= 1.0) diff = 0;
+            else if (w <= 4.0) diff = 0.5;
+            else if (w <= 8.0) diff = 1.5;
+            else if (w <= 12.0) diff = 2.0;
+            else if (w <= 16.0) diff = 2.5;
+            else diff = 3.0; 
+
+            let total = base + diff;
+            let totalWithVat = total * 1.20; // %20 KDV Eklemesi
+            return totalWithVat;
+        }
+
         async function fetchProduct() {
             const url = document.getElementById('urlInput').value;
             if (!url) return alert("Link gir kanka!");
@@ -276,13 +281,11 @@
                     document.getElementById('resTitle').innerText = parts[0] ? parts[0].trim() : "";
                     document.getElementById('resDesc').innerText = parts[1] ? parts[1].trim() : "";
                     
-                    // Fiyatı alıp her yeri güncelle
                     let rawPriceTL = parts[2] ? parts[2].trim().replace(',', '.').replace(/[^\d.-]/g, '') : "0";
                     document.getElementById('calcCostTL').value = rawPriceTL;
                     
-                    calculatePrices(); // SİHİR: Hem hızlı ekranı hem hesap ekranını anında doldurur
+                    calculatePrices(); 
 
-                    // Resimleri Listele
                     let rawImages = parts[4] ? parts[4].trim() : "";
                     let cleanImages = rawImages.match(/https?:\/\/[^\s"',]+/g);
                     const imgContainer = document.getElementById('resImages');
@@ -307,13 +310,15 @@
             }
         }
 
-        // Fiyat Hesaplama Modülü (Her iki ekranı da besler)
         function calculatePrices() {
             let costTL = parseFloat(document.getElementById('calcCostTL').value) || 0;
             let usdRate = parseFloat(document.getElementById('calcUsdRate').value) || 32.50;
             let weight = document.getElementById('calcWeight').value;
             let carrier = document.getElementById('calcCarrier').value;
-            let prepCost = parseFloat(document.getElementById('calcPrep').value) || 0;
+            
+            // Dinamik Ara Depo Maliyetini Al
+            let prepCost = getDynamicPrepCost(weight, document.getElementById('calcPrep').value);
+            
             let profitType = document.getElementById('calcProfitType').value;
             let profitVal = parseFloat(document.getElementById('calcProfitVal').value) || 0;
 
@@ -327,12 +332,10 @@
             let finalPrice = desiredPayout / (1 - 0.16);
             let strikePrice = finalPrice * 2;
 
-            // 1. Modül (Hızlı Ekran) Güncellemesi
             document.getElementById('quickSalePrice').innerText = "$" + finalPrice.toFixed(2);
             document.getElementById('quickStrikePrice').innerText = "$" + strikePrice.toFixed(2);
             document.getElementById('quickNetProfit').innerText = "$" + targetProfit.toFixed(2);
 
-            // 2. Modül (Detaylı Ekran) Güncellemesi
             document.getElementById('outSalePrice').innerText = "$" + finalPrice.toFixed(2);
             document.getElementById('outStrikePrice').innerText = "$" + strikePrice.toFixed(2);
             document.getElementById('outProdCost').innerText = "$" + costUSD.toFixed(2);
