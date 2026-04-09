@@ -562,4 +562,288 @@
         }
 
         function copyDirectData(elementId) {
-            let txt
+            let txt = document.getElementById(elementId).innerText.replace('$', '').trim();
+            navigator.clipboard.writeText(txt).then(() => alert("Kopyalandı!"));
+        }
+        function copyRawText(text) {
+            navigator.clipboard.writeText(text).then(() => alert("Kopyalandı: " + text));
+        }
+
+        // ==========================================
+        // MODÜL 3: GTIP YÖNETİMİ
+        // ==========================================
+        let gtipList = JSON.parse(localStorage.getItem('paraBassGtipDb')) || [];
+
+        function initDropZone() {
+            const dropZone = document.getElementById('gpsrDropZone');
+            if(!dropZone) return;
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#48d1cc'; dropZone.style.background = '#f0ffff'; });
+            dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#bdc3c7'; dropZone.style.background = '#fafafa'; });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; dropZone.style.background = '#fafafa';
+                if(e.dataTransfer.files.length > 0) processGpsrFile(e.dataTransfer.files[0]);
+            });
+        }
+
+        function handleGpsrSelect(event) {
+            const file = event.target.files[0]; if(!file) return; processGpsrFile(file);
+        }
+
+        function processGpsrFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 400; 
+                    let width = img.width; let height = img.height;
+                    if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
+                    else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
+
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const base64 = canvas.toDataURL('image/jpeg', 0.7);
+                    
+                    document.getElementById('gpsrBase64').value = base64;
+                    document.getElementById('gpsrPreview').src = base64;
+                    document.getElementById('gpsrPreview').style.display = 'block';
+                    document.getElementById('gpsrDropText').style.display = 'none';
+                }
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function saveGtip() {
+            let name = document.getElementById('gtipName').value.trim();
+            let code = document.getElementById('gtipCode').value.trim();
+            let imageBase64 = document.getElementById('gpsrBase64').value;
+            
+            if (!name || !code) return alert("Ürün adı ve GTIP boş bırakılamaz!");
+            let editIndex = document.getElementById('gtipEditIndex').value;
+
+            try {
+                if (editIndex === "-1") { gtipList.unshift({ name, code, image: imageBase64 }); } 
+                else { gtipList[editIndex] = { name, code, image: imageBase64 }; }
+                localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList));
+                cancelGtipEdit(); renderGtibs();
+            } catch (e) { alert("Hata! Tarayıcı hafızası dolu."); if (editIndex === "-1") gtipList.shift(); }
+        }
+
+        function editGtip(index) {
+            let item = gtipList[index];
+            document.getElementById('gtipEditIndex').value = index;
+            document.getElementById('gtipName').value = item.name;
+            document.getElementById('gtipCode').value = item.code;
+            
+            if (item.image) {
+                document.getElementById('gpsrBase64').value = item.image;
+                document.getElementById('gpsrPreview').src = item.image;
+                document.getElementById('gpsrPreview').style.display = 'block';
+                document.getElementById('gpsrDropText').style.display = 'none';
+            } else {
+                document.getElementById('gpsrBase64').value = "";
+                document.getElementById('gpsrPreview').style.display = 'none';
+                document.getElementById('gpsrDropText').style.display = 'inline';
+            }
+
+            document.getElementById('gtipFormTitle').innerText = "✏️ GTIP Düzenle";
+            document.getElementById('saveGtipBtn').innerHTML = "🔄 Güncelle";
+            document.getElementById('cancelGtipBtn').style.display = "inline-block";
+            document.querySelector('.main-content').scrollTop = 0;
+        }
+
+        function cancelGtipEdit() {
+            document.getElementById('gtipEditIndex').value = "-1"; document.getElementById('gtipName').value = ""; document.getElementById('gtipCode').value = ""; document.getElementById('gpsrBase64').value = ""; document.getElementById('gpsrPreview').style.display = 'none'; document.getElementById('gpsrDropText').style.display = 'inline';
+            document.getElementById('gtipFormTitle').innerText = "Yeni GTIP ve GPSR Ekle";
+            document.getElementById('saveGtipBtn').innerHTML = "➕ Ekle ve Kaydet";
+            document.getElementById('cancelGtipBtn').style.display = "none";
+        }
+
+        function deleteGtip(index) {
+            if(confirm("Silmek istediğinize emin misiniz?")) {
+                gtipList.splice(index, 1); localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList)); renderGtibs();
+            }
+        }
+
+        function renderGtibs() {
+            const container = document.getElementById('gtipContainer'); 
+            if(!container) return;
+            container.innerHTML = "";
+            if(gtipList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün eklenmedi.</p>";
+            
+            gtipList.forEach((item, i) => {
+                let div = document.createElement("div"); div.className = "gtip-item";
+                let imgHtml = item.image ? `<img src="${item.image}" draggable="true" title="Sürükle">` : `<span>Yok</span>`;
+                let safeName = item.name ? item.name.replace(/'/g, "\\'") : '';
+                let safeCode = item.code ? item.code.replace(/'/g, "\\'") : '';
+
+                div.innerHTML = `
+                    <div class="gpsr-img-container">${imgHtml}</div>
+                    <div class="gtip-info"><div class="gtip-name">${item.name}</div><div class="gtip-code">${item.code}</div></div>
+                    <div class="gtip-actions">
+                        <div style="display:flex; gap:5px; width: 100%;"><button class="small-btn" style="flex:1; background:#27ae60;" onclick="copyRawText('${safeName}')">Adı Al</button><button class="small-btn" style="flex:1;" onclick="copyRawText('${safeCode}')">Kodu Al</button></div>
+                        <div style="display:flex; gap:5px; width: 100%; margin-top:5px;"><button class="edit-btn" style="flex:1; margin:0;" onclick="editGtip(${i})">✏️</button><button class="delete-btn" style="flex:1; margin:0;" onclick="deleteGtip(${i})">Sil</button></div>
+                    </div>`;
+                container.appendChild(div);
+            });
+        }
+
+        // ==========================================
+        // MODÜL 4: MAİL YÖNETİMİ
+        // ==========================================
+        let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
+
+        function saveMail() {
+            let title = document.getElementById('mailTitle').value.trim();
+            if(!title) return alert("Şablon başlığı zorunludur!");
+            
+            let newMail = { title: title, tr: document.getElementById('mailTR').value.trim() || "-", en: document.getElementById('mailEN').value.trim() || "-", fr: document.getElementById('mailFR').value.trim() || "-", es: document.getElementById('mailES').value.trim() || "-", it: document.getElementById('mailIT').value.trim() || "-" };
+            let editIndex = document.getElementById('mailEditIndex').value;
+            
+            if(editIndex === "-1") { mailList.unshift(newMail); } else { mailList[editIndex] = newMail; }
+            localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); cancelMailEdit(); renderMails();
+        }
+
+        function editMail(event, index) {
+            event.stopPropagation(); 
+            let mail = mailList[index];
+            document.getElementById('mailEditIndex').value = index; document.getElementById('mailTitle').value = mail.title; document.getElementById('mailTR').value = mail.tr !== "-" ? mail.tr : ""; document.getElementById('mailEN').value = mail.en !== "-" ? mail.en : ""; document.getElementById('mailFR').value = mail.fr !== "-" ? mail.fr : ""; document.getElementById('mailES').value = mail.es !== "-" ? mail.es : ""; document.getElementById('mailIT').value = mail.it !== "-" ? mail.it : "";
+            
+            document.getElementById('mailFormTitle').innerText = "✏️ Şablonu Düzenliyorsun"; document.getElementById('saveMailBtn').innerText = "🔄 Güncelle"; document.getElementById('cancelEditBtn').style.display = "inline-block"; document.querySelector('.main-content').scrollTop = 0;
+        }
+
+        function cancelMailEdit() {
+            document.getElementById('mailEditIndex').value = "-1"; document.getElementById('mailTitle').value = ""; document.getElementById('mailTR').value = ""; document.getElementById('mailEN').value = ""; document.getElementById('mailFR').value = ""; document.getElementById('mailES').value = ""; document.getElementById('mailIT').value = "";
+            document.getElementById('mailFormTitle').innerText = "Yeni Şablon Ekle"; document.getElementById('saveMailBtn').innerText = "💾 Şablonu Kaydet"; document.getElementById('cancelEditBtn').style.display = "none";
+        }
+
+        function deleteMail(event, index) {
+            event.stopPropagation(); 
+            if(confirm("Silmek istediğinize emin misiniz?")) { mailList.splice(index, 1); localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); renderMails(); }
+        }
+
+        function toggleMailAccordion(index) {
+            let body = document.getElementById('mail-body-' + index); let icon = document.getElementById('mail-icon-' + index);
+            if(body.style.display === 'none' || body.style.display === '') { body.style.display = 'grid'; icon.innerText = '🔽'; } else { body.style.display = 'none'; icon.innerText = '▶️'; }
+        }
+
+        function renderMails() {
+            const container = document.getElementById('mailTemplatesContainer'); 
+            if(!container) return;
+            container.innerHTML = "";
+            if(mailList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz şablon eklemedin.</p>";
+
+            mailList.forEach((mail, i) => {
+                let html = `
+                    <div class="mail-card">
+                        <div class="mail-header" onclick="toggleMailAccordion(${i})">
+                            <span><span id="mail-icon-${i}">▶️</span> 📌 ${mail.title}</span>
+                            <div><button class="edit-btn" onclick="editMail(event, ${i})">✏️</button><button class="delete-btn" onclick="deleteMail(event, ${i})">Sil</button></div>
+                        </div>
+                        <div class="mail-body" id="mail-body-${i}">
+                            <div class="lang-row"><div class="lang-flag">🇹🇷</div><div class="lang-text">${mail.tr}</div><button class="lang-copy" onclick="copyRawText('${mail.tr.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                            <div class="lang-row"><div class="lang-flag">🇬🇧</div><div class="lang-text">${mail.en}</div><button class="lang-copy" onclick="copyRawText('${mail.en.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                            <div class="lang-row"><div class="lang-flag">🇫🇷</div><div class="lang-text">${mail.fr}</div><button class="lang-copy" onclick="copyRawText('${mail.fr.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                            <div class="lang-row"><div class="lang-flag">🇪🇸</div><div class="lang-text">${mail.es}</div><button class="lang-copy" onclick="copyRawText('${mail.es.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                            <div class="lang-row"><div class="lang-flag">🇮🇹</div><div class="lang-text">${mail.it}</div><button class="lang-copy" onclick="copyRawText('${mail.it.replace(/'/g, "\\'")}')">Kopyala</button></div>
+                        </div>
+                    </div>`;
+                container.innerHTML += html;
+            });
+        }
+
+        // ==========================================
+        // MODÜL 5: SIFIR KREDİLİ GEÇMİŞ YÖNETİMİ
+        // ==========================================
+        function deleteHistory(index) {
+            if(confirm("Bu ürünü geçmişten silmek istediğinize emin misiniz?")) {
+                historyList.splice(index, 1);
+                localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList));
+                renderHistory();
+            }
+        }
+
+        function restoreFromHistory(index) {
+            let item = historyList[index];
+            
+            if(localStorage.getItem('paraBassRole') === 'calisan') {
+                return alert("Çalışan yetkisiyle AI modülüne ürün geri yüklenemez.");
+            }
+            
+            document.getElementById('urlInput').value = item.url;
+            document.getElementById('resTitle').innerText = item.title;
+            document.getElementById('resDesc').innerText = item.desc || "Yok";
+            document.getElementById('calcCostTL').value = item.priceTL;
+            document.getElementById('resVideo').innerText = item.video || "Video bulunamadı";
+
+            const imgContainer = document.getElementById('resImages');
+            imgContainer.innerHTML = ""; 
+            if (item.images && item.images.length > 0) {
+                item.images.forEach(imgUrl => {
+                    let img = document.createElement("img");
+                    img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`;
+                    img.draggable = true; imgContainer.appendChild(img);
+                });
+            }
+
+            document.getElementById('fetchResults').style.display = "block";
+            document.getElementById('statusMessage').style.color = "#27ae60"; 
+            document.getElementById('statusMessage').innerText = "♻️ Başarılı! Veriler geçmişten 0 kredi ile geri yüklendi.";
+            
+            calculatePrices(); 
+            switchTab('module-add', document.getElementById('menuAdd'));
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('historyContainer');
+            if(!container) return;
+            container.innerHTML = "";
+            if(historyList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün aratmadınız.</p>";
+
+            historyList.forEach((item, i) => {
+                let div = document.createElement("div");
+                div.className = "history-card";
+                
+                div.innerHTML = `
+                    <div style="flex:1;">
+                        <div class="hist-title">${item.title}</div>
+                        <div class="hist-date">📅 ${item.date}</div>
+                    </div>
+                    <div class="hist-actions">
+                        <button class="action-btn" style="margin:0; padding:8px 12px; font-size:13px;" onclick="restoreFromHistory(${i})">Sisteme Yükle ♻️</button>
+                        <div style="display:flex; gap:5px;">
+                            <button class="small-btn" style="flex:1;" onclick="window.open('${item.url}', '_blank')">Link ↗️</button>
+                            <button class="delete-btn" style="flex:1; margin:0;" onclick="deleteHistory(${i})">Sil</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // --- AÇILIŞ ---
+        window.onload = () => {
+            initDropdowns();
+            
+            if(document.getElementById('calcWeight')) {
+                document.getElementById('calcWeight').value = "0.1";
+                if(document.getElementById('quickWeight')) document.getElementById('quickWeight').value = "0.1";
+            }
+            
+            if(localStorage.getItem('paraBassAuth') === 'true') {
+                document.getElementById('loginOverlay').style.display = 'none';
+                applyRolePermissions();
+                fetchExchangeRate(); 
+            }
+
+            initDropZone();
+            calculatePrices();
+            renderGtibs();
+            renderMails();
+            renderHistory();
+        };
+    </script>
+</body>
+</html>
