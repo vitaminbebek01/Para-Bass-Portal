@@ -8,12 +8,12 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         
         /* GİRİŞ EKRANI CSS */
-        #loginOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; transition: 0.5s; }
+        #loginOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; transition: 0.3s; }
         .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center; width: 320px; }
         .login-box h2 { color: #00bfff; margin-top: 0; margin-bottom: 20px; font-size: 24px; }
         .login-box input { width: 100%; padding: 15px; margin-bottom: 15px; border: 2px solid #eee; border-radius: 8px; font-size: 16px; text-align: center; box-sizing: border-box; }
         .login-box input:focus { border-color: #48d1cc; outline: none; }
-        .login-box button { width: 100%; padding: 15px; background: #48d1cc; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .login-box button { width: 100%; padding: 15px; background: #48d1cc; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s;}
         .login-box button:hover { background: #40e0d0; }
 
         .sidebar { width: 250px; background: #2c3e50; color: white; display: flex; flex-direction: column; padding-top: 20px; overflow-y: auto; }
@@ -98,7 +98,7 @@
         <div class="login-box">
             <h2>GÜVENLİK DUVARI</h2>
             <p style="font-size:13px; color:#666; margin-bottom:20px;">Sisteme giriş yapmak için şifrenizi girin.</p>
-            <input type="password" id="adminPassword" placeholder="Şifreyi Girin" onkeypress="if(event.key === 'Enter') checkLogin()">
+            <input type="password" id="adminPassword" placeholder="Şifreniz" onkeypress="if(event.key === 'Enter') checkLogin()">
             <button onclick="checkLogin()">Sistemi Aç 🔓</button>
         </div>
     </div>
@@ -109,7 +109,7 @@
         <div class="menu-item" onclick="switchTab('module-calc', this)" id="menuCalc">🧮 Hesaplama Aracı</div>
         <div class="menu-item" onclick="switchTab('module-gtip', this)">📦 GTIP & GPSR</div>
         <div class="menu-item" onclick="switchTab('module-mail', this)">✉️ Müşteri Mailleri</div>
-        <div class="menu-item" onclick="switchTab('module-history', this)">⏳ Geçmiş Listesi</div>
+        <div class="menu-item" onclick="switchTab('module-history', this)" id="menuHistory">⏳ Geçmiş Ürün Listelerim</div>
         
         <div style="margin-top: auto;">
             <div class="logout-btn" onclick="logout()">Çıkış Yap 🚪</div>
@@ -288,8 +288,8 @@
         </div>
 
         <div id="module-history" class="module">
-            <h2>⏳ Geçmiş Listesi (Sıfır Kredi)</h2>
-            <p style="font-size:13px; color:#666;">Buradaki ürünleri sisteme geri yüklediğinizde Make.com kredisi harcanmaz.</p>
+            <h2>⏳ Geçmiş Ürün Listelerim</h2>
+            <p style="font-size:13px; color:#666;">Daha önce çektiğiniz ürünler burada kaydedilir. Sisteme geri yükleyerek 0 kredi ile tekrar işlem yapabilirsiniz.</p>
             <div id="historyContainer">
                 </div>
         </div>
@@ -312,8 +312,8 @@
                 applyRolePermissions();
                 fetchExchangeRate();
             } 
-            else if(pass === "calisan") {
-                // ÇALIŞAN GİRİŞİ (MAKE.COM KISITLI)
+            else if(pass === "12345") {
+                // ÇALIŞAN GİRİŞİ (MAKE.COM VE GEÇMİŞ KISITLI)
                 document.getElementById('loginOverlay').style.display = 'none';
                 localStorage.setItem('paraBassAuth', 'true');
                 localStorage.setItem('paraBassRole', 'calisan');
@@ -333,21 +333,31 @@
 
         function applyRolePermissions() {
             const role = localStorage.getItem('paraBassRole');
+            const menuAdd = document.getElementById('menuAdd');
+            const modAdd = document.getElementById('module-add');
+            const menuHistory = document.getElementById('menuHistory');
+            const modHistory = document.getElementById('module-history');
+            const menuCalc = document.getElementById('menuCalc');
+
             if (role === 'calisan') {
-                // Çalışansa 1. Modülü Gizle ve Hesaplama Aracına at
-                document.getElementById('menuAdd').style.display = 'none';
-                document.getElementById('module-add').innerHTML = "<h2>Yetkisiz Erişim</h2><p>Bu modüle erişim yetkiniz bulunmamaktadır.</p>";
-                switchTab('module-calc', document.getElementById('menuCalc'));
+                if(menuAdd) menuAdd.style.display = 'none';
+                if(modAdd) modAdd.innerHTML = "<h2>Yetkisiz Erişim</h2><p>Bu modüle erişim yetkiniz bulunmamaktadır.</p>";
+                
+                if(menuHistory) menuHistory.style.display = 'none';
+                if(modHistory) modHistory.innerHTML = "<h2>Yetkisiz Erişim</h2><p>Bu modüle erişim yetkiniz bulunmamaktadır.</p>";
+
+                // Çalışan direkt Hesaplama Aracında başlatılır
+                switchTab('module-calc', menuCalc);
             } else {
-                // Patronsa her şey açık kalsın
-                document.getElementById('menuAdd').style.display = 'block';
+                if(menuAdd) menuAdd.style.display = 'block';
+                if(menuHistory) menuHistory.style.display = 'block';
             }
         }
 
         if(localStorage.getItem('paraBassAuth') === 'true') {
             document.getElementById('loginOverlay').style.display = 'none';
             applyRolePermissions();
-            fetchExchangeRate(); // Zaten giriş yapılıysa direk kuru çek
+            fetchExchangeRate(); 
         }
 
         // CANLI DOLAR KURU ÇEKME (YEDEK: 44.50)
@@ -357,13 +367,17 @@
                 let data = await res.json();
                 if(data && data.rates && data.rates.TRY) {
                     let liveRate = data.rates.TRY.toFixed(2);
-                    document.getElementById('calcUsdRate').value = liveRate;
-                    document.getElementById('calcUsdRate').style.borderColor = "#27ae60"; 
+                    let usdInput = document.getElementById('calcUsdRate');
+                    if(usdInput) {
+                        usdInput.value = liveRate;
+                        usdInput.style.borderColor = "#27ae60"; 
+                    }
                     calculatePrices(); 
                 }
             } catch(e) {
                 console.log("Kur çekilemedi, varsayılan 44.50 kullanılacak.");
-                document.getElementById('calcUsdRate').value = "44.50";
+                let usdInput = document.getElementById('calcUsdRate');
+                if(usdInput) usdInput.value = "44.50";
             }
         }
 
@@ -382,18 +396,24 @@
             "15.0": { ali: 80.44, fedex: 83.51 }
         };
 
-        const weightSelectCalc = document.getElementById('calcWeight');
-        const weightSelectQuick = document.getElementById('quickWeight');
-        Object.keys(shippingRates).forEach(kg => {
-            let opt1 = document.createElement('option'); opt1.value = kg; opt1.innerHTML = kg + " kg";
-            let opt2 = document.createElement('option'); opt2.value = kg; opt2.innerHTML = kg + " kg";
-            weightSelectCalc.appendChild(opt1); weightSelectQuick.appendChild(opt2);
-        });
+        function initDropdowns() {
+            const weightSelectCalc = document.getElementById('calcWeight');
+            const weightSelectQuick = document.getElementById('quickWeight');
+            if(!weightSelectCalc || !weightSelectQuick) return;
+            
+            Object.keys(shippingRates).forEach(kg => {
+                let opt1 = document.createElement('option'); opt1.value = kg; opt1.innerHTML = kg + " kg";
+                let opt2 = document.createElement('option'); opt2.value = kg; opt2.innerHTML = kg + " kg";
+                weightSelectCalc.appendChild(opt1); weightSelectQuick.appendChild(opt2);
+            });
+        }
 
         function switchTab(tabId, clickedElement) {
             document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
             document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
+            
+            let targetTab = document.getElementById(tabId);
+            if(targetTab) targetTab.classList.add('active');
             if(clickedElement) clickedElement.classList.add('active');
         }
 
@@ -405,11 +425,14 @@
                 document.getElementById('calcProfitType').value = document.getElementById('quickProfitType').value;
                 document.getElementById('calcProfitVal').value = document.getElementById('quickProfitVal').value;
             } else if (source === 'calc') {
-                document.getElementById('quickWeight').value = document.getElementById('calcWeight').value;
-                document.getElementById('quickCarrier').value = document.getElementById('calcCarrier').value;
-                document.getElementById('quickPrep').value = document.getElementById('calcPrep').value;
-                document.getElementById('quickProfitType').value = document.getElementById('calcProfitType').value;
-                document.getElementById('quickProfitVal').value = document.getElementById('calcProfitVal').value;
+                let qw = document.getElementById('quickWeight');
+                if(qw) {
+                    qw.value = document.getElementById('calcWeight').value;
+                    document.getElementById('quickCarrier').value = document.getElementById('calcCarrier').value;
+                    document.getElementById('quickPrep').value = document.getElementById('calcPrep').value;
+                    document.getElementById('quickProfitType').value = document.getElementById('calcProfitType').value;
+                    document.getElementById('quickProfitVal').value = document.getElementById('calcProfitVal').value;
+                }
             }
             calculatePrices();
         }
@@ -467,8 +490,15 @@
                         });
                     }
 
-                    // GEÇMİŞE KAYDET
-                    let newItem = { title: seoTitle, desc: seoDesc, url: url, priceTL: rawPriceTL, video: videoLink, images: cleanImages, date: new Date().toLocaleDateString('tr-TR') };
+                    let newItem = {
+                        title: seoTitle,
+                        desc: seoDesc,
+                        url: url,
+                        priceTL: rawPriceTL,
+                        video: videoLink,
+                        images: cleanImages, 
+                        date: new Date().toLocaleDateString('tr-TR')
+                    };
                     historyList.unshift(newItem);
                     localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList));
                     renderHistory();
@@ -480,8 +510,11 @@
         }
 
         function calculatePrices() {
-            let costTL = parseFloat(document.getElementById('calcCostTL').value) || 0;
-            let usdRate = parseFloat(document.getElementById('calcUsdRate').value) || 44.50; // Fallback var
+            let costEl = document.getElementById('calcCostTL');
+            if(!costEl) return;
+
+            let costTL = parseFloat(costEl.value) || 0;
+            let usdRate = parseFloat(document.getElementById('calcUsdRate').value) || 44.50;
             let weight = document.getElementById('calcWeight').value;
             let carrier = document.getElementById('calcCarrier').value;
             let prepCost = getDynamicPrepCost(weight, document.getElementById('calcPrep').value);
@@ -529,196 +562,4 @@
         }
 
         function copyDirectData(elementId) {
-            let txt = document.getElementById(elementId).innerText.replace('$', '').trim();
-            navigator.clipboard.writeText(txt).then(() => alert("Kopyalandı!"));
-        }
-        function copyRawText(text) {
-            navigator.clipboard.writeText(text).then(() => alert("Kopyalandı: " + text));
-        }
-
-        // ==========================================
-        // MODÜL 3: GTIP YÖNETİMİ
-        // ==========================================
-        let gtipList = JSON.parse(localStorage.getItem('paraBassGtipDb')) || [];
-
-        const dropZone = document.getElementById('gpsrDropZone');
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#48d1cc'; dropZone.style.background = '#f0ffff'; });
-        dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#bdc3c7'; dropZone.style.background = '#fafafa'; });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; dropZone.style.background = '#fafafa';
-            if(e.dataTransfer.files.length > 0) processGpsrFile(e.dataTransfer.files[0]);
-        });
-
-        function handleGpsrSelect(event) {
-            const file = event.target.files[0]; if(!file) return; processGpsrFile(file);
-        }
-
-        function processGpsrFile(file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    const MAX_SIZE = 400; 
-                    let width = img.width; let height = img.height;
-                    if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
-                    else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
-
-                    canvas.width = width; canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    const base64 = canvas.toDataURL('image/jpeg', 0.7);
-                    
-                    document.getElementById('gpsrBase64').value = base64;
-                    document.getElementById('gpsrPreview').src = base64;
-                    document.getElementById('gpsrPreview').style.display = 'block';
-                    document.getElementById('gpsrDropText').style.display = 'none';
-                }
-                img.src = e.target.result;
-            }
-            reader.readAsDataURL(file);
-        }
-
-        function saveGtip() {
-            let name = document.getElementById('gtipName').value.trim();
-            let code = document.getElementById('gtipCode').value.trim();
-            let imageBase64 = document.getElementById('gpsrBase64').value;
-            
-            if (!name || !code) return alert("Ürün adı ve GTIP boş bırakılamaz!");
-            let editIndex = document.getElementById('gtipEditIndex').value;
-
-            try {
-                if (editIndex === "-1") { gtipList.unshift({ name, code, image: imageBase64 }); } 
-                else { gtipList[editIndex] = { name, code, image: imageBase64 }; }
-                localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList));
-                cancelGtipEdit(); renderGtibs();
-            } catch (e) { alert("Hata! Tarayıcı hafızası dolu."); if (editIndex === "-1") gtipList.shift(); }
-        }
-
-        function editGtip(index) {
-            let item = gtipList[index];
-            document.getElementById('gtipEditIndex').value = index;
-            document.getElementById('gtipName').value = item.name;
-            document.getElementById('gtipCode').value = item.code;
-            
-            if (item.image) {
-                document.getElementById('gpsrBase64').value = item.image;
-                document.getElementById('gpsrPreview').src = item.image;
-                document.getElementById('gpsrPreview').style.display = 'block';
-                document.getElementById('gpsrDropText').style.display = 'none';
-            } else {
-                document.getElementById('gpsrBase64').value = "";
-                document.getElementById('gpsrPreview').style.display = 'none';
-                document.getElementById('gpsrDropText').style.display = 'inline';
-            }
-
-            document.getElementById('gtipFormTitle').innerText = "✏️ GTIP Düzenle";
-            document.getElementById('saveGtipBtn').innerHTML = "🔄 Güncelle";
-            document.getElementById('cancelGtipBtn').style.display = "inline-block";
-            document.querySelector('.main-content').scrollTop = 0;
-        }
-
-        function cancelGtipEdit() {
-            document.getElementById('gtipEditIndex').value = "-1"; document.getElementById('gtipName').value = ""; document.getElementById('gtipCode').value = ""; document.getElementById('gpsrBase64').value = ""; document.getElementById('gpsrPreview').style.display = 'none'; document.getElementById('gpsrDropText').style.display = 'inline';
-            document.getElementById('gtipFormTitle').innerText = "Yeni GTIP ve GPSR Ekle";
-            document.getElementById('saveGtipBtn').innerHTML = "➕ Ekle ve Kaydet";
-            document.getElementById('cancelGtipBtn').style.display = "none";
-        }
-
-        function deleteGtip(index) {
-            if(confirm("Silmek istediğinize emin misiniz?")) {
-                gtipList.splice(index, 1); localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList)); renderGtibs();
-            }
-        }
-
-        function renderGtibs() {
-            const container = document.getElementById('gtipContainer'); container.innerHTML = "";
-            if(gtipList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün eklenmedi.</p>";
-            
-            gtipList.forEach((item, i) => {
-                let div = document.createElement("div"); div.className = "gtip-item";
-                let imgHtml = item.image ? `<img src="${item.image}" draggable="true" title="Sürükle">` : `<span>Yok</span>`;
-                let safeName = item.name ? item.name.replace(/'/g, "\\'") : '';
-                let safeCode = item.code ? item.code.replace(/'/g, "\\'") : '';
-
-                div.innerHTML = `
-                    <div class="gpsr-img-container">${imgHtml}</div>
-                    <div class="gtip-info"><div class="gtip-name">${item.name}</div><div class="gtip-code">${item.code}</div></div>
-                    <div class="gtip-actions">
-                        <div style="display:flex; gap:5px; width: 100%;"><button class="small-btn" style="flex:1; background:#27ae60;" onclick="copyRawText('${safeName}')">Adı Al</button><button class="small-btn" style="flex:1;" onclick="copyRawText('${safeCode}')">Kodu Al</button></div>
-                        <div style="display:flex; gap:5px; width: 100%; margin-top:5px;"><button class="edit-btn" style="flex:1; margin:0;" onclick="editGtip(${i})">✏️</button><button class="delete-btn" style="flex:1; margin:0;" onclick="deleteGtip(${i})">Sil</button></div>
-                    </div>`;
-                container.appendChild(div);
-            });
-        }
-
-        // ==========================================
-        // MODÜL 4: MAİL YÖNETİMİ
-        // ==========================================
-        let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
-
-        function saveMail() {
-            let title = document.getElementById('mailTitle').value.trim();
-            if(!title) return alert("Şablon başlığı zorunludur!");
-            
-            let newMail = { title: title, tr: document.getElementById('mailTR').value.trim() || "-", en: document.getElementById('mailEN').value.trim() || "-", fr: document.getElementById('mailFR').value.trim() || "-", es: document.getElementById('mailES').value.trim() || "-", it: document.getElementById('mailIT').value.trim() || "-" };
-            let editIndex = document.getElementById('mailEditIndex').value;
-            
-            if(editIndex === "-1") { mailList.unshift(newMail); } else { mailList[editIndex] = newMail; }
-            localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); cancelMailEdit(); renderMails();
-        }
-
-        function editMail(event, index) {
-            event.stopPropagation(); 
-            let mail = mailList[index];
-            document.getElementById('mailEditIndex').value = index; document.getElementById('mailTitle').value = mail.title; document.getElementById('mailTR').value = mail.tr !== "-" ? mail.tr : ""; document.getElementById('mailEN').value = mail.en !== "-" ? mail.en : ""; document.getElementById('mailFR').value = mail.fr !== "-" ? mail.fr : ""; document.getElementById('mailES').value = mail.es !== "-" ? mail.es : ""; document.getElementById('mailIT').value = mail.it !== "-" ? mail.it : "";
-            
-            document.getElementById('mailFormTitle').innerText = "✏️ Şablonu Düzenliyorsun"; document.getElementById('saveMailBtn').innerText = "🔄 Güncelle"; document.getElementById('cancelEditBtn').style.display = "inline-block"; document.querySelector('.main-content').scrollTop = 0;
-        }
-
-        function cancelMailEdit() {
-            document.getElementById('mailEditIndex').value = "-1"; document.getElementById('mailTitle').value = ""; document.getElementById('mailTR').value = ""; document.getElementById('mailEN').value = ""; document.getElementById('mailFR').value = ""; document.getElementById('mailES').value = ""; document.getElementById('mailIT').value = "";
-            document.getElementById('mailFormTitle').innerText = "Yeni Şablon Ekle"; document.getElementById('saveMailBtn').innerText = "💾 Şablonu Kaydet"; document.getElementById('cancelEditBtn').style.display = "none";
-        }
-
-        function deleteMail(event, index) {
-            event.stopPropagation(); 
-            if(confirm("Silmek istediğinize emin misiniz?")) { mailList.splice(index, 1); localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); renderMails(); }
-        }
-
-        function toggleMailAccordion(index) {
-            let body = document.getElementById('mail-body-' + index); let icon = document.getElementById('mail-icon-' + index);
-            if(body.style.display === 'none' || body.style.display === '') { body.style.display = 'grid'; icon.innerText = '🔽'; } else { body.style.display = 'none'; icon.innerText = '▶️'; }
-        }
-
-        function renderMails() {
-            const container = document.getElementById('mailTemplatesContainer'); container.innerHTML = "";
-            if(mailList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz şablon eklemedin.</p>";
-
-            mailList.forEach((mail, i) => {
-                let html = `
-                    <div class="mail-card">
-                        <div class="mail-header" onclick="toggleMailAccordion(${i})">
-                            <span><span id="mail-icon-${i}">▶️</span> 📌 ${mail.title}</span>
-                            <div><button class="edit-btn" onclick="editMail(event, ${i})">✏️</button><button class="delete-btn" onclick="deleteMail(event, ${i})">Sil</button></div>
-                        </div>
-                        <div class="mail-body" id="mail-body-${i}">
-                            <div class="lang-row"><div class="lang-flag">🇹🇷</div><div class="lang-text">${mail.tr}</div><button class="lang-copy" onclick="copyRawText('${mail.tr.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                            <div class="lang-row"><div class="lang-flag">🇬🇧</div><div class="lang-text">${mail.en}</div><button class="lang-copy" onclick="copyRawText('${mail.en.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                            <div class="lang-row"><div class="lang-flag">🇫🇷</div><div class="lang-text">${mail.fr}</div><button class="lang-copy" onclick="copyRawText('${mail.fr.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                            <div class="lang-row"><div class="lang-flag">🇪🇸</div><div class="lang-text">${mail.es}</div><button class="lang-copy" onclick="copyRawText('${mail.es.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                            <div class="lang-row"><div class="lang-flag">🇮🇹</div><div class="lang-text">${mail.it}</div><button class="lang-copy" onclick="copyRawText('${mail.it.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                        </div>
-                    </div>`;
-                container.innerHTML += html;
-            });
-        }
-
-        // ==========================================
-        // MODÜL 5: GEÇMİŞ YÖNETİMİ
-        // ==========================================
-        function deleteHistory(index) {
-            if(confirm("Bu ürünü geçmişten silmek istediğinize emin misiniz?")) {
-                historyList.splice(index, 1);
-                localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList));
-                render
+            let txt
