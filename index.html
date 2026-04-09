@@ -36,6 +36,8 @@
         #resImages img { width: 100px; height: 100px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; cursor: grab; background: white; }
         #statusMessage { margin-top: 15px; font-weight: bold; text-align: center; }
         .quick-settings { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; margin-bottom: 15px; }
+        .fee-text { color: #e74c3c; font-weight: bold; }
+        .extra-fee { background: #fff3cd; padding: 10px; border-radius: 6px; border: 1px solid #ffeeba; margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -94,7 +96,7 @@
                     </div>
                 </div>
                 <div style="text-align:center; font-weight:bold; color:#27ae60; margin-bottom:20px; font-size:14px;">
-                    Garanti Edilen Net Kâr: <span id="quickNetProfit">$0.00</span>
+                    Tüm Kesintiler Çıktıktan Sonra Net Kâr: <span id="quickNetProfit">$0.00</span>
                 </div>
 
                 <div class="result-box">
@@ -148,6 +150,17 @@
                 </div>
             </div>
 
+            <div class="extra-fee row">
+                <div>
+                    <label>Coins Fee / Ekstra Komisyon (%)</label>
+                    <input type="number" id="calcCoinsFee" value="2" step="0.5" oninput="calculatePrices()">
+                </div>
+                <div>
+                    <label>Mağaza Promosyonu / Kupon ($)</label>
+                    <input type="number" id="calcCoupon" value="1" step="0.5" oninput="calculatePrices()">
+                </div>
+            </div>
+
             <div class="row">
                 <div>
                     <label>Kâr Türü</label>
@@ -176,9 +189,16 @@
             </div>
 
             <div class="result-box" style="font-size:13px; line-height:1.8;">
-                <strong>Maliyet Dağılımı:</strong><br>
+                <strong>Sabit Maliyetler:</strong><br>
                 Ürün: <span id="outProdCost">$0.00</span> | Kargo: <span id="outShipCost">$0.00</span> | Depo: <span id="outPrepCost">$0.00</span><br>
-                <strong>Elinize Geçecek Net Kâr: <span id="outNetProfit" style="color:#27ae60; font-weight:bold; font-size:16px;">$0.00</span></strong>
+                <hr style="border:0; border-top:1px solid #eee; margin:8px 0;">
+                <strong>Platform ve Pazarlama Kesintileri:</strong><br>
+                AliExpress Komisyonu (%8): <span id="outAliFee" class="fee-text">$0.00</span> | 
+                Affiliate Komisyonu (%8): <span id="outAffFee" class="fee-text">$0.00</span><br>
+                Coins Marketing Fee (<span id="outCoinsPct">%2</span>): <span id="outCoinsFee" class="fee-text">$0.00</span> | 
+                Mağaza Kuponu/Promosyon: <span id="outCoupon" class="fee-text">$0.00</span>
+                <hr style="border:0; border-top:1px solid #eee; margin:8px 0;">
+                <strong>Elinize Geçecek NET KÂR: <span id="outNetProfit" style="color:#27ae60; font-weight:bold; font-size:16px;">$0.00</span></strong>
             </div>
         </div>
 
@@ -237,9 +257,8 @@
             calculatePrices();
         }
 
-        // Dinamik Ara Depo Fiyat Hesaplama Formülü
         function getDynamicPrepCost(weightStr, prepSelectVal) {
-            if (prepSelectVal === '0') return 0; // Ara depo seçilmemişse 0
+            if (prepSelectVal === '0') return 0; 
             
             let w = parseFloat(weightStr);
             let base = 1.0;
@@ -253,8 +272,7 @@
             else diff = 3.0; 
 
             let total = base + diff;
-            let totalWithVat = total * 1.20; // %20 KDV Eklemesi
-            return totalWithVat;
+            return total * 1.20; 
         }
 
         async function fetchProduct() {
@@ -316,8 +334,11 @@
             let weight = document.getElementById('calcWeight').value;
             let carrier = document.getElementById('calcCarrier').value;
             
-            // Dinamik Ara Depo Maliyetini Al
             let prepCost = getDynamicPrepCost(weight, document.getElementById('calcPrep').value);
+            
+            // Ekstra Giderler
+            let coinsFeePct = parseFloat(document.getElementById('calcCoinsFee').value) || 0;
+            let couponVal = parseFloat(document.getElementById('calcCoupon').value) || 0;
             
             let profitType = document.getElementById('calcProfitType').value;
             let profitVal = parseFloat(document.getElementById('calcProfitVal').value) || 0;
@@ -326,21 +347,43 @@
             let shipCost = shippingRates[weight] ? shippingRates[weight][carrier] : 0;
             let totalCost = costUSD + shipCost + prepCost;
 
+            // Kârı hesapla
             let targetProfit = profitType === 'percent' ? totalCost * (profitVal / 100) : profitVal;
-            let desiredPayout = totalCost + targetProfit;
             
-            let finalPrice = desiredPayout / (1 - 0.16);
+            // CEBİMİZE GİRMESİ GEREKEN TOPLAM PARA (Maliyet + Kar + Müşteriye vereceğimiz Kupon parası)
+            let desiredPayout = totalCost + targetProfit + couponVal;
+            
+            // Toplam Kesinti Oranı = %8 Ali + %8 Affiliate + %X Coins
+            let totalFeeRate = 0.16 + (coinsFeePct / 100);
+            
+            // Satış Fiyatını Bul
+            let finalPrice = desiredPayout / (1 - totalFeeRate);
             let strikePrice = finalPrice * 2;
 
+            // Komisyon Dağılımları
+            let aliFee = finalPrice * 0.08;
+            let affFee = finalPrice * 0.08;
+            let coinsFeeVal = finalPrice * (coinsFeePct / 100);
+
+            // Ekran Güncellemeleri
             document.getElementById('quickSalePrice').innerText = "$" + finalPrice.toFixed(2);
             document.getElementById('quickStrikePrice').innerText = "$" + strikePrice.toFixed(2);
             document.getElementById('quickNetProfit').innerText = "$" + targetProfit.toFixed(2);
 
             document.getElementById('outSalePrice').innerText = "$" + finalPrice.toFixed(2);
             document.getElementById('outStrikePrice').innerText = "$" + strikePrice.toFixed(2);
+            
             document.getElementById('outProdCost').innerText = "$" + costUSD.toFixed(2);
             document.getElementById('outShipCost').innerText = "$" + shipCost.toFixed(2);
             document.getElementById('outPrepCost').innerText = "$" + prepCost.toFixed(2);
+            
+            document.getElementById('outAliFee').innerText = "$" + aliFee.toFixed(2);
+            document.getElementById('outAffFee').innerText = "$" + affFee.toFixed(2);
+            
+            document.getElementById('outCoinsPct').innerText = "%" + coinsFeePct;
+            document.getElementById('outCoinsFee').innerText = "$" + coinsFeeVal.toFixed(2);
+            document.getElementById('outCoupon').innerText = "$" + couponVal.toFixed(2);
+            
             document.getElementById('outNetProfit').innerText = "$" + targetProfit.toFixed(2);
         }
 
