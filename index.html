@@ -988,7 +988,7 @@
             const container = document.getElementById('gtipContainer'); if(!container) return; container.innerHTML = ""; if(gtipList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün eklenmedi.</p>";
             gtipList.forEach((item, i) => {
                 let div = document.createElement("div"); div.className = "gtip-item"; let imgHtml = item.image ? `<img src="${item.image}" draggable="true" title="Sürükle">` : `<span>Yok</span>`;
-                let safeName = item.name ? item.name.replace(/'/g, "\\'") : ''; let safeCode = item.code ? item.code.replace(/'/g, "\\'") : '';
+                let safeName = item.name ? String(item.name).replace(/'/g, "\\'") : ''; let safeCode = item.code ? String(item.code).replace(/'/g, "\\'") : '';
                 div.innerHTML = `<div class="gpsr-img-container">${imgHtml}</div><div class="gtip-info"><div class="gtip-name">${item.name}</div><div class="gtip-code">${item.code}</div></div><div class="gtip-actions"><div style="display:flex; gap:5px; width: 100%;"><button class="small-btn" style="flex:1; background:#27ae60;" onclick="copyRawText('${safeName}')">Adı Al</button><button class="small-btn" style="flex:1;" onclick="copyRawText('${safeCode}')">Kodu Al</button></div><div style="display:flex; gap:5px; width: 100%; margin-top:5px;"><button class="edit-btn" style="flex:1; margin:0;" onclick="editGtip(${i})">✏️</button><button class="delete-btn" style="flex:1; margin:0;" onclick="deleteGtip(${i})">Sil</button></div></div>`; 
                 container.appendChild(div);
             });
@@ -1017,7 +1017,12 @@
         function renderMails() {
             const container = document.getElementById('mailTemplatesContainer'); if(!container) return; container.innerHTML = ""; if(mailList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz şablon eklemedin.</p>";
             mailList.forEach((mail, i) => {
-                let html = `<div class="mail-card"><div class="mail-header" onclick="toggleMailAccordion(${i})"><span><span id="mail-icon-${i}">▶️</span> 📌 ${mail.title}</span><div><button class="edit-btn" onclick="editMail(event, ${i})">✏️</button><button class="delete-btn" onclick="deleteMail(event, ${i})">Sil</button></div></div><div class="mail-body" id="mail-body-${i}"><div class="lang-row"><div class="lang-flag">🇹🇷</div><div class="lang-text">${mail.tr}</div><button class="lang-copy" onclick="copyRawText('${mail.tr.replace(/'/g, "\\'")}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇬🇧</div><div class="lang-text">${mail.en}</div><button class="lang-copy" onclick="copyRawText('${mail.en.replace(/'/g, "\\'")}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇫🇷</div><div class="lang-text">${mail.fr}</div><button class="lang-copy" onclick="copyRawText('${mail.fr.replace(/'/g, "\\'")}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇪🇸</div><div class="lang-text">${mail.es}</div><button class="lang-copy" onclick="copyRawText('${mail.es.replace(/'/g, "\\'")}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇮🇹</div><div class="lang-text">${mail.it}</div><button class="lang-copy" onclick="copyRawText('${mail.it.replace(/'/g, "\\'")}')">Kopyala</button></div></div></div>`; 
+                let safeTR = mail.tr ? String(mail.tr).replace(/'/g, "\\'") : '';
+                let safeEN = mail.en ? String(mail.en).replace(/'/g, "\\'") : '';
+                let safeFR = mail.fr ? String(mail.fr).replace(/'/g, "\\'") : '';
+                let safeES = mail.es ? String(mail.es).replace(/'/g, "\\'") : '';
+                let safeIT = mail.it ? String(mail.it).replace(/'/g, "\\'") : '';
+                let html = `<div class="mail-card"><div class="mail-header" onclick="toggleMailAccordion(${i})"><span><span id="mail-icon-${i}">▶️</span> 📌 ${mail.title}</span><div><button class="edit-btn" onclick="editMail(event, ${i})">✏️</button><button class="delete-btn" onclick="deleteMail(event, ${i})">Sil</button></div></div><div class="mail-body" id="mail-body-${i}"><div class="lang-row"><div class="lang-flag">🇹🇷</div><div class="lang-text">${mail.tr}</div><button class="lang-copy" onclick="copyRawText('${safeTR}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇬🇧</div><div class="lang-text">${mail.en}</div><button class="lang-copy" onclick="copyRawText('${safeEN}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇫🇷</div><div class="lang-text">${mail.fr}</div><button class="lang-copy" onclick="copyRawText('${safeFR}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇪🇸</div><div class="lang-text">${mail.es}</div><button class="lang-copy" onclick="copyRawText('${safeES}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇮🇹</div><div class="lang-text">${mail.it}</div><button class="lang-copy" onclick="copyRawText('${safeIT}')">Kopyala</button></div></div></div>`; 
                 container.innerHTML += html;
             });
         }
@@ -1059,14 +1064,14 @@
             }
             if(localStorage.getItem('paraBassAuth') === 'true') { 
                 document.getElementById('loginOverlay').style.display = 'none'; 
-                applyRolePermissions(); 
-                fetchExchangeRate(); 
+                try { applyRolePermissions(); } catch(e){ console.error(e); } 
+                try { fetchExchangeRate(); } catch(e){ console.error(e); } 
             }
-            initDropZone(); 
-            calculatePrices(); 
-            renderGtibs(); 
-            renderMails(); 
-            renderHistory();
+            try { initDropZone(); } catch(e){} 
+            try { calculatePrices(); } catch(e){ console.error("calc err:", e); } 
+            try { renderGtibs(); } catch(e){ console.error("gtip err:", e); } 
+            try { renderMails(); } catch(e){ console.error("mail err:", e); } 
+            try { renderHistory(); } catch(e){ console.error("history err:", e); }
         };
     </script>
 </body>
