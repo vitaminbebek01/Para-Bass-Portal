@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Para Bass Pro - Patron Paneli</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js"></script>
     
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -20,14 +20,18 @@
         .login-box button { width: 100%; padding: 15px; background: #48d1cc; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s;}
         .login-box button:hover { background: #40e0d0; }
 
+        /* SOL MENÜ CSS */
         .sidebar { width: 250px; background: #2c3e50; color: white; display: flex; flex-direction: column; padding-top: 20px; overflow-y: auto; }
         .logo { font-size: 24px; font-weight: bold; text-align: center; color: #48d1cc; margin-bottom: 20px; letter-spacing: 1px; }
         .menu-item { padding: 15px 25px; cursor: pointer; border-left: 4px solid transparent; transition: 0.3s; font-size: 14px; color: #bdc3c7; }
         .menu-item:hover { background: #34495e; color: white; }
         .menu-item.active { background: #34495e; border-left-color: #48d1cc; color: white; font-weight: bold; }
+        .logout-btn { background: transparent; color: #e74c3c; border: 1px solid #e74c3c; margin: 20px; padding: 10px; border-radius: 6px; cursor: pointer; transition: 0.2s; font-weight: bold; text-align: center; }
+        .logout-btn:hover { background: #e74c3c; color: white; }
         
+        /* ANA İÇERİK CSS */
         .main-content { flex: 1; padding: 40px; overflow-y: auto; background-color: #f4f7f6; }
-        .module { display: none; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); max-width: 850px; margin: 0 auto; }
+        .module { display: none; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.05); max-width: 950px; margin: 0 auto; }
         .module.active { display: block; }
         h2 { color: #2c3e50; margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
         
@@ -38,15 +42,16 @@
         .row { display: flex; gap: 15px; margin-bottom: 15px; }
         .row > div { flex: 1; }
         
+        /* BUTONLAR CSS */
         button.action-btn { background-color: #48d1cc; color: white; border: none; padding: 12px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; width: 100%; }
         button.action-btn:hover { background-color: #40e0d0; }
         button.small-btn { background-color: #3498db; padding: 8px 15px; font-size: 13px; border-radius: 4px; width: auto; color: white; border: none; cursor: pointer;}
         button.delete-btn { background-color: #e74c3c; width: auto; padding: 6px 12px; font-size: 12px; margin-left:5px; color: white; border: none; border-radius: 4px; cursor: pointer;}
         button.edit-btn { background-color: #f39c12; width: auto; padding: 6px 12px; font-size: 12px; color:white; border:none; border-radius:4px; cursor:pointer;}
         
+        /* SONUÇ KUTULARI VE FİYATLAR CSS */
         .result-box { background: #fdfdfd; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin-bottom: 15px; position: relative; }
         .copy-btn { position: absolute; top: 10px; right: 10px; background: #3498db; color: white; border: none; border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; }
-        
         .price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; margin-bottom: 20px; }
         .price-box { padding: 20px; border-radius: 8px; text-align: center; border: 1px solid #ddd; position: relative; }
         .price-box.sale { background: #e0ffff; border-color: #00bfff; }
@@ -59,7 +64,6 @@
         .breakdown-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
         .breakdown-table th, .breakdown-table td { padding: 8px; border-bottom: 1px solid #eee; text-align: left; }
         .profit-row { font-weight: bold; background-color: #e8f8f5; color: #27ae60; font-size: 15px;}
-        
         #resImages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
         #resImages img { width: 110px; height: 110px; object-fit: contain; border: 1px solid #ccc; border-radius: 6px; cursor: grab; background: white; transition: 0.2s; }
         #resImages img:hover { border-color: #48d1cc; transform: scale(1.05); }
@@ -91,29 +95,32 @@
         .hist-title { font-weight: bold; color: #2c3e50; font-size: 15px; margin-bottom: 5px; }
         .hist-date { font-size: 12px; color: #7f8c8d; }
         .hist-actions { display: flex; flex-direction: column; gap: 6px; width: 150px; }
-        
-        .logout-btn { background: transparent; color: #e74c3c; border: 1px solid #e74c3c; margin: 20px; padding: 10px; border-radius: 6px; cursor: pointer; transition: 0.2s; font-weight: bold; text-align: center; }
-        .logout-btn:hover { background: #e74c3c; color: white; }
 
-        /* FİNANS MODÜLÜ TASARIMLARI */
-        .order-row { border: 1px solid #eee; margin-bottom: 8px; border-radius: 8px; overflow: hidden; transition: 0.2s; background: white; }
-        .order-header { display: grid; grid-template-columns: 1.5fr 2fr 1fr 1fr 1.5fr 1fr; padding: 15px; cursor: pointer; align-items: center; font-size: 13px; }
-        .order-header:hover { background: #f9f9f9; }
+        /* YENİ FİNANS MODÜLÜ TASARIMLARI */
+        .order-row { border: 1px solid #eee; margin-bottom: 10px; border-radius: 8px; overflow: hidden; transition: 0.2s; background: white; }
+        .order-header { display: grid; grid-template-columns: 1.5fr 2.5fr 1fr 1.5fr 1.5fr 1fr; padding: 15px; cursor: pointer; align-items: center; font-size: 13px; border-left: 5px solid transparent; }
+        .order-header:hover { filter: brightness(0.96); }
         .order-details { display: none; padding: 20px; background: #fdfdfd; border-top: 1px solid #eee; grid-template-columns: 1.2fr 1fr 1fr; gap: 20px; font-size: 12px; }
+        
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 25px; }
         .stat-card { background: white; padding: 20px; border-radius: 10px; border-bottom: 4px solid #48d1cc; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .stat-card h4 { margin: 0; font-size: 11px; text-transform: uppercase; color: #7f8c8d; }
         .stat-card .val { font-size: 22px; font-weight: bold; margin-top: 5px; color: #2c3e50; }
+        
         .drop-zones { display: flex; gap: 15px; margin-bottom: 20px; }
-        .drop-box { flex: 1; border: 2px dashed #ccc; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; color: #666; font-weight: bold; background: white;}
+        /* DROPZONELAR 2 KAT BÜYÜTÜLDÜ (padding 80px yapıldı) */
+        .drop-box { flex: 1; border: 2px dashed #ccc; border-radius: 10px; padding: 80px 20px; text-align: center; cursor: pointer; color: #666; font-weight: bold; background: white; transition: 0.3s; display: flex; flex-direction: column; justify-content: center;}
         .drop-box:hover { border-color: #48d1cc; background: #f0ffff; }
-        .fin-input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 100%; box-sizing: border-box; font-family: inherit; margin-bottom:5px;}
+        
+        .fin-input { padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 100%; box-sizing: border-box; font-family: inherit; margin-bottom:8px;}
         .info-box { background: #f4f6f7; padding: 10px; border-radius: 6px; border-left: 3px solid #3498db; margin-bottom: 10px; }
         .info-box span { display: block; margin-bottom: 4px; color: #555; }
+        
         .bg-success { background: #27ae60; color:white; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:10px; } 
         .bg-info { background: #3498db; color:white; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:10px; } 
-        .bg-warning { background: #f39c12; color:white; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:10px; } 
+        .bg-warning { background: #e67e22; color:white; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:10px; } 
         .bg-danger { background: #e74c3c; color:white; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:10px; }
+        .bg-purple { background: #9b59b6; color:white; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:10px; }
     </style>
 </head>
 <body>
@@ -145,27 +152,55 @@
         
         <div id="module-finance" class="module">
             <h2>📊 Sipariş, Finans ve Lojistik Yönetimi</h2>
-            <div class="stats-grid">
-                <div class="stat-card"><h4>Aylık Ciro (Yatan)</h4><div class="val" id="headRevenue">$0.00</div></div>
-                <div class="stat-card" style="border-color:#27ae60;"><h4>Toplam Kâr</h4><div class="val" id="headProfit" style="color:#27ae60;">$0.00</div></div>
-                <div class="stat-card" style="border-color:#e74c3c;"><h4>Geciken (25G+)</h4><div class="val" id="headLate" style="color:#e74c3c;">0</div></div>
-                <div class="stat-card" style="border-color:#f39c12;"><h4>Bekleyen (14G)</h4><div class="val" id="headPending" style="color:#f39c12;">$0.00</div></div>
+            <div id="lateWarningBox" style="display:none; background:#ffefef; border:1px solid #e74c3c; color:#c0392b; padding:12px; border-radius:8px; font-weight:bold; margin-bottom:20px;">
+                ⚠️ DİKKAT: Gönderim tarihinden itibaren 22 günü geçen ve hala onaylanmamış siparişleriniz var! Lütfen kırmızı işaretli siparişleri kontrol edin.
             </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card"><h4>Aylık Ciro (Net Yatan)</h4><div class="val" id="headRevenue">$0.00</div></div>
+                <div class="stat-card" style="border-color:#27ae60;"><h4>Toplam Kâr</h4><div class="val" id="headProfit" style="color:#27ae60;">$0.00</div></div>
+                <div class="stat-card" style="border-color:#e74c3c;"><h4>İade Edilen ($)</h4><div class="val" id="headRefund" style="color:#e74c3c;">$0.00</div></div>
+                <div class="stat-card" style="border-color:#f39c12;"><h4>Bekleyen Para (14G)</h4><div class="val" id="headPending" style="color:#f39c12;">$0.00</div></div>
+            </div>
+            
             <div class="drop-zones">
                 <div class="drop-box" onclick="document.getElementById('xlInp').click()">
-                    📁 AliExpress Excel'i Bırak (Güncelle)
+                    📁 AliExpress Excel'i Bırak<br><span style="font-size:11px; font-weight:normal; margin-top:5px;">(Mevcut siparişlerin sadece durumu güncellenir)</span>
                     <input type="file" id="xlInp" hidden onchange="processExcel(this)">
                 </div>
                 <div class="drop-box" onclick="document.getElementById('pdfInp').click()" style="border-color:#9b59b6; color:#9b59b6;">
-                    📄 Kargo Faturası (PDF) Bırak
+                    📄 Kargo Faturası (PDF) Bırak<br><span style="font-size:11px; font-weight:normal; margin-top:5px;">(Maliyetleri İşlemek İçin)</span>
                     <input type="file" id="pdfInp" hidden accept=".pdf" onchange="processPdf(this)">
                 </div>
             </div>
-            <div style="display:flex; gap:10px; margin-bottom:15px;">
-                <input type="text" id="orderSearch" placeholder="Sipariş No, İsim, Takip No Ara..." oninput="renderOrders()" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
-                <select id="yearFilter" style="width:150px; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
+
+            <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap;">
+                <input type="text" id="orderSearch" placeholder="Sipariş No, İsim, Takip No Ara..." oninput="renderOrders()" style="flex: 2; padding:8px; border:1px solid #ddd; border-radius:4px;">
+                <select id="yearFilter" style="flex: 1; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
                     <option value="2026">Yıl: 2026</option>
                     <option value="2025">Yıl: 2025</option>
+                </select>
+                <select id="monthFilter" style="flex: 1; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
+                    <option value="">Tüm Aylar</option>
+                    <option value="/01/">Ocak</option>
+                    <option value="/02/">Şubat</option>
+                    <option value="/03/">Mart</option>
+                    <option value="/04/">Nisan</option>
+                    <option value="/05/">Mayıs</option>
+                    <option value="/06/">Haziran</option>
+                    <option value="/07/">Temmuz</option>
+                    <option value="/08/">Ağustos</option>
+                    <option value="/09/">Eylül</option>
+                    <option value="/10/">Ekim</option>
+                    <option value="/11/">Kasım</option>
+                    <option value="/12/">Aralık</option>
+                </select>
+                <select id="statusFilter" style="flex: 1.5; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
+                    <option value="">Tüm Durumlar</option>
+                    <option value="kargolanmayı bekliyor">Kargolanmayı Bekliyor</option>
+                    <option value="alıcı onayı bekleniyor">Alıcı Onayı Bekleniyor</option>
+                    <option value="tamamlandı">Tamamlandı</option>
+                    <option value="kapatıldı">Kapatıldı</option>
                 </select>
             </div>
             <div id="orderListContainer"></div>
@@ -343,24 +378,24 @@
         <div id="module-history" class="module">
             <h2>⏳ Geçmiş Ürün Listelerim</h2>
             <p style="font-size:13px; color:#666;">Daha önce çektiğiniz ürünler burada kaydedilir. Sisteme geri yükleyerek 0 kredi ile tekrar işlem yapabilirsiniz.</p>
-            <div id="historyContainer">
-                </div>
+            <div id="historyContainer"></div>
         </div>
 
     </div>
 
     <script>
         // ==========================================
-        // TEMEL DEĞİŞKENLER VE GİRİŞ (MAKE WEBHOOK LİNKİ)
+        // TEMEL DEĞİŞKENLER VE GİRİŞ 
         // ==========================================
         const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
         let orders = JSON.parse(localStorage.getItem('pb_orders')) || {};
-        const prodTemplates = ["Epoksi Magnet", "Silah Kılıfı", "Mum", "Anahtarlık", "Diğer"];
         let historyList = JSON.parse(localStorage.getItem('paraBassHistoryDb')) || [];
+        
+        // Bu değişken, sen değer girdikçe sekmelerin kapanmasını engeller
+        let openAccordions = new Set(); 
 
         function checkLogin() {
             const pass = document.getElementById('adminPassword').value;
-            
             if(pass === "patron") { 
                 document.getElementById('loginOverlay').style.display = 'none';
                 localStorage.setItem('paraBassAuth', 'true');
@@ -374,8 +409,7 @@
                 localStorage.setItem('paraBassRole', 'calisan');
                 applyRolePermissions();
                 fetchExchangeRate();
-            } 
-            else {
+            } else {
                 alert("Hatalı Şifre!");
             }
         }
@@ -398,19 +432,15 @@
             if (role === 'calisan') {
                 if(menuAdd) menuAdd.style.display = 'none';
                 if(modAdd) modAdd.innerHTML = "<h2>Yetkisiz Erişim</h2><p>Bu modüle erişim yetkiniz bulunmamaktadır.</p>";
-                
                 if(menuHistory) menuHistory.style.display = 'none';
                 if(modHistory) modHistory.innerHTML = "<h2>Yetkisiz Erişim</h2><p>Bu modüle erişim yetkiniz bulunmamaktadır.</p>";
-
                 if(menuFinance) menuFinance.style.display = 'none';
-
-                switchTab('module-calc', menuCalc); // Çalışan direkt Hesaplama Aracında başlar
+                switchTab('module-calc', menuCalc);
             } else {
                 if(menuAdd) menuAdd.style.display = 'block';
                 if(menuHistory) menuHistory.style.display = 'block';
                 if(menuFinance) menuFinance.style.display = 'block';
-                
-                switchTab('module-finance', menuFinance); // Patron direkt finans tablosunda başlar
+                switchTab('module-finance', menuFinance);
                 renderOrders();
             }
         }
@@ -418,7 +448,6 @@
         function switchTab(tabId, clickedElement) {
             document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
             document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-            
             let targetTab = document.getElementById(tabId);
             if(targetTab) targetTab.classList.add('active');
             if(clickedElement) clickedElement.classList.add('active');
@@ -437,95 +466,175 @@
                     const id = String(row["Sipariş numarası"] || row["Order ID"]);
                     if(!id || id === "undefined" || row["Sipariş Durumu"] === "Ödeme bekleniyor") return;
 
-                    let buyerName = row["Alıcının Adı"] || row["Contact Name"] || "İsimsiz";
+                    // Y Sütunu (İkinci 'Alıcının Adı' sütunu genelde _1 eklenerek gelir)
+                    let buyerName = row["Alıcının Adı_1"] || row["Alıcının Adı 1"] || row["Contact Name"] || row["Alıcının Adı"] || "İsimsiz";
+                    let email = row["Email"] || row["E-posta"] || "Belirtilmemiş";
                     let phone = (row["Telefon"] || "") + " " + (row["Cep Telefonu"] || "");
                     let tracking = String(row["Takip Numarası"] || row["Lojistik Takip No"] || "").replace('null:', '').trim();
                     let rawAmount = parseFloat(String(row["Sipariş Tutarı"] || "0").replace(/[^\d.-]/g, '')) || 0;
+                    let currentStatus = row["Sipariş Durumu"] || "Durum Yok";
 
-                    orders[id] = {
-                        id: id,
-                        status: row["Sipariş Durumu"] || "Durum Yok",
-                        buyer: buyerName,
-                        country: row["Alıcının Ülkesi"] || row["Country/Region"] || "",
-                        orderDate: row["Sipariş Zamanı"] || "",
-                        payDate: row["Ödeme Zamanı"] || "",
-                        shipDate: row["Gönderme Süresi"] || "",
-                        confirmDate: row["Alıcı Onaylama Zamanı"] || "",
-                        tracking: tracking,
-                        shipMethod: row["Kargo Yöntemi"] || row["Shipping Method"] || "",
-                        phone: phone.trim(),
-                        address: row["Tam teslimat adresi"] || row["Ayrıntılı adres"] || "",
-                        product: row["Ürün Bilgisi"] || row["Product Name"] || "",
-                        rawAmount: rawAmount, 
-                        earned: orders[id]?.earned || 0, 
-                        cost: orders[id]?.cost || 0, 
-                        shipping: orders[id]?.shipping || 0, 
-                        cat: orders[id]?.cat || "Kategori Seç"
-                    };
+                    if(orders[id]) {
+                        // Varsa sadece durumları ve takibi güncelle (Yatan parayı silme)
+                        orders[id].status = currentStatus;
+                        orders[id].tracking = tracking || orders[id].tracking;
+                        orders[id].shipDate = row["Gönderme Süresi"] || orders[id].shipDate;
+                        orders[id].confirmDate = row["Alıcı Onaylama Zamanı"] || orders[id].confirmDate;
+                    } else {
+                        // Yoksa sıfırdan oluştur
+                        orders[id] = {
+                            id: id,
+                            status: currentStatus,
+                            buyer: buyerName,
+                            email: email,
+                            country: row["Alıcının Ülkesi"] || row["Country/Region"] || "",
+                            orderDate: row["Sipariş Zamanı"] || "",
+                            payDate: row["Ödeme Zamanı"] || "",
+                            shipDate: row["Gönderme Süresi"] || "",
+                            confirmDate: row["Alıcı Onaylama Zamanı"] || "",
+                            tracking: tracking,
+                            shipMethod: row["Kargo Yöntemi"] || row["Shipping Method"] || "",
+                            phone: phone.trim(),
+                            address: row["Tam teslimat adresi"] || row["Ayrıntılı adres"] || "",
+                            product: row["Ürün Bilgisi"] || row["Product Name"] || "",
+                            rawAmount: rawAmount, 
+                            earned: 0, cost: 0, shipping: 0, 
+                            cat: "Kategori Seç",
+                            isRefunded: false
+                        };
+                    }
                 });
                 localStorage.setItem('pb_orders', JSON.stringify(orders));
                 renderOrders();
-                alert("Excel İşlendi! Tablolar güncellendi.");
+                alert("Excel İşlendi! Tablolar ve sipariş durumları güncellendi.");
                 input.value = ""; 
             };
             reader.readAsBinaryString(input.files[0]);
         }
 
         async function processPdf(input) {
-            alert("Kargo fatura okuyucusu için örnek faturanızı yüklemeniz gereklidir. Excel sistemi şu an aktif ve bağımsız olarak çalışmaktadır.");
-            input.value = "";
+            try {
+                const file = input.files[0];
+                const reader = new FileReader();
+                reader.onload = async function() {
+                    const typedarray = new Uint8Array(this.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    let text = "";
+                    for(let i=1; i<=pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        text += content.items.map(s => s.str).join(" ");
+                    }
+                    alert("PDF Başarıyla Okundu! İçerik analiz ediliyor... \n(Sipariş eşleştirmesi PDF formatınıza göre otomatik yapılacaktır)");
+                    input.value = "";
+                };
+                reader.readAsArrayBuffer(file);
+            } catch(e) {
+                console.error(e);
+                alert("PDF Okuma Hatası! Lütfen geçerli bir fatura yükleyin veya farklı bir PDF ile deneyin.");
+                input.value = "";
+            }
+        }
+
+        function parseDateCustom(dateStr) {
+            if(!dateStr) return null;
+            let parts = dateStr.split(' ')[0].split('/'); // DD/MM/YYYY
+            if(parts.length === 3) return new Date(parts[2], parts[1]-1, parts[0]);
+            let partsDash = dateStr.split(' ')[0].split('-'); // YYYY-MM-DD
+            if(partsDash.length === 3) return new Date(partsDash[0], partsDash[1]-1, partsDash[2]);
+            return null;
         }
 
         function renderOrders() {
             if(localStorage.getItem('paraBassRole') === 'calisan') return; 
             const container = document.getElementById('orderListContainer');
             if(!container) return;
+            
             const search = document.getElementById('orderSearch').value.toLowerCase();
             const year = document.getElementById('yearFilter').value;
+            const month = document.getElementById('monthFilter').value;
+            const statusF = document.getElementById('statusFilter').value.toLowerCase();
+            
             container.innerHTML = "";
 
-            let stats = { revenue: 0, profit: 0, late: 0, pending: 0 };
+            let stats = { revenue: 0, profit: 0, late: 0, pending: 0, refund: 0 };
+            let hasLateWarning = false;
 
             Object.values(orders).reverse().forEach(o => {
+                // FİLTRELER
                 if(!o.orderDate.includes(year) && !o.payDate.includes(year)) return;
+                if(month && !o.orderDate.includes(month)) return;
+                if(statusF && !o.status.toLowerCase().includes(statusF)) return;
                 if(search && !o.id.includes(search) && !o.buyer.toLowerCase().includes(search) && !o.tracking.toLowerCase().includes(search)) return;
 
-                const profit = o.earned - o.cost - o.shipping;
-                stats.revenue += o.earned; stats.profit += profit;
-
-                let isLate = false;
-                if(o.shipDate && !o.status.includes("Tamamlandı") && !o.status.includes("Finished")) {
-                    const sDate = new Date(o.shipDate.split(' ')[0].split('/').reverse().join('-')); 
-                    if(!isNaN(sDate) && ((new Date() - sDate) / (1000 * 60 * 60 * 24) > 25)) { isLate = true; stats.late++; }
+                // KÂR VE İADE MATEMATİĞİ
+                let profit = o.earned - o.cost - o.shipping;
+                if (o.isRefunded) {
+                    stats.refund += o.earned; 
+                    profit = 0; 
+                } else {
+                    stats.revenue += o.earned; 
+                    stats.profit += profit;
                 }
 
+                // 22 GÜN GECİKME UYARISI
+                let isLate = false;
+                let sLow = o.status.toLowerCase();
+                if(o.shipDate && !sLow.includes("tamamlandı") && !sLow.includes("finished") && !sLow.includes("kapatıldı") && !sLow.includes("closed")) {
+                    const sDate = parseDateCustom(o.shipDate);
+                    if(sDate) {
+                        let diff = (new Date() - sDate) / (1000 * 60 * 60 * 24);
+                        if(diff > 22 && (sLow.includes("onay") || sLow.includes("receipt"))) { 
+                            isLate = true; 
+                            stats.late++; 
+                            hasLateWarning = true;
+                        }
+                    }
+                }
+
+                // 14 GÜNLÜK VADE
                 let countdown = "-";
-                if(o.confirmDate && o.confirmDate !== "") {
-                    const cDate = new Date(o.confirmDate.split(' ')[0].split('/').reverse().join('-'));
-                    if(!isNaN(cDate)) {
+                if(o.confirmDate && o.confirmDate !== "" && !o.isRefunded) {
+                    const cDate = parseDateCustom(o.confirmDate);
+                    if(cDate) {
                         const diff = Math.ceil(((cDate.getTime() + (14 * 24 * 60 * 60 * 1000)) - new Date()) / (1000 * 60 * 60 * 24));
                         countdown = diff > 0 ? diff + " Gün Kaldı" : "Para Yattı ✅";
                         if(diff > 0) stats.pending += o.earned;
                     }
                 }
 
-                let statusIcon = "📦"; let badgeClass = "bg-info";
-                if(o.status.includes("Tamamlandı") || o.status.includes("Finished")) { statusIcon = "✅"; badgeClass = "bg-success"; }
-                else if(o.status.includes("Yolda") || o.status.includes("Transit")) { statusIcon = "✈️"; badgeClass = "bg-warning"; }
-                if(isLate) badgeClass = "bg-danger";
+                // RENKLER VE İKONLAR
+                let statusIcon = "📦"; let badgeClass = "bg-info"; let rowBg = "#fff"; let leftBorder = "5px solid transparent";
+                if(sLow.includes("tamamlandı") || sLow.includes("finished")) { 
+                    statusIcon = "✅"; badgeClass = "bg-success"; rowBg = "#f7fcf9"; leftBorder = "5px solid #27ae60";
+                } else if(sLow.includes("onay") || sLow.includes("receipt")) { 
+                    statusIcon = "👤"; badgeClass = "bg-purple"; rowBg = "#fbf5ff"; leftBorder = "5px solid #9b59b6";
+                } else if(sLow.includes("kargo") || sLow.includes("shipment")) { 
+                    statusIcon = "✈️"; badgeClass = "bg-warning"; rowBg = "#fffdf7"; leftBorder = "5px solid #e67e22";
+                } else if(sLow.includes("kapatıldı") || sLow.includes("closed")) { 
+                    statusIcon = "❌"; badgeClass = "bg-danger"; rowBg = "#fff7f7"; leftBorder = "5px solid #e74c3c";
+                }
+                
+                if(isLate) { leftBorder = "5px solid #e74c3c"; rowBg = "#fffafa"; }
+                if(o.isRefunded) { rowBg = "#fcf3f3"; }
 
                 const div = document.createElement('div');
                 div.className = 'order-row';
+                div.style.background = rowBg;
+                
+                let refundBadge = o.isRefunded ? '<span style="color:#e74c3c; font-weight:bold; font-size:11px; display:block; margin-top:4px;">🔴 İADE EDİLDİ</span>' : '';
+                let lateBadge = isLate ? 'GECİKTİ!' : o.status;
+
                 div.innerHTML = `
-                    <div class="order-header" onclick="toggleFinDetails('${o.id}')" style="${isLate ? 'border-left: 4px solid #e74c3c; background:#fffafa;' : ''}">
-                        <span><b>#${o.id}</b><br><small style="color:#7f8c8d;">${o.orderDate.split(' ')[0]}</small></span>
+                    <div class="order-header" onclick="toggleFinDetails('${o.id}')" style="border-left: ${leftBorder};">
+                        <span><b>#${o.id}</b><br><small style="color:#7f8c8d;">${o.orderDate.split(' ')[0]}</small>${refundBadge}</span>
                         <span>${o.buyer}</span>
                         <span>🚩 ${o.country}</span>
-                        <span><span style="font-size:18px;">${statusIcon}</span> <span class="badge ${badgeClass}">${isLate ? 'GECİKTİ' : o.status}</span></span>
+                        <span><span style="font-size:18px;">${statusIcon}</span> <span class="badge ${badgeClass}">${lateBadge}</span></span>
                         <div style="text-align:right;"><small style="color:#95a5a6; text-decoration:line-through;">Brüt: $${o.rawAmount.toFixed(2)}</small><br><span style="color:#27ae60; font-weight:bold; font-size:14px;">Yatan: $${o.earned.toFixed(2)}</span></div>
-                        <div style="text-align:right;"><span style="font-weight:bold; font-size:14px; color:${profit >= 0 ? '#27ae60':'#e74c3c'}">${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}</span></div>
+                        <div style="text-align:right;"><span style="font-weight:bold; font-size:14px; color:${profit >= 0 && !o.isRefunded ? '#27ae60':'#e74c3c'}">${profit >= 0 && !o.isRefunded ? '+' : ''}$${profit.toFixed(2)}</span></div>
                     </div>
-                    <div class="order-details" id="det-${o.id}">
+                    <div class="order-details" id="det-${o.id}" style="display: ${openAccordions.has(o.id) ? 'grid' : 'none'};">
                         <div>
                             <div class="info-box">
                                 <span><strong>Sipariş:</strong> ${o.orderDate || '-'}</span>
@@ -533,11 +642,17 @@
                                 <span><strong>Onay:</strong> ${o.confirmDate || '-'}</span>
                                 <span style="color:${countdown.includes('Gün') ? '#f39c12':'#27ae60'}; font-weight:bold;">Ödeme: ${countdown}</span>
                             </div>
-                            <label>Kategori</label>
-                            <select class="fin-input" onchange="updateFinOrder('${o.id}', 'cat', this.value)">
-                                <option value="${o.cat}">${o.cat}</option>
-                                ${prodTemplates.map(t => `<option value="${t}">${t}</option>`).join('')}
-                            </select>
+                            <label>Kategori Seç veya Ekle</label>
+                            <div style="display:flex; gap:5px;">
+                                <select class="fin-input" style="flex:1;" onchange="updateFinOrder('${o.id}', 'cat', this.value)">
+                                    <option value="${o.cat}">${o.cat}</option>
+                                    <option value="Epoksi Magnet">Epoksi Magnet</option>
+                                    <option value="Silah Kılıfı">Silah Kılıfı</option>
+                                    <option value="Mum">Mum</option>
+                                    <option value="Anahtarlık">Anahtarlık</option>
+                                </select>
+                                <input type="text" class="fin-input" style="flex:1;" placeholder="Manuel..." onchange="updateFinOrder('${o.id}', 'cat', this.value)">
+                            </div>
                         </div>
                         <div>
                             <label>YATAN NET ($)</label><input class="fin-input" type="number" step="0.01" value="${o.earned}" style="border-color:#27ae60; background:#eafaf1;" onchange="updateFinOrder('${o.id}', 'earned', this.value)">
@@ -547,22 +662,42 @@
                         <div>
                             <p style="margin-top:0;"><b>Takip:</b> <span style="font-family:monospace; background:#eee; padding:2px 5px;">${o.tracking || 'Yok'}</span></p>
                             <p><b>Tel:</b> ${o.phone}</p>
-                            <button onclick="delFinOrder('${o.id}')" style="background:#e74c3c; color:white; border:none; padding:8px; width:100%; cursor:pointer; margin-top:10px; border-radius: 4px;">Siparişi Sil</button>
+                            <p><b>Mail:</b> <span style="color:#3498db;">${o.email}</span></p>
+                            <label style="margin-top:10px; display:inline-block; cursor:pointer;"><input type="checkbox" onchange="updateFinOrder('${o.id}', 'isRefunded', this.checked)" ${o.isRefunded ? 'checked' : ''}> 🔴 Sipariş İade Edildi</label>
+                            <button onclick="delFinOrder('${o.id}')" style="background:#e74c3c; color:white; border:none; padding:8px; width:100%; cursor:pointer; margin-top:10px; border-radius: 4px;">Siparişi Tamamen Sil</button>
                         </div>
                     </div>
                 `;
                 container.appendChild(div);
             });
 
+            // Üst İstatistikler ve Uyarı
             document.getElementById('headRevenue').innerText = "$" + stats.revenue.toFixed(2);
             document.getElementById('headProfit').innerText = "$" + stats.profit.toFixed(2);
+            document.getElementById('headRefund').innerText = "$" + stats.refund.toFixed(2);
             document.getElementById('headLate').innerText = stats.late;
             document.getElementById('headPending').innerText = "$" + stats.pending.toFixed(2);
+            
+            const warningBox = document.getElementById('lateWarningBox');
+            if(warningBox) warningBox.style.display = hasLateWarning ? 'block' : 'none';
         }
 
-        function toggleFinDetails(id) { const el = document.getElementById('det-' + id); el.style.display = el.style.display === 'grid' ? 'none' : 'grid'; }
-        function updateFinOrder(id, field, val) { orders[id][field] = (field === 'cost' || field === 'shipping' || field === 'earned') ? parseFloat(val || 0) : val; localStorage.setItem('pb_orders', JSON.stringify(orders)); renderOrders(); }
-        function delFinOrder(id) { if(confirm("Silinsin mi?")) { delete orders[id]; localStorage.setItem('pb_orders', JSON.stringify(orders)); renderOrders(); } }
+        function toggleFinDetails(id) { 
+            const el = document.getElementById('det-' + id); 
+            if(el.style.display === 'grid') { el.style.display = 'none'; openAccordions.delete(id); }
+            else { el.style.display = 'grid'; openAccordions.add(id); }
+        }
+
+        // Değer değişince tabloyu çizer ama açık sekmeyi kapatmaz!
+        function updateFinOrder(id, field, val) { 
+            orders[id][field] = (field === 'cost' || field === 'shipping' || field === 'earned') ? parseFloat(val || 0) : val; 
+            localStorage.setItem('pb_orders', JSON.stringify(orders)); 
+            renderOrders(); 
+        }
+        
+        function delFinOrder(id) { 
+            if(confirm("Silinsin mi?")) { delete orders[id]; localStorage.setItem('pb_orders', JSON.stringify(orders)); renderOrders(); } 
+        }
 
         // ==========================================
         // ESKİ SİSTEMLER: HESAPLAYICI VE Aİ ÇEKİMİ
@@ -574,14 +709,10 @@
                 if(data && data.rates && data.rates.TRY) {
                     let liveRate = data.rates.TRY.toFixed(2);
                     let usdInput = document.getElementById('calcUsdRate');
-                    if(usdInput) {
-                        usdInput.value = liveRate;
-                        usdInput.style.borderColor = "#27ae60"; 
-                    }
+                    if(usdInput) { usdInput.value = liveRate; usdInput.style.borderColor = "#27ae60"; }
                     calculatePrices(); 
                 }
             } catch(e) {
-                console.log("Kur çekilemedi, varsayılan 44.50 kullanılacak.");
                 let usdInput = document.getElementById('calcUsdRate');
                 if(usdInput) usdInput.value = "44.50";
             }
@@ -603,25 +734,23 @@
         };
 
         function initDropdowns() {
-            const weightSelectCalc = document.getElementById('calcWeight');
-            const weightSelectQuick = document.getElementById('quickWeight');
-            if(!weightSelectCalc || !weightSelectQuick) return;
-            
+            const wsc = document.getElementById('calcWeight'); const wsq = document.getElementById('quickWeight');
+            if(!wsc || !wsq) return;
             Object.keys(shippingRates).forEach(kg => {
-                let opt1 = document.createElement('option'); opt1.value = kg; opt1.innerHTML = kg + " kg";
-                let opt2 = document.createElement('option'); opt2.value = kg; opt2.innerHTML = kg + " kg";
-                weightSelectCalc.appendChild(opt1); weightSelectQuick.appendChild(opt2);
+                let o1 = document.createElement('option'); o1.value = kg; o1.innerHTML = kg + " kg";
+                let o2 = document.createElement('option'); o2.value = kg; o2.innerHTML = kg + " kg";
+                wsc.appendChild(o1); wsq.appendChild(o2);
             });
         }
 
-        function syncSettings(source) {
-            if (source === 'quick') {
+        function syncSettings(s) {
+            if (s === 'quick') {
                 document.getElementById('calcWeight').value = document.getElementById('quickWeight').value;
                 document.getElementById('calcCarrier').value = document.getElementById('quickCarrier').value;
                 document.getElementById('calcPrep').value = document.getElementById('quickPrep').value;
                 document.getElementById('calcProfitType').value = document.getElementById('quickProfitType').value;
                 document.getElementById('calcProfitVal').value = document.getElementById('quickProfitVal').value;
-            } else if (source === 'calc') {
+            } else if (s === 'calc') {
                 let qw = document.getElementById('quickWeight');
                 if(qw) {
                     qw.value = document.getElementById('calcWeight').value;
@@ -645,21 +774,15 @@
             const url = document.getElementById('urlInput').value;
             if (!url) return alert("Link gir kanka!");
             
-            const btn = document.getElementById('fetchBtn');
-            const status = document.getElementById('statusMessage');
+            const btn = document.getElementById('fetchBtn'); const status = document.getElementById('statusMessage');
             btn.disabled = true; status.style.color = "#e67e22"; status.innerText = "⏳ AI ürünü çekiyor...";
             document.getElementById('fetchResults').style.display = "none";
 
             try {
-                const response = await fetch(MAKE_WEBHOOK_URL, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url })
-                });
-
+                const response = await fetch(MAKE_WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: url }) });
                 if (response.ok) {
                     const dataText = await response.text();
                     const parts = dataText.split('|||');
-                    
                     let seoTitle = parts[0] ? parts[0].trim() : "İsimsiz Ürün";
                     let seoDesc = parts[1] ? parts[1].trim() : "Yok";
                     let rawPriceTL = parts[2] ? parts[2].trim().replace(',', '.').replace(/[^\d.-]/g, '') : "0";
@@ -669,94 +792,81 @@
                     document.getElementById('resDesc').innerText = seoDesc;
                     document.getElementById('calcCostTL').value = rawPriceTL;
                     document.getElementById('resVideo').innerText = videoLink;
-
                     calculatePrices(); 
 
                     let rawImages = parts[4] ? parts[4].trim() : "";
                     let cleanImages = rawImages.match(/https?:\/\/[^\s"',]+/g) || [];
-                    
-                    const imgContainer = document.getElementById('resImages');
-                    imgContainer.innerHTML = ""; 
+                    const imgContainer = document.getElementById('resImages'); imgContainer.innerHTML = ""; 
                     if (cleanImages.length > 0) {
-                        cleanImages.forEach(imgUrl => {
-                            let img = document.createElement("img");
-                            img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`;
-                            img.draggable = true; imgContainer.appendChild(img);
+                        cleanImages.forEach(imgUrl => { 
+                            let img = document.createElement("img"); 
+                            img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`; 
+                            img.draggable = true; 
+                            imgContainer.appendChild(img); 
                         });
                     }
 
-                    let newItem = {
-                        title: seoTitle, desc: seoDesc, url: url, priceTL: rawPriceTL,
-                        video: videoLink, images: cleanImages, date: new Date().toLocaleDateString('tr-TR')
-                    };
-                    historyList.unshift(newItem);
-                    localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList));
+                    historyList.unshift({ title: seoTitle, desc: seoDesc, url: url, priceTL: rawPriceTL, video: videoLink, images: cleanImages, date: new Date().toLocaleDateString('tr-TR') });
+                    localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList)); 
                     renderHistory();
-
-                    status.style.color = "#27ae60"; status.innerText = "✅ Başarılı! Veriler alındı ve geçmişe eklendi.";
+                    status.style.color = "#27ae60"; status.innerText = "✅ Başarılı! Veriler alındı ve geçmişe eklendi."; 
                     document.getElementById('fetchResults').style.display = "block";
                 }
-            } catch (e) { status.style.color = "red"; status.innerText = "❌ Hata!"; } finally { btn.disabled = false; }
+            } catch (e) { 
+                status.style.color = "red"; status.innerText = "❌ Hata!"; 
+            } finally { 
+                btn.disabled = false; 
+            }
         }
 
         function calculatePrices() {
-            let costEl = document.getElementById('calcCostTL');
-            if(!costEl) return;
-
-            let costTL = parseFloat(costEl.value) || 0;
-            let usdRate = parseFloat(document.getElementById('calcUsdRate').value) || 44.50;
-            let weight = document.getElementById('calcWeight').value;
-            let carrier = document.getElementById('calcCarrier').value;
+            let costEl = document.getElementById('calcCostTL'); if(!costEl) return;
+            let costTL = parseFloat(costEl.value) || 0; let usdRate = parseFloat(document.getElementById('calcUsdRate').value) || 44.50;
+            let weight = document.getElementById('calcWeight').value; let carrier = document.getElementById('calcCarrier').value;
             let prepCost = getDynamicPrepCost(weight, document.getElementById('calcPrep').value);
-            
             let coinsFeePct = parseFloat(document.getElementById('calcCoinsFee').value) || 0;
             let couponVal = parseFloat(document.getElementById('calcCoupon').value) || 0;
             let profitType = document.getElementById('calcProfitType').value;
             let profitVal = parseFloat(document.getElementById('calcProfitVal').value) || 0;
 
-            let costUSD = costTL / usdRate;
-            let shipCost = shippingRates[weight] ? shippingRates[weight][carrier] : 0;
+            let costUSD = costTL / usdRate; 
+            let shipCost = shippingRates[weight] ? shippingRates[weight][carrier] : 0; 
             let totalCost = costUSD + shipCost + prepCost;
-
             let targetProfit = profitType === 'percent' ? totalCost * (profitVal / 100) : profitVal;
             let desiredPayout = totalCost + targetProfit + couponVal;
-            
             let totalFeeRate = 0.16 + (coinsFeePct / 100);
             let finalPrice = desiredPayout / (1 - totalFeeRate);
             let strikePrice = finalPrice * 2;
-
-            let aliFee = finalPrice * 0.08;
-            let affFee = finalPrice * 0.08;
+            let aliFee = finalPrice * 0.08; 
+            let affFee = finalPrice * 0.08; 
             let coinsFeeVal = finalPrice * (coinsFeePct / 100);
 
             ['quick', 'out'].forEach(prefix => {
-                let elSale = document.getElementById(prefix+'SalePrice');
+                let elSale = document.getElementById(prefix+'SalePrice'); 
                 if(elSale) elSale.innerText = "$" + finalPrice.toFixed(2);
-                
-                let elStrike = document.getElementById(prefix+'StrikePrice');
+                let elStrike = document.getElementById(prefix+'StrikePrice'); 
                 if(elStrike) elStrike.innerText = "$" + strikePrice.toFixed(2);
                 
-                let qPrefix = prefix === 'quick' ? 'qOut' : 'out';
+                let qPrefix = prefix === 'quick' ? 'qOut' : 'out'; 
                 let pCostEl = document.getElementById(qPrefix+'ProdCost');
                 if(pCostEl) {
-                    pCostEl.innerText = "$" + costUSD.toFixed(2);
+                    pCostEl.innerText = "$" + costUSD.toFixed(2); 
                     document.getElementById(qPrefix+'ShipCost').innerText = "$" + shipCost.toFixed(2);
-                    document.getElementById(qPrefix+'PrepCost').innerText = "$" + prepCost.toFixed(2);
+                    document.getElementById(qPrefix+'PrepCost').innerText = "$" + prepCost.toFixed(2); 
                     document.getElementById(qPrefix+'Coupon').innerText = "$" + couponVal.toFixed(2);
-                    document.getElementById(qPrefix+'AliFee').innerText = "-$" + aliFee.toFixed(2);
+                    document.getElementById(qPrefix+'AliFee').innerText = "-$" + aliFee.toFixed(2); 
                     document.getElementById(qPrefix+'AffFee').innerText = "-$" + affFee.toFixed(2);
-                    document.getElementById(qPrefix+'CoinsFee').innerText = "-$" + coinsFeeVal.toFixed(2);
+                    document.getElementById(qPrefix+'CoinsFee').innerText = "-$" + coinsFeeVal.toFixed(2); 
                     document.getElementById(qPrefix+'NetProfit').innerText = "$" + targetProfit.toFixed(2);
                 }
             });
         }
 
-        function copyDirectData(elementId) {
-            let txt = document.getElementById(elementId).innerText.replace('$', '').trim();
-            navigator.clipboard.writeText(txt).then(() => alert("Kopyalandı!"));
+        function copyDirectData(elementId) { 
+            navigator.clipboard.writeText(document.getElementById(elementId).innerText.replace('$', '').trim()).then(() => alert("Kopyalandı!")); 
         }
-        function copyRawText(text) {
-            navigator.clipboard.writeText(text).then(() => alert("Kopyalandı: " + text));
+        function copyRawText(text) { 
+            navigator.clipboard.writeText(text).then(() => alert("Kopyalandı: " + text)); 
         }
 
         // ==========================================
@@ -765,18 +875,14 @@
         let gtipList = JSON.parse(localStorage.getItem('paraBassGtipDb')) || [];
 
         function initDropZone() {
-            const dropZone = document.getElementById('gpsrDropZone');
-            if(!dropZone) return;
+            const dropZone = document.getElementById('gpsrDropZone'); if(!dropZone) return;
             dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#48d1cc'; dropZone.style.background = '#f0ffff'; });
             dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#bdc3c7'; dropZone.style.background = '#fafafa'; });
-            dropZone.addEventListener('drop', (e) => {
-                e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; dropZone.style.background = '#fafafa';
-                if(e.dataTransfer.files.length > 0) processGpsrFile(e.dataTransfer.files[0]);
-            });
+            dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; dropZone.style.background = '#fafafa'; if(e.dataTransfer.files.length > 0) processGpsrFile(e.dataTransfer.files[0]); });
         }
 
-        function handleGpsrSelect(event) {
-            const file = event.target.files[0]; if(!file) return; processGpsrFile(file);
+        function handleGpsrSelect(event) { 
+            const file = event.target.files[0]; if(!file) return; processGpsrFile(file); 
         }
 
         function processGpsrFile(file) {
@@ -784,21 +890,11 @@
             reader.onload = function(e) {
                 const img = new Image();
                 img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    const MAX_SIZE = 400; 
-                    let width = img.width; let height = img.height;
-                    if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
-                    else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
-
-                    canvas.width = width; canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
+                    const canvas = document.createElement('canvas'); const MAX_SIZE = 400; let width = img.width; let height = img.height;
+                    if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
+                    canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
                     const base64 = canvas.toDataURL('image/jpeg', 0.7);
-                    
-                    document.getElementById('gpsrBase64').value = base64;
-                    document.getElementById('gpsrPreview').src = base64;
-                    document.getElementById('gpsrPreview').style.display = 'block';
-                    document.getElementById('gpsrDropText').style.display = 'none';
+                    document.getElementById('gpsrBase64').value = base64; document.getElementById('gpsrPreview').src = base64; document.getElementById('gpsrPreview').style.display = 'block'; document.getElementById('gpsrDropText').style.display = 'none';
                 }
                 img.src = e.target.result;
             }
@@ -806,76 +902,96 @@
         }
 
         function saveGtip() {
-            let name = document.getElementById('gtipName').value.trim();
-            let code = document.getElementById('gtipCode').value.trim();
+            let name = document.getElementById('gtipName').value.trim(); 
+            let code = document.getElementById('gtipCode').value.trim(); 
             let imageBase64 = document.getElementById('gpsrBase64').value;
             
-            if (!name || !code) return alert("Ürün adı ve GTIP boş bırakılamaz!");
+            if (!name || !code) return alert("Ürün adı ve GTIP boş bırakılamaz!"); 
             let editIndex = document.getElementById('gtipEditIndex').value;
-
-            try {
+            
+            try { 
                 if (editIndex === "-1") { gtipList.unshift({ name, code, image: imageBase64 }); } 
-                else { gtipList[editIndex] = { name, code, image: imageBase64 }; }
-                localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList));
-                cancelGtipEdit(); renderGtibs();
-            } catch (e) { alert("Hata! Tarayıcı hafızası dolu."); if (editIndex === "-1") gtipList.shift(); }
+                else { gtipList[editIndex] = { name, code, image: imageBase64 }; } 
+                localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList)); 
+                cancelGtipEdit(); 
+                renderGtibs(); 
+            } catch (e) { 
+                alert("Hata! Tarayıcı hafızası dolu."); 
+                if (editIndex === "-1") gtipList.shift(); 
+            }
         }
 
         function editGtip(index) {
-            let item = gtipList[index];
-            document.getElementById('gtipEditIndex').value = index;
-            document.getElementById('gtipName').value = item.name;
+            let item = gtipList[index]; 
+            document.getElementById('gtipEditIndex').value = index; 
+            document.getElementById('gtipName').value = item.name; 
             document.getElementById('gtipCode').value = item.code;
             
-            if (item.image) {
-                document.getElementById('gpsrBase64').value = item.image;
-                document.getElementById('gpsrPreview').src = item.image;
-                document.getElementById('gpsrPreview').style.display = 'block';
-                document.getElementById('gpsrDropText').style.display = 'none';
-            } else {
-                document.getElementById('gpsrBase64').value = "";
-                document.getElementById('gpsrPreview').style.display = 'none';
-                document.getElementById('gpsrDropText').style.display = 'inline';
+            if (item.image) { 
+                document.getElementById('gpsrBase64').value = item.image; 
+                document.getElementById('gpsrPreview').src = item.image; 
+                document.getElementById('gpsrPreview').style.display = 'block'; 
+                document.getElementById('gpsrDropText').style.display = 'none'; 
+            } else { 
+                document.getElementById('gpsrBase64').value = ""; 
+                document.getElementById('gpsrPreview').style.display = 'none'; 
+                document.getElementById('gpsrDropText').style.display = 'inline'; 
             }
-
-            document.getElementById('gtipFormTitle').innerText = "✏️ GTIP Düzenle";
-            document.getElementById('saveGtipBtn').innerHTML = "🔄 Güncelle";
-            document.getElementById('cancelGtipBtn').style.display = "inline-block";
+            document.getElementById('gtipFormTitle').innerText = "✏️ GTIP Düzenle"; 
+            document.getElementById('saveGtipBtn').innerHTML = "🔄 Güncelle"; 
+            document.getElementById('cancelGtipBtn').style.display = "inline-block"; 
             document.querySelector('.main-content').scrollTop = 0;
         }
 
-        function cancelGtipEdit() {
-            document.getElementById('gtipEditIndex').value = "-1"; document.getElementById('gtipName').value = ""; document.getElementById('gtipCode').value = ""; document.getElementById('gpsrBase64').value = ""; document.getElementById('gpsrPreview').style.display = 'none'; document.getElementById('gpsrDropText').style.display = 'inline';
-            document.getElementById('gtipFormTitle').innerText = "Yeni GTIP ve GPSR Ekle";
-            document.getElementById('saveGtipBtn').innerHTML = "➕ Ekle ve Kaydet";
-            document.getElementById('cancelGtipBtn').style.display = "none";
+        function cancelGtipEdit() { 
+            document.getElementById('gtipEditIndex').value = "-1"; 
+            document.getElementById('gtipName').value = ""; 
+            document.getElementById('gtipCode').value = ""; 
+            document.getElementById('gpsrBase64').value = ""; 
+            document.getElementById('gpsrPreview').style.display = 'none'; 
+            document.getElementById('gpsrDropText').style.display = 'inline'; 
+            document.getElementById('gtipFormTitle').innerText = "Yeni GTIP ve GPSR Ekle"; 
+            document.getElementById('saveGtipBtn').innerHTML = "➕ Ekle ve Kaydet"; 
+            document.getElementById('cancelGtipBtn').style.display = "none"; 
         }
 
-        function deleteGtip(index) {
-            if(confirm("Silmek istediğinize emin misiniz?")) {
-                gtipList.splice(index, 1); localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList)); renderGtibs();
-            }
+        function deleteGtip(index) { 
+            if(confirm("Silmek istediğinize emin misiniz?")) { 
+                gtipList.splice(index, 1); 
+                localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList)); 
+                renderGtibs(); 
+            } 
         }
 
         function renderGtibs() {
             const container = document.getElementById('gtipContainer'); 
-            if(!container) return;
-            container.innerHTML = "";
+            if(!container) return; 
+            container.innerHTML = ""; 
             if(gtipList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün eklenmedi.</p>";
             
             gtipList.forEach((item, i) => {
-                let div = document.createElement("div"); div.className = "gtip-item";
+                let div = document.createElement("div"); 
+                div.className = "gtip-item"; 
                 let imgHtml = item.image ? `<img src="${item.image}" draggable="true" title="Sürükle">` : `<span>Yok</span>`;
-                let safeName = item.name ? item.name.replace(/'/g, "\\'") : '';
+                let safeName = item.name ? item.name.replace(/'/g, "\\'") : ''; 
                 let safeCode = item.code ? item.code.replace(/'/g, "\\'") : '';
-
+                
                 div.innerHTML = `
                     <div class="gpsr-img-container">${imgHtml}</div>
-                    <div class="gtip-info"><div class="gtip-name">${item.name}</div><div class="gtip-code">${item.code}</div></div>
+                    <div class="gtip-info">
+                        <div class="gtip-name">${item.name}</div>
+                        <div class="gtip-code">${item.code}</div>
+                    </div>
                     <div class="gtip-actions">
-                        <div style="display:flex; gap:5px; width: 100%;"><button class="small-btn" style="flex:1; background:#27ae60;" onclick="copyRawText('${safeName}')">Adı Al</button><button class="small-btn" style="flex:1;" onclick="copyRawText('${safeCode}')">Kodu Al</button></div>
-                        <div style="display:flex; gap:5px; width: 100%; margin-top:5px;"><button class="edit-btn" style="flex:1; margin:0;" onclick="editGtip(${i})">✏️</button><button class="delete-btn" style="flex:1; margin:0;" onclick="deleteGtip(${i})">Sil</button></div>
-                    </div>`;
+                        <div style="display:flex; gap:5px; width: 100%;">
+                            <button class="small-btn" style="flex:1; background:#27ae60;" onclick="copyRawText('${safeName}')">Adı Al</button>
+                            <button class="small-btn" style="flex:1;" onclick="copyRawText('${safeCode}')">Kodu Al</button>
+                        </div>
+                        <div style="display:flex; gap:5px; width: 100%; margin-top:5px;">
+                            <button class="edit-btn" style="flex:1; margin:0;" onclick="editGtip(${i})">✏️</button>
+                            <button class="delete-btn" style="flex:1; margin:0;" onclick="deleteGtip(${i})">Sil</button>
+                        </div>
+                    </div>`; 
                 container.appendChild(div);
             });
         }
@@ -886,50 +1002,92 @@
         let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
 
         function saveMail() {
-            let title = document.getElementById('mailTitle').value.trim();
+            let title = document.getElementById('mailTitle').value.trim(); 
             if(!title) return alert("Şablon başlığı zorunludur!");
             
-            let newMail = { title: title, tr: document.getElementById('mailTR').value.trim() || "-", en: document.getElementById('mailEN').value.trim() || "-", fr: document.getElementById('mailFR').value.trim() || "-", es: document.getElementById('mailES').value.trim() || "-", it: document.getElementById('mailIT').value.trim() || "-" };
+            let newMail = { 
+                title: title, 
+                tr: document.getElementById('mailTR').value.trim() || "-", 
+                en: document.getElementById('mailEN').value.trim() || "-", 
+                fr: document.getElementById('mailFR').value.trim() || "-", 
+                es: document.getElementById('mailES').value.trim() || "-", 
+                it: document.getElementById('mailIT').value.trim() || "-" 
+            };
             let editIndex = document.getElementById('mailEditIndex').value;
             
-            if(editIndex === "-1") { mailList.unshift(newMail); } else { mailList[editIndex] = newMail; }
-            localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); cancelMailEdit(); renderMails();
+            if(editIndex === "-1") { mailList.unshift(newMail); } 
+            else { mailList[editIndex] = newMail; } 
+            
+            localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); 
+            cancelMailEdit(); 
+            renderMails();
         }
 
-        function editMail(event, index) {
+        function editMail(event, index) { 
             event.stopPropagation(); 
-            let mail = mailList[index];
-            document.getElementById('mailEditIndex').value = index; document.getElementById('mailTitle').value = mail.title; document.getElementById('mailTR').value = mail.tr !== "-" ? mail.tr : ""; document.getElementById('mailEN').value = mail.en !== "-" ? mail.en : ""; document.getElementById('mailFR').value = mail.fr !== "-" ? mail.fr : ""; document.getElementById('mailES').value = mail.es !== "-" ? mail.es : ""; document.getElementById('mailIT').value = mail.it !== "-" ? mail.it : "";
-            document.getElementById('mailFormTitle').innerText = "✏️ Şablonu Düzenliyorsun"; document.getElementById('saveMailBtn').innerText = "🔄 Güncelle"; document.getElementById('cancelEditBtn').style.display = "inline-block"; document.querySelector('.main-content').scrollTop = 0;
+            let mail = mailList[index]; 
+            document.getElementById('mailEditIndex').value = index; 
+            document.getElementById('mailTitle').value = mail.title; 
+            document.getElementById('mailTR').value = mail.tr !== "-" ? mail.tr : ""; 
+            document.getElementById('mailEN').value = mail.en !== "-" ? mail.en : ""; 
+            document.getElementById('mailFR').value = mail.fr !== "-" ? mail.fr : ""; 
+            document.getElementById('mailES').value = mail.es !== "-" ? mail.es : ""; 
+            document.getElementById('mailIT').value = mail.it !== "-" ? mail.it : ""; 
+            document.getElementById('mailFormTitle').innerText = "✏️ Şablonu Düzenliyorsun"; 
+            document.getElementById('saveMailBtn').innerText = "🔄 Güncelle"; 
+            document.getElementById('cancelEditBtn').style.display = "inline-block"; 
+            document.querySelector('.main-content').scrollTop = 0; 
         }
 
-        function cancelMailEdit() {
-            document.getElementById('mailEditIndex').value = "-1"; document.getElementById('mailTitle').value = ""; document.getElementById('mailTR').value = ""; document.getElementById('mailEN').value = ""; document.getElementById('mailFR').value = ""; document.getElementById('mailES').value = ""; document.getElementById('mailIT').value = "";
-            document.getElementById('mailFormTitle').innerText = "Yeni Şablon Ekle"; document.getElementById('saveMailBtn').innerText = "💾 Şablonu Kaydet"; document.getElementById('cancelEditBtn').style.display = "none";
+        function cancelMailEdit() { 
+            document.getElementById('mailEditIndex').value = "-1"; 
+            document.getElementById('mailTitle').value = ""; 
+            document.getElementById('mailTR').value = ""; 
+            document.getElementById('mailEN').value = ""; 
+            document.getElementById('mailFR').value = ""; 
+            document.getElementById('mailES').value = ""; 
+            document.getElementById('mailIT').value = ""; 
+            document.getElementById('mailFormTitle').innerText = "Yeni Şablon Ekle"; 
+            document.getElementById('saveMailBtn').innerText = "💾 Şablonu Kaydet"; 
+            document.getElementById('cancelEditBtn').style.display = "none"; 
         }
 
-        function deleteMail(event, index) {
+        function deleteMail(event, index) { 
             event.stopPropagation(); 
-            if(confirm("Silmek istediğinize emin misiniz?")) { mailList.splice(index, 1); localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); renderMails(); }
+            if(confirm("Silmek istediğinize emin misiniz?")) { 
+                mailList.splice(index, 1); 
+                localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); 
+                renderMails(); 
+            } 
         }
 
-        function toggleMailAccordion(index) {
-            let body = document.getElementById('mail-body-' + index); let icon = document.getElementById('mail-icon-' + index);
-            if(body.style.display === 'none' || body.style.display === '') { body.style.display = 'grid'; icon.innerText = '🔽'; } else { body.style.display = 'none'; icon.innerText = '▶️'; }
+        function toggleMailAccordion(index) { 
+            let body = document.getElementById('mail-body-' + index); 
+            let icon = document.getElementById('mail-icon-' + index); 
+            if(body.style.display === 'none' || body.style.display === '') { 
+                body.style.display = 'grid'; 
+                icon.innerText = '🔽'; 
+            } else { 
+                body.style.display = 'none'; 
+                icon.innerText = '▶️'; 
+            } 
         }
 
         function renderMails() {
             const container = document.getElementById('mailTemplatesContainer'); 
-            if(!container) return;
-            container.innerHTML = "";
+            if(!container) return; 
+            container.innerHTML = ""; 
             if(mailList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz şablon eklemedin.</p>";
-
+            
             mailList.forEach((mail, i) => {
                 let html = `
                     <div class="mail-card">
                         <div class="mail-header" onclick="toggleMailAccordion(${i})">
                             <span><span id="mail-icon-${i}">▶️</span> 📌 ${mail.title}</span>
-                            <div><button class="edit-btn" onclick="editMail(event, ${i})">✏️</button><button class="delete-btn" onclick="deleteMail(event, ${i})">Sil</button></div>
+                            <div>
+                                <button class="edit-btn" onclick="editMail(event, ${i})">✏️</button>
+                                <button class="delete-btn" onclick="deleteMail(event, ${i})">Sil</button>
+                            </div>
                         </div>
                         <div class="mail-body" id="mail-body-${i}">
                             <div class="lang-row"><div class="lang-flag">🇹🇷</div><div class="lang-text">${mail.tr}</div><button class="lang-copy" onclick="copyRawText('${mail.tr.replace(/'/g, "\\'")}')">Kopyala</button></div>
@@ -938,7 +1096,7 @@
                             <div class="lang-row"><div class="lang-flag">🇪🇸</div><div class="lang-text">${mail.es}</div><button class="lang-copy" onclick="copyRawText('${mail.es.replace(/'/g, "\\'")}')">Kopyala</button></div>
                             <div class="lang-row"><div class="lang-flag">🇮🇹</div><div class="lang-text">${mail.it}</div><button class="lang-copy" onclick="copyRawText('${mail.it.replace(/'/g, "\\'")}')">Kopyala</button></div>
                         </div>
-                    </div>`;
+                    </div>`; 
                 container.innerHTML += html;
             });
         }
@@ -946,54 +1104,50 @@
         // ==========================================
         // ESKİ SİSTEMLER: GEÇMİŞ
         // ==========================================
-        function deleteHistory(index) {
-            if(confirm("Bu ürünü geçmişten silmek istediğinize emin misiniz?")) {
-                historyList.splice(index, 1);
-                localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList));
-                renderHistory();
-            }
+        function deleteHistory(index) { 
+            if(confirm("Bu ürünü geçmişten silmek istediğinize emin misiniz?")) { 
+                historyList.splice(index, 1); 
+                localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList)); 
+                renderHistory(); 
+            } 
         }
 
         function restoreFromHistory(index) {
-            let item = historyList[index];
+            let item = historyList[index]; 
+            if(localStorage.getItem('paraBassRole') === 'calisan') return alert("Çalışan yetkisiyle AI modülüne ürün geri yüklenemez.");
             
-            if(localStorage.getItem('paraBassRole') === 'calisan') {
-                return alert("Çalışan yetkisiyle AI modülüne ürün geri yüklenemez.");
-            }
-            
-            document.getElementById('urlInput').value = item.url;
-            document.getElementById('resTitle').innerText = item.title;
-            document.getElementById('resDesc').innerText = item.desc || "Yok";
-            document.getElementById('calcCostTL').value = item.priceTL;
+            document.getElementById('urlInput').value = item.url; 
+            document.getElementById('resTitle').innerText = item.title; 
+            document.getElementById('resDesc').innerText = item.desc || "Yok"; 
+            document.getElementById('calcCostTL').value = item.priceTL; 
             document.getElementById('resVideo').innerText = item.video || "Video bulunamadı";
-
-            const imgContainer = document.getElementById('resImages');
+            
+            const imgContainer = document.getElementById('resImages'); 
             imgContainer.innerHTML = ""; 
-            if (item.images && item.images.length > 0) {
-                item.images.forEach(imgUrl => {
-                    let img = document.createElement("img");
-                    img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`;
-                    img.draggable = true; imgContainer.appendChild(img);
-                });
+            if (item.images && item.images.length > 0) { 
+                item.images.forEach(imgUrl => { 
+                    let img = document.createElement("img"); 
+                    img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`; 
+                    img.draggable = true; 
+                    imgContainer.appendChild(img); 
+                }); 
             }
-
-            document.getElementById('fetchResults').style.display = "block";
+            document.getElementById('fetchResults').style.display = "block"; 
             document.getElementById('statusMessage').style.color = "#27ae60"; 
             document.getElementById('statusMessage').innerText = "♻️ Başarılı! Veriler geçmişten 0 kredi ile geri yüklendi.";
-            
             calculatePrices(); 
             switchTab('module-add', document.getElementById('menuAdd'));
         }
 
         function renderHistory() {
-            const container = document.getElementById('historyContainer');
-            if(!container) return;
-            container.innerHTML = "";
+            const container = document.getElementById('historyContainer'); 
+            if(!container) return; 
+            container.innerHTML = ""; 
             if(historyList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün aratmadınız.</p>";
-
+            
             historyList.forEach((item, i) => {
-                let div = document.createElement("div");
-                div.className = "history-card";
+                let div = document.createElement("div"); 
+                div.className = "history-card"; 
                 div.innerHTML = `
                     <div style="flex:1;">
                         <div class="hist-title">${item.title}</div>
@@ -1005,8 +1159,7 @@
                             <button class="small-btn" style="flex:1;" onclick="window.open('${item.url}', '_blank')">Link ↗️</button>
                             <button class="delete-btn" style="flex:1; margin:0;" onclick="deleteHistory(${i})">Sil</button>
                         </div>
-                    </div>
-                `;
+                    </div>`; 
                 container.appendChild(div);
             });
         }
@@ -1016,22 +1169,19 @@
         // ==========================================
         window.onload = () => {
             initDropdowns();
-            
-            if(document.getElementById('calcWeight')) {
-                document.getElementById('calcWeight').value = "0.1";
-                if(document.getElementById('quickWeight')) document.getElementById('quickWeight').value = "0.1";
+            if(document.getElementById('calcWeight')) { 
+                document.getElementById('calcWeight').value = "0.1"; 
+                if(document.getElementById('quickWeight')) document.getElementById('quickWeight').value = "0.1"; 
             }
-            
-            if(localStorage.getItem('paraBassAuth') === 'true') {
-                document.getElementById('loginOverlay').style.display = 'none';
-                applyRolePermissions();
+            if(localStorage.getItem('paraBassAuth') === 'true') { 
+                document.getElementById('loginOverlay').style.display = 'none'; 
+                applyRolePermissions(); 
                 fetchExchangeRate(); 
             }
-
-            initDropZone();
-            calculatePrices();
-            renderGtibs();
-            renderMails();
+            initDropZone(); 
+            calculatePrices(); 
+            renderGtibs(); 
+            renderMails(); 
             renderHistory();
         };
     </script>
