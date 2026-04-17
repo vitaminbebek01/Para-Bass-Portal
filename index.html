@@ -6,7 +6,6 @@
     <title>Para Bass Pro - Patron Paneli</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js"></script>
     
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -96,7 +95,7 @@
         .hist-date { font-size: 12px; color: #7f8c8d; }
         .hist-actions { display: flex; flex-direction: column; gap: 6px; width: 150px; }
 
-        /* YENİ FİNANS MODÜLÜ TASARIMLARI */
+        /* FİNANS MODÜLÜ TASARIMLARI */
         .order-row { border: 1px solid #eee; margin-bottom: 10px; border-radius: 8px; overflow: hidden; transition: 0.2s; background: white; }
         .order-header { display: grid; grid-template-columns: 1.5fr 2.5fr 1fr 1.5fr 1.5fr 1fr; padding: 15px; cursor: pointer; align-items: center; font-size: 13px; border-left: 5px solid transparent; }
         .order-header:hover { filter: brightness(0.96); }
@@ -108,7 +107,6 @@
         .stat-card .val { font-size: 22px; font-weight: bold; margin-top: 5px; color: #2c3e50; }
         
         .drop-zones { display: flex; gap: 15px; margin-bottom: 20px; }
-        /* DROPZONELAR 2 KAT BÜYÜTÜLDÜ (padding 80px yapıldı) */
         .drop-box { flex: 1; border: 2px dashed #ccc; border-radius: 10px; padding: 80px 20px; text-align: center; cursor: pointer; color: #666; font-weight: bold; background: white; transition: 0.3s; display: flex; flex-direction: column; justify-content: center;}
         .drop-box:hover { border-color: #48d1cc; background: #f0ffff; }
         
@@ -136,12 +134,12 @@
 
     <div class="sidebar">
         <div class="logo">PARA BASS</div>
-        <div class="menu-item" onclick="switchTab('module-finance', this)" id="menuFinance">📊 Sipariş & Finans</div>
         <div class="menu-item active" onclick="switchTab('module-add', this)" id="menuAdd">🚀 Yeni Ürün Ekle</div>
         <div class="menu-item" onclick="switchTab('module-calc', this)" id="menuCalc">🧮 Hesaplama Aracı</div>
         <div class="menu-item" onclick="switchTab('module-gtip', this)" id="menuGtip">📦 GTIP & GPSR</div>
         <div class="menu-item" onclick="switchTab('module-mail', this)" id="menuMail">✉️ Müşteri Mailleri</div>
         <div class="menu-item" onclick="switchTab('module-history', this)" id="menuHistory">⏳ Geçmiş Ürün Listelerim</div>
+        <div class="menu-item" onclick="switchTab('module-finance', this)" id="menuFinance">📊 Sipariş & Finans</div>
         
         <div style="margin-top: auto;">
             <div class="logout-btn" onclick="logout()">Çıkış Yap 🚪</div>
@@ -150,62 +148,6 @@
 
     <div class="main-content">
         
-        <div id="module-finance" class="module">
-            <h2>📊 Sipariş, Finans ve Lojistik Yönetimi</h2>
-            <div id="lateWarningBox" style="display:none; background:#ffefef; border:1px solid #e74c3c; color:#c0392b; padding:12px; border-radius:8px; font-weight:bold; margin-bottom:20px;">
-                ⚠️ DİKKAT: Gönderim tarihinden itibaren 22 günü geçen ve hala onaylanmamış siparişleriniz var! Lütfen kırmızı işaretli siparişleri kontrol edin.
-            </div>
-            
-            <div class="stats-grid">
-                <div class="stat-card"><h4>Aylık Ciro (Net Yatan)</h4><div class="val" id="headRevenue">$0.00</div></div>
-                <div class="stat-card" style="border-color:#27ae60;"><h4>Toplam Kâr</h4><div class="val" id="headProfit" style="color:#27ae60;">$0.00</div></div>
-                <div class="stat-card" style="border-color:#e74c3c;"><h4>İade Edilen ($)</h4><div class="val" id="headRefund" style="color:#e74c3c;">$0.00</div></div>
-                <div class="stat-card" style="border-color:#f39c12;"><h4>Bekleyen Para (14G)</h4><div class="val" id="headPending" style="color:#f39c12;">$0.00</div></div>
-            </div>
-            
-            <div class="drop-zones">
-                <div class="drop-box" onclick="document.getElementById('xlInp').click()">
-                    📁 AliExpress Excel'i Bırak<br><span style="font-size:11px; font-weight:normal; margin-top:5px;">(Mevcut siparişlerin sadece durumu güncellenir)</span>
-                    <input type="file" id="xlInp" hidden onchange="processExcel(this)">
-                </div>
-                <div class="drop-box" onclick="document.getElementById('pdfInp').click()" style="border-color:#9b59b6; color:#9b59b6;">
-                    📄 Kargo Faturası (PDF) Bırak<br><span style="font-size:11px; font-weight:normal; margin-top:5px;">(Maliyetleri İşlemek İçin)</span>
-                    <input type="file" id="pdfInp" hidden accept=".pdf" onchange="processPdf(this)">
-                </div>
-            </div>
-
-            <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap;">
-                <input type="text" id="orderSearch" placeholder="Sipariş No, İsim, Takip No Ara..." oninput="renderOrders()" style="flex: 2; padding:8px; border:1px solid #ddd; border-radius:4px;">
-                <select id="yearFilter" style="flex: 1; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
-                    <option value="2026">Yıl: 2026</option>
-                    <option value="2025">Yıl: 2025</option>
-                </select>
-                <select id="monthFilter" style="flex: 1; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
-                    <option value="">Tüm Aylar</option>
-                    <option value="/01/">Ocak</option>
-                    <option value="/02/">Şubat</option>
-                    <option value="/03/">Mart</option>
-                    <option value="/04/">Nisan</option>
-                    <option value="/05/">Mayıs</option>
-                    <option value="/06/">Haziran</option>
-                    <option value="/07/">Temmuz</option>
-                    <option value="/08/">Ağustos</option>
-                    <option value="/09/">Eylül</option>
-                    <option value="/10/">Ekim</option>
-                    <option value="/11/">Kasım</option>
-                    <option value="/12/">Aralık</option>
-                </select>
-                <select id="statusFilter" style="flex: 1.5; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
-                    <option value="">Tüm Durumlar</option>
-                    <option value="kargolanmayı bekliyor">Kargolanmayı Bekliyor</option>
-                    <option value="alıcı onayı bekleniyor">Alıcı Onayı Bekleniyor</option>
-                    <option value="tamamlandı">Tamamlandı</option>
-                    <option value="kapatıldı">Kapatıldı</option>
-                </select>
-            </div>
-            <div id="orderListContainer"></div>
-        </div>
-
         <div id="module-add" class="module active">
             <h2>Yeni Ürün Çek ve Hızlı Fiyatla</h2>
             <div class="form-group">
@@ -381,17 +323,80 @@
             <div id="historyContainer"></div>
         </div>
 
+        <div id="module-finance" class="module">
+            <h2>📊 Sipariş, Finans ve Lojistik Yönetimi</h2>
+            <div id="lateWarningBox" style="display:none; background:#ffefef; border:1px solid #e74c3c; color:#c0392b; padding:12px; border-radius:8px; font-weight:bold; margin-bottom:20px;">
+                ⚠️ DİKKAT: Gönderim tarihinden itibaren 22 günü geçen ve hala onaylanmamış siparişleriniz var! Lütfen kırmızı işaretli siparişleri kontrol edin.
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card"><h4>Aylık Ciro (Net Yatan)</h4><div class="val" id="headRevenue">$0.00</div></div>
+                <div class="stat-card" style="border-color:#27ae60;"><h4>Toplam Kâr</h4><div class="val" id="headProfit" style="color:#27ae60;">$0.00</div></div>
+                <div class="stat-card" style="border-color:#e74c3c;"><h4>İade Zararı ($)</h4><div class="val" id="headRefund" style="color:#e74c3c;">$0.00</div></div>
+                <div class="stat-card" style="border-color:#f39c12;"><h4>Bekleyen Para (14G)</h4><div class="val" id="headPending" style="color:#f39c12;">$0.00</div></div>
+            </div>
+            
+            <div class="drop-zones">
+                <div class="drop-box" onclick="document.getElementById('xlInp').click()">
+                    <span style="font-size:30px; margin-bottom:10px;">📁</span>
+                    AliExpress Excel'i Bırak<br><span style="font-size:11px; font-weight:normal; margin-top:5px;">(Sipariş durumları güncellenir)</span>
+                    <input type="file" id="xlInp" hidden onchange="processExcel(this)">
+                </div>
+                <div class="drop-box" onclick="document.getElementById('pdfInp').click()" style="border-color:#9b59b6; color:#9b59b6;">
+                    <span style="font-size:30px; margin-bottom:10px;">📄</span>
+                    Kargo Faturası (PDF) Bırak<br><span style="font-size:11px; font-weight:normal; margin-top:5px;">(Kargo Fiyatları Otomatik İşlenir)</span>
+                    <input type="file" id="pdfInp" hidden accept=".pdf" onchange="processPdf(this)">
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap;">
+                <input type="text" id="orderSearch" placeholder="Sipariş No, İsim, Takip No Ara..." oninput="renderOrders()" style="flex: 2; padding:8px; border:1px solid #ddd; border-radius:4px;">
+                <select id="yearFilter" style="flex: 1; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
+                    <option value="2026">Yıl: 2026</option>
+                    <option value="2025">Yıl: 2025</option>
+                </select>
+                <select id="monthFilter" style="flex: 1; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
+                    <option value="">Tüm Aylar</option>
+                    <option value="/01/">Ocak</option>
+                    <option value="/02/">Şubat</option>
+                    <option value="/03/">Mart</option>
+                    <option value="/04/">Nisan</option>
+                    <option value="/05/">Mayıs</option>
+                    <option value="/06/">Haziran</option>
+                    <option value="/07/">Temmuz</option>
+                    <option value="/08/">Ağustos</option>
+                    <option value="/09/">Eylül</option>
+                    <option value="/10/">Ekim</option>
+                    <option value="/11/">Kasım</option>
+                    <option value="/12/">Aralık</option>
+                </select>
+                <select id="statusFilter" style="flex: 1.5; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
+                    <option value="">Tüm Durumlar</option>
+                    <option value="kargolanmayı bekliyor">Kargolanmayı Bekliyor</option>
+                    <option value="alıcı onayı bekleniyor">Alıcı Onayı Bekleniyor</option>
+                    <option value="tamamlandı">Tamamlandı</option>
+                    <option value="kapatıldı">Kapatıldı</option>
+                </select>
+            </div>
+            <div id="orderListContainer"></div>
+        </div>
+
     </div>
 
     <script>
+        // PDF KÜTÜPHANE AYARI 
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
+
         // ==========================================
-        // TEMEL DEĞİŞKENLER VE GİRİŞ 
+        // TEMEL DEĞİŞKENLER (ESKİ İSİMLERE GERİ DÖNÜLDÜ - VERİLERİN GÜVENDE!)
         // ==========================================
         const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/u8d7j0zv94ywlp5zgjb3kzbivgy4j9ol";
-        let orders = JSON.parse(localStorage.getItem('pb_orders')) || {};
-        let historyList = JSON.parse(localStorage.getItem('paraBassHistoryDb')) || [];
         
-        // Bu değişken, sen değer girdikçe sekmelerin kapanmasını engeller
+        let orders = JSON.parse(localStorage.getItem('paraBassOrdersDb')) || JSON.parse(localStorage.getItem('pb_orders')) || {};
+        let historyList = JSON.parse(localStorage.getItem('paraBassHistoryDb')) || [];
+        let gtipList = JSON.parse(localStorage.getItem('paraBassGtipDb')) || [];
+        let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
+        
         let openAccordions = new Set(); 
 
         function checkLogin() {
@@ -440,7 +445,7 @@
                 if(menuAdd) menuAdd.style.display = 'block';
                 if(menuHistory) menuHistory.style.display = 'block';
                 if(menuFinance) menuFinance.style.display = 'block';
-                switchTab('module-finance', menuFinance);
+                switchTab('module-add', menuAdd);
                 renderOrders();
             }
         }
@@ -454,7 +459,7 @@
         }
 
         // ==========================================
-        // YENİ: FİNANS VE SİPARİŞ MOTORU
+        // FİNANS VE SİPARİŞ MOTORU
         // ==========================================
         function processExcel(input) {
             const reader = new FileReader();
@@ -464,24 +469,24 @@
                 
                 data.forEach(row => {
                     const id = String(row["Sipariş numarası"] || row["Order ID"]);
-                    if(!id || id === "undefined" || row["Sipariş Durumu"] === "Ödeme bekleniyor") return;
+                    if(!id || id === "undefined") return;
+                    
+                    let currentStatus = row["Sipariş Durumu"] || "Durum Yok";
+                    if(currentStatus.toLowerCase().includes("ödeme bekleniyor") || currentStatus.toLowerCase().includes("payment")) return;
 
-                    // Y Sütunu (İkinci 'Alıcının Adı' sütunu genelde _1 eklenerek gelir)
                     let buyerName = row["Alıcının Adı_1"] || row["Alıcının Adı 1"] || row["Contact Name"] || row["Alıcının Adı"] || "İsimsiz";
-                    let email = row["Email"] || row["E-posta"] || "Belirtilmemiş";
+                    let email = row["Email"] || row["E-posta"] || row["Buyer Email"] || "Belirtilmemiş";
                     let phone = (row["Telefon"] || "") + " " + (row["Cep Telefonu"] || "");
                     let tracking = String(row["Takip Numarası"] || row["Lojistik Takip No"] || "").replace('null:', '').trim();
                     let rawAmount = parseFloat(String(row["Sipariş Tutarı"] || "0").replace(/[^\d.-]/g, '')) || 0;
-                    let currentStatus = row["Sipariş Durumu"] || "Durum Yok";
 
                     if(orders[id]) {
-                        // Varsa sadece durumları ve takibi güncelle (Yatan parayı silme)
                         orders[id].status = currentStatus;
                         orders[id].tracking = tracking || orders[id].tracking;
                         orders[id].shipDate = row["Gönderme Süresi"] || orders[id].shipDate;
                         orders[id].confirmDate = row["Alıcı Onaylama Zamanı"] || orders[id].confirmDate;
+                        if(email !== "Belirtilmemiş") orders[id].email = email; 
                     } else {
-                        // Yoksa sıfırdan oluştur
                         orders[id] = {
                             id: id,
                             status: currentStatus,
@@ -504,18 +509,20 @@
                         };
                     }
                 });
-                localStorage.setItem('pb_orders', JSON.stringify(orders));
+                localStorage.setItem('paraBassOrdersDb', JSON.stringify(orders));
                 renderOrders();
-                alert("Excel İşlendi! Tablolar ve sipariş durumları güncellendi.");
+                alert("✅ Excel İşlendi! Tablolar ve sipariş durumları güvenle güncellendi.");
                 input.value = ""; 
             };
             reader.readAsBinaryString(input.files[0]);
         }
 
+        // PDF OKUMA VE KARGO AVCI MOTORU
         async function processPdf(input) {
             try {
                 const file = input.files[0];
                 const reader = new FileReader();
+                
                 reader.onload = async function() {
                     const typedarray = new Uint8Array(this.result);
                     const pdf = await pdfjsLib.getDocument(typedarray).promise;
@@ -525,22 +532,55 @@
                         const content = await page.getTextContent();
                         text += content.items.map(s => s.str).join(" ");
                     }
-                    alert("PDF Başarıyla Okundu! İçerik analiz ediliyor... \n(Sipariş eşleştirmesi PDF formatınıza göre otomatik yapılacaktır)");
+                    
+                    let updatedCount = 0;
+                    let resultMsg = "📄 PDF İşleme Raporu:\n\n";
+                    
+                    let allTrackings = Object.values(orders).map(o => o.tracking).filter(t => t && t.length >= 8);
+                    let uniqueTrackings = [...new Set(allTrackings)];
+
+                    uniqueTrackings.forEach(track => {
+                        let safeTrack = track.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                        let regex = new RegExp(safeTrack + '[\\s\\S]{1,200}?(\\d+[,\\.]\\d{2})\\s*USD', 'g');
+                        let match;
+                        let total = 0;
+                        while((match = regex.exec(text)) !== null) {
+                            let val = parseFloat(match[1].replace(',', '.'));
+                            total += val;
+                        }
+                        if(total > 0) {
+                            Object.values(orders).forEach(o => {
+                                if(o.tracking === track) {
+                                    o.shipping = total;
+                                    updatedCount++;
+                                    resultMsg += `Takip: ${track} -> Toplam Kargo: ${total.toFixed(2)} $\n`;
+                                }
+                            });
+                        }
+                    });
+
+                    if(updatedCount > 0) {
+                        localStorage.setItem('paraBassOrdersDb', JSON.stringify(orders));
+                        renderOrders();
+                        alert("✅ Başarılı! " + updatedCount + " siparişin kargo fiyatı PDF'ten çekildi.\n\n" + resultMsg);
+                    } else {
+                        alert("⚠️ PDF Okundu fakat sistemdeki takip numaraları ile USD fiyatları eşleşmedi. Doğru faturayı yüklediğinizden emin olun.");
+                    }
                     input.value = "";
                 };
                 reader.readAsArrayBuffer(file);
             } catch(e) {
                 console.error(e);
-                alert("PDF Okuma Hatası! Lütfen geçerli bir fatura yükleyin veya farklı bir PDF ile deneyin.");
+                alert("❌ PDF Okuma Hatası! Lütfen geçerli bir fatura yükleyin.");
                 input.value = "";
             }
         }
 
         function parseDateCustom(dateStr) {
             if(!dateStr) return null;
-            let parts = dateStr.split(' ')[0].split('/'); // DD/MM/YYYY
+            let parts = dateStr.split(' ')[0].split('/'); 
             if(parts.length === 3) return new Date(parts[2], parts[1]-1, parts[0]);
-            let partsDash = dateStr.split(' ')[0].split('-'); // YYYY-MM-DD
+            let partsDash = dateStr.split(' ')[0].split('-'); 
             if(partsDash.length === 3) return new Date(partsDash[0], partsDash[1]-1, partsDash[2]);
             return null;
         }
@@ -561,30 +601,30 @@
             let hasLateWarning = false;
 
             Object.values(orders).reverse().forEach(o => {
-                // FİLTRELER
                 if(!o.orderDate.includes(year) && !o.payDate.includes(year)) return;
                 if(month && !o.orderDate.includes(month)) return;
                 if(statusF && !o.status.toLowerCase().includes(statusF)) return;
                 if(search && !o.id.includes(search) && !o.buyer.toLowerCase().includes(search) && !o.tracking.toLowerCase().includes(search)) return;
 
-                // KÂR VE İADE MATEMATİĞİ
                 let profit = o.earned - o.cost - o.shipping;
                 if (o.isRefunded) {
-                    stats.refund += o.earned; 
-                    profit = 0; 
+                    stats.refund += (o.cost + o.shipping); 
+                    profit = 0 - o.cost - o.shipping; 
+                    stats.profit += profit; 
                 } else {
                     stats.revenue += o.earned; 
                     stats.profit += profit;
                 }
 
-                // 22 GÜN GECİKME UYARISI
                 let isLate = false;
                 let sLow = o.status.toLowerCase();
+                let daysPassed = 0;
+                
                 if(o.shipDate && !sLow.includes("tamamlandı") && !sLow.includes("finished") && !sLow.includes("kapatıldı") && !sLow.includes("closed")) {
                     const sDate = parseDateCustom(o.shipDate);
                     if(sDate) {
-                        let diff = (new Date() - sDate) / (1000 * 60 * 60 * 24);
-                        if(diff > 22 && (sLow.includes("onay") || sLow.includes("receipt"))) { 
+                        daysPassed = Math.floor((new Date() - sDate) / (1000 * 60 * 60 * 24));
+                        if(daysPassed > 22 && (sLow.includes("onay") || sLow.includes("receipt"))) { 
                             isLate = true; 
                             stats.late++; 
                             hasLateWarning = true;
@@ -592,7 +632,6 @@
                     }
                 }
 
-                // 14 GÜNLÜK VADE
                 let countdown = "-";
                 if(o.confirmDate && o.confirmDate !== "" && !o.isRefunded) {
                     const cDate = parseDateCustom(o.confirmDate);
@@ -603,7 +642,6 @@
                     }
                 }
 
-                // RENKLER VE İKONLAR
                 let statusIcon = "📦"; let badgeClass = "bg-info"; let rowBg = "#fff"; let leftBorder = "5px solid transparent";
                 if(sLow.includes("tamamlandı") || sLow.includes("finished")) { 
                     statusIcon = "✅"; badgeClass = "bg-success"; rowBg = "#f7fcf9"; leftBorder = "5px solid #27ae60";
@@ -616,21 +654,21 @@
                 }
                 
                 if(isLate) { leftBorder = "5px solid #e74c3c"; rowBg = "#fffafa"; }
-                if(o.isRefunded) { rowBg = "#fcf3f3"; }
+                if(o.isRefunded) { rowBg = "#fcf3f3"; leftBorder = "5px solid #c0392b";}
 
                 const div = document.createElement('div');
                 div.className = 'order-row';
                 div.style.background = rowBg;
                 
                 let refundBadge = o.isRefunded ? '<span style="color:#e74c3c; font-weight:bold; font-size:11px; display:block; margin-top:4px;">🔴 İADE EDİLDİ</span>' : '';
-                let lateBadge = isLate ? 'GECİKTİ!' : o.status;
+                let lateCounterText = (sLow.includes("onay") && daysPassed > 0) ? `<br><small style="color:${isLate ? '#e74c3c' : '#9b59b6'}; font-weight:bold;">Kargoda: ${daysPassed}. Gün</small>` : '';
 
                 div.innerHTML = `
                     <div class="order-header" onclick="toggleFinDetails('${o.id}')" style="border-left: ${leftBorder};">
                         <span><b>#${o.id}</b><br><small style="color:#7f8c8d;">${o.orderDate.split(' ')[0]}</small>${refundBadge}</span>
-                        <span>${o.buyer}</span>
+                        <span>${o.buyer} ${lateCounterText}</span>
                         <span>🚩 ${o.country}</span>
-                        <span><span style="font-size:18px;">${statusIcon}</span> <span class="badge ${badgeClass}">${lateBadge}</span></span>
+                        <span><span style="font-size:18px;">${statusIcon}</span> <span class="badge ${badgeClass}">${isLate ? 'GECİKTİ!' : o.status}</span></span>
                         <div style="text-align:right;"><small style="color:#95a5a6; text-decoration:line-through;">Brüt: $${o.rawAmount.toFixed(2)}</small><br><span style="color:#27ae60; font-weight:bold; font-size:14px;">Yatan: $${o.earned.toFixed(2)}</span></div>
                         <div style="text-align:right;"><span style="font-weight:bold; font-size:14px; color:${profit >= 0 && !o.isRefunded ? '#27ae60':'#e74c3c'}">${profit >= 0 && !o.isRefunded ? '+' : ''}$${profit.toFixed(2)}</span></div>
                     </div>
@@ -642,7 +680,15 @@
                                 <span><strong>Onay:</strong> ${o.confirmDate || '-'}</span>
                                 <span style="color:${countdown.includes('Gün') ? '#f39c12':'#27ae60'}; font-weight:bold;">Ödeme: ${countdown}</span>
                             </div>
-                            <label>Kategori Seç veya Ekle</label>
+                            <label>Durum (Manuel Değiştir)</label>
+                            <select class="fin-input" onchange="updateFinOrder('${o.id}', 'status', this.value)">
+                                <option value="${o.status}">${o.status}</option>
+                                <option value="Kargolanmayı Bekliyor">Kargolanmayı Bekliyor</option>
+                                <option value="Alıcı Onayı Bekleniyor">Alıcı Onayı Bekleniyor</option>
+                                <option value="Tamamlandı">Tamamlandı</option>
+                                <option value="Kapatıldı">Kapatıldı</option>
+                            </select>
+                            <label style="margin-top:5px;">Kategori Seç / Ekle</label>
                             <div style="display:flex; gap:5px;">
                                 <select class="fin-input" style="flex:1;" onchange="updateFinOrder('${o.id}', 'cat', this.value)">
                                     <option value="${o.cat}">${o.cat}</option>
@@ -655,15 +701,17 @@
                             </div>
                         </div>
                         <div>
-                            <label>YATAN NET ($)</label><input class="fin-input" type="number" step="0.01" value="${o.earned}" style="border-color:#27ae60; background:#eafaf1;" onchange="updateFinOrder('${o.id}', 'earned', this.value)">
+                            <label>YATAN NET ($)</label><input class="fin-input" type="number" step="0.01" value="${o.earned}" style="border-color:#27ae60; background:#eafaf1;" onchange="updateFinOrder('${o.id}', 'earned', this.value)" ${o.isRefunded ? 'disabled' : ''}>
                             <label>Maliyet ($)</label><input class="fin-input" type="number" step="0.01" value="${o.cost}" onchange="updateFinOrder('${o.id}', 'cost', this.value)">
                             <label>Kargo ($)</label><input class="fin-input" type="number" step="0.01" value="${o.shipping}" onchange="updateFinOrder('${o.id}', 'shipping', this.value)">
                         </div>
                         <div>
                             <p style="margin-top:0;"><b>Takip:</b> <span style="font-family:monospace; background:#eee; padding:2px 5px;">${o.tracking || 'Yok'}</span></p>
                             <p><b>Tel:</b> ${o.phone}</p>
-                            <p><b>Mail:</b> <span style="color:#3498db;">${o.email}</span></p>
-                            <label style="margin-top:10px; display:inline-block; cursor:pointer;"><input type="checkbox" onchange="updateFinOrder('${o.id}', 'isRefunded', this.checked)" ${o.isRefunded ? 'checked' : ''}> 🔴 Sipariş İade Edildi</label>
+                            <p><b>Mail:</b> <span style="color:#3498db; font-weight:bold;">${o.email || 'Yok'}</span></p>
+                            <label style="margin-top:10px; display:inline-block; cursor:pointer; font-weight:bold; color:#c0392b; background:#ffefef; padding:5px; border-radius:4px; width:100%;">
+                                <input type="checkbox" onchange="updateFinOrder('${o.id}', 'isRefunded', this.checked)" ${o.isRefunded ? 'checked' : ''}> 🔴 Sipariş İade Edildi
+                            </label>
                             <button onclick="delFinOrder('${o.id}')" style="background:#e74c3c; color:white; border:none; padding:8px; width:100%; cursor:pointer; margin-top:10px; border-radius: 4px;">Siparişi Tamamen Sil</button>
                         </div>
                     </div>
@@ -671,7 +719,6 @@
                 container.appendChild(div);
             });
 
-            // Üst İstatistikler ve Uyarı
             document.getElementById('headRevenue').innerText = "$" + stats.revenue.toFixed(2);
             document.getElementById('headProfit').innerText = "$" + stats.profit.toFixed(2);
             document.getElementById('headRefund').innerText = "$" + stats.refund.toFixed(2);
@@ -688,15 +735,14 @@
             else { el.style.display = 'grid'; openAccordions.add(id); }
         }
 
-        // Değer değişince tabloyu çizer ama açık sekmeyi kapatmaz!
         function updateFinOrder(id, field, val) { 
             orders[id][field] = (field === 'cost' || field === 'shipping' || field === 'earned') ? parseFloat(val || 0) : val; 
-            localStorage.setItem('pb_orders', JSON.stringify(orders)); 
+            localStorage.setItem('paraBassOrdersDb', JSON.stringify(orders)); 
             renderOrders(); 
         }
         
         function delFinOrder(id) { 
-            if(confirm("Silinsin mi?")) { delete orders[id]; localStorage.setItem('pb_orders', JSON.stringify(orders)); renderOrders(); } 
+            if(confirm("Sipariş veritabanından kalıcı olarak silinsin mi?")) { delete orders[id]; localStorage.setItem('paraBassOrdersDb', JSON.stringify(orders)); renderOrders(); } 
         }
 
         // ==========================================
@@ -862,18 +908,12 @@
             });
         }
 
-        function copyDirectData(elementId) { 
-            navigator.clipboard.writeText(document.getElementById(elementId).innerText.replace('$', '').trim()).then(() => alert("Kopyalandı!")); 
-        }
-        function copyRawText(text) { 
-            navigator.clipboard.writeText(text).then(() => alert("Kopyalandı: " + text)); 
-        }
+        function copyDirectData(elementId) { navigator.clipboard.writeText(document.getElementById(elementId).innerText.replace('$', '').trim()).then(() => alert("Kopyalandı!")); }
+        function copyRawText(text) { navigator.clipboard.writeText(text).then(() => alert("Kopyalandı: " + text)); }
 
         // ==========================================
         // ESKİ SİSTEMLER: GTIP
         // ==========================================
-        let gtipList = JSON.parse(localStorage.getItem('paraBassGtipDb')) || [];
-
         function initDropZone() {
             const dropZone = document.getElementById('gpsrDropZone'); if(!dropZone) return;
             dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#48d1cc'; dropZone.style.background = '#f0ffff'; });
@@ -881,9 +921,7 @@
             dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.style.borderColor = '#bdc3c7'; dropZone.style.background = '#fafafa'; if(e.dataTransfer.files.length > 0) processGpsrFile(e.dataTransfer.files[0]); });
         }
 
-        function handleGpsrSelect(event) { 
-            const file = event.target.files[0]; if(!file) return; processGpsrFile(file); 
-        }
+        function handleGpsrSelect(event) { const file = event.target.files[0]; if(!file) return; processGpsrFile(file); }
 
         function processGpsrFile(file) {
             const reader = new FileReader();
@@ -915,83 +953,28 @@
                 localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList)); 
                 cancelGtipEdit(); 
                 renderGtibs(); 
-            } catch (e) { 
-                alert("Hata! Tarayıcı hafızası dolu."); 
-                if (editIndex === "-1") gtipList.shift(); 
-            }
+            } catch (e) { alert("Hata! Tarayıcı hafızası dolu."); if (editIndex === "-1") gtipList.shift(); }
         }
 
         function editGtip(index) {
-            let item = gtipList[index]; 
-            document.getElementById('gtipEditIndex').value = index; 
-            document.getElementById('gtipName').value = item.name; 
-            document.getElementById('gtipCode').value = item.code;
-            
-            if (item.image) { 
-                document.getElementById('gpsrBase64').value = item.image; 
-                document.getElementById('gpsrPreview').src = item.image; 
-                document.getElementById('gpsrPreview').style.display = 'block'; 
-                document.getElementById('gpsrDropText').style.display = 'none'; 
-            } else { 
-                document.getElementById('gpsrBase64').value = ""; 
-                document.getElementById('gpsrPreview').style.display = 'none'; 
-                document.getElementById('gpsrDropText').style.display = 'inline'; 
-            }
-            document.getElementById('gtipFormTitle').innerText = "✏️ GTIP Düzenle"; 
-            document.getElementById('saveGtipBtn').innerHTML = "🔄 Güncelle"; 
-            document.getElementById('cancelGtipBtn').style.display = "inline-block"; 
-            document.querySelector('.main-content').scrollTop = 0;
+            let item = gtipList[index]; document.getElementById('gtipEditIndex').value = index; document.getElementById('gtipName').value = item.name; document.getElementById('gtipCode').value = item.code;
+            if (item.image) { document.getElementById('gpsrBase64').value = item.image; document.getElementById('gpsrPreview').src = item.image; document.getElementById('gpsrPreview').style.display = 'block'; document.getElementById('gpsrDropText').style.display = 'none'; } 
+            else { document.getElementById('gpsrBase64').value = ""; document.getElementById('gpsrPreview').style.display = 'none'; document.getElementById('gpsrDropText').style.display = 'inline'; }
+            document.getElementById('gtipFormTitle').innerText = "✏️ GTIP Düzenle"; document.getElementById('saveGtipBtn').innerHTML = "🔄 Güncelle"; document.getElementById('cancelGtipBtn').style.display = "inline-block"; document.querySelector('.main-content').scrollTop = 0;
         }
 
         function cancelGtipEdit() { 
-            document.getElementById('gtipEditIndex').value = "-1"; 
-            document.getElementById('gtipName').value = ""; 
-            document.getElementById('gtipCode').value = ""; 
-            document.getElementById('gpsrBase64').value = ""; 
-            document.getElementById('gpsrPreview').style.display = 'none'; 
-            document.getElementById('gpsrDropText').style.display = 'inline'; 
-            document.getElementById('gtipFormTitle').innerText = "Yeni GTIP ve GPSR Ekle"; 
-            document.getElementById('saveGtipBtn').innerHTML = "➕ Ekle ve Kaydet"; 
-            document.getElementById('cancelGtipBtn').style.display = "none"; 
+            document.getElementById('gtipEditIndex').value = "-1"; document.getElementById('gtipName').value = ""; document.getElementById('gtipCode').value = ""; document.getElementById('gpsrBase64').value = ""; document.getElementById('gpsrPreview').style.display = 'none'; document.getElementById('gpsrDropText').style.display = 'inline'; document.getElementById('gtipFormTitle').innerText = "Yeni GTIP ve GPSR Ekle"; document.getElementById('saveGtipBtn').innerHTML = "➕ Ekle ve Kaydet"; document.getElementById('cancelGtipBtn').style.display = "none"; 
         }
 
-        function deleteGtip(index) { 
-            if(confirm("Silmek istediğinize emin misiniz?")) { 
-                gtipList.splice(index, 1); 
-                localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList)); 
-                renderGtibs(); 
-            } 
-        }
+        function deleteGtip(index) { if(confirm("Silmek istediğinize emin misiniz?")) { gtipList.splice(index, 1); localStorage.setItem('paraBassGtipDb', JSON.stringify(gtipList)); renderGtibs(); } }
 
         function renderGtibs() {
-            const container = document.getElementById('gtipContainer'); 
-            if(!container) return; 
-            container.innerHTML = ""; 
-            if(gtipList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün eklenmedi.</p>";
-            
+            const container = document.getElementById('gtipContainer'); if(!container) return; container.innerHTML = ""; if(gtipList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün eklenmedi.</p>";
             gtipList.forEach((item, i) => {
-                let div = document.createElement("div"); 
-                div.className = "gtip-item"; 
-                let imgHtml = item.image ? `<img src="${item.image}" draggable="true" title="Sürükle">` : `<span>Yok</span>`;
-                let safeName = item.name ? item.name.replace(/'/g, "\\'") : ''; 
-                let safeCode = item.code ? item.code.replace(/'/g, "\\'") : '';
-                
-                div.innerHTML = `
-                    <div class="gpsr-img-container">${imgHtml}</div>
-                    <div class="gtip-info">
-                        <div class="gtip-name">${item.name}</div>
-                        <div class="gtip-code">${item.code}</div>
-                    </div>
-                    <div class="gtip-actions">
-                        <div style="display:flex; gap:5px; width: 100%;">
-                            <button class="small-btn" style="flex:1; background:#27ae60;" onclick="copyRawText('${safeName}')">Adı Al</button>
-                            <button class="small-btn" style="flex:1;" onclick="copyRawText('${safeCode}')">Kodu Al</button>
-                        </div>
-                        <div style="display:flex; gap:5px; width: 100%; margin-top:5px;">
-                            <button class="edit-btn" style="flex:1; margin:0;" onclick="editGtip(${i})">✏️</button>
-                            <button class="delete-btn" style="flex:1; margin:0;" onclick="deleteGtip(${i})">Sil</button>
-                        </div>
-                    </div>`; 
+                let div = document.createElement("div"); div.className = "gtip-item"; let imgHtml = item.image ? `<img src="${item.image}" draggable="true" title="Sürükle">` : `<span>Yok</span>`;
+                let safeName = item.name ? item.name.replace(/'/g, "\\'") : ''; let safeCode = item.code ? item.code.replace(/'/g, "\\'") : '';
+                div.innerHTML = `<div class="gpsr-img-container">${imgHtml}</div><div class="gtip-info"><div class="gtip-name">${item.name}</div><div class="gtip-code">${item.code}</div></div><div class="gtip-actions"><div style="display:flex; gap:5px; width: 100%;"><button class="small-btn" style="flex:1; background:#27ae60;" onclick="copyRawText('${safeName}')">Adı Al</button><button class="small-btn" style="flex:1;" onclick="copyRawText('${safeCode}')">Kodu Al</button></div><div style="display:flex; gap:5px; width: 100%; margin-top:5px;"><button class="edit-btn" style="flex:1; margin:0;" onclick="editGtip(${i})">✏️</button><button class="delete-btn" style="flex:1; margin:0;" onclick="deleteGtip(${i})">Sil</button></div></div>`; 
                 container.appendChild(div);
             });
         }
@@ -999,104 +982,27 @@
         // ==========================================
         // ESKİ SİSTEMLER: MAİL 
         // ==========================================
-        let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
-
         function saveMail() {
-            let title = document.getElementById('mailTitle').value.trim(); 
-            if(!title) return alert("Şablon başlığı zorunludur!");
-            
-            let newMail = { 
-                title: title, 
-                tr: document.getElementById('mailTR').value.trim() || "-", 
-                en: document.getElementById('mailEN').value.trim() || "-", 
-                fr: document.getElementById('mailFR').value.trim() || "-", 
-                es: document.getElementById('mailES').value.trim() || "-", 
-                it: document.getElementById('mailIT').value.trim() || "-" 
-            };
+            let title = document.getElementById('mailTitle').value.trim(); if(!title) return alert("Şablon başlığı zorunludur!");
+            let newMail = { title: title, tr: document.getElementById('mailTR').value.trim() || "-", en: document.getElementById('mailEN').value.trim() || "-", fr: document.getElementById('mailFR').value.trim() || "-", es: document.getElementById('mailES').value.trim() || "-", it: document.getElementById('mailIT').value.trim() || "-" };
             let editIndex = document.getElementById('mailEditIndex').value;
-            
-            if(editIndex === "-1") { mailList.unshift(newMail); } 
-            else { mailList[editIndex] = newMail; } 
-            
-            localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); 
-            cancelMailEdit(); 
-            renderMails();
+            if(editIndex === "-1") { mailList.unshift(newMail); } else { mailList[editIndex] = newMail; } localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); cancelMailEdit(); renderMails();
         }
 
         function editMail(event, index) { 
-            event.stopPropagation(); 
-            let mail = mailList[index]; 
-            document.getElementById('mailEditIndex').value = index; 
-            document.getElementById('mailTitle').value = mail.title; 
-            document.getElementById('mailTR').value = mail.tr !== "-" ? mail.tr : ""; 
-            document.getElementById('mailEN').value = mail.en !== "-" ? mail.en : ""; 
-            document.getElementById('mailFR').value = mail.fr !== "-" ? mail.fr : ""; 
-            document.getElementById('mailES').value = mail.es !== "-" ? mail.es : ""; 
-            document.getElementById('mailIT').value = mail.it !== "-" ? mail.it : ""; 
-            document.getElementById('mailFormTitle').innerText = "✏️ Şablonu Düzenliyorsun"; 
-            document.getElementById('saveMailBtn').innerText = "🔄 Güncelle"; 
-            document.getElementById('cancelEditBtn').style.display = "inline-block"; 
-            document.querySelector('.main-content').scrollTop = 0; 
+            event.stopPropagation(); let mail = mailList[index]; document.getElementById('mailEditIndex').value = index; document.getElementById('mailTitle').value = mail.title; document.getElementById('mailTR').value = mail.tr !== "-" ? mail.tr : ""; document.getElementById('mailEN').value = mail.en !== "-" ? mail.en : ""; document.getElementById('mailFR').value = mail.fr !== "-" ? mail.fr : ""; document.getElementById('mailES').value = mail.es !== "-" ? mail.es : ""; document.getElementById('mailIT').value = mail.it !== "-" ? mail.it : ""; document.getElementById('mailFormTitle').innerText = "✏️ Şablonu Düzenliyorsun"; document.getElementById('saveMailBtn').innerText = "🔄 Güncelle"; document.getElementById('cancelEditBtn').style.display = "inline-block"; document.querySelector('.main-content').scrollTop = 0; 
         }
 
-        function cancelMailEdit() { 
-            document.getElementById('mailEditIndex').value = "-1"; 
-            document.getElementById('mailTitle').value = ""; 
-            document.getElementById('mailTR').value = ""; 
-            document.getElementById('mailEN').value = ""; 
-            document.getElementById('mailFR').value = ""; 
-            document.getElementById('mailES').value = ""; 
-            document.getElementById('mailIT').value = ""; 
-            document.getElementById('mailFormTitle').innerText = "Yeni Şablon Ekle"; 
-            document.getElementById('saveMailBtn').innerText = "💾 Şablonu Kaydet"; 
-            document.getElementById('cancelEditBtn').style.display = "none"; 
-        }
+        function cancelMailEdit() { document.getElementById('mailEditIndex').value = "-1"; document.getElementById('mailTitle').value = ""; document.getElementById('mailTR').value = ""; document.getElementById('mailEN').value = ""; document.getElementById('mailFR').value = ""; document.getElementById('mailES').value = ""; document.getElementById('mailIT').value = ""; document.getElementById('mailFormTitle').innerText = "Yeni Şablon Ekle"; document.getElementById('saveMailBtn').innerText = "💾 Şablonu Kaydet"; document.getElementById('cancelEditBtn').style.display = "none"; }
 
-        function deleteMail(event, index) { 
-            event.stopPropagation(); 
-            if(confirm("Silmek istediğinize emin misiniz?")) { 
-                mailList.splice(index, 1); 
-                localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); 
-                renderMails(); 
-            } 
-        }
+        function deleteMail(event, index) { event.stopPropagation(); if(confirm("Silmek istediğinize emin misiniz?")) { mailList.splice(index, 1); localStorage.setItem('paraBassMailDb', JSON.stringify(mailList)); renderMails(); } }
 
-        function toggleMailAccordion(index) { 
-            let body = document.getElementById('mail-body-' + index); 
-            let icon = document.getElementById('mail-icon-' + index); 
-            if(body.style.display === 'none' || body.style.display === '') { 
-                body.style.display = 'grid'; 
-                icon.innerText = '🔽'; 
-            } else { 
-                body.style.display = 'none'; 
-                icon.innerText = '▶️'; 
-            } 
-        }
+        function toggleMailAccordion(index) { let body = document.getElementById('mail-body-' + index); let icon = document.getElementById('mail-icon-' + index); if(body.style.display === 'none' || body.style.display === '') { body.style.display = 'grid'; icon.innerText = '🔽'; } else { body.style.display = 'none'; icon.innerText = '▶️'; } }
 
         function renderMails() {
-            const container = document.getElementById('mailTemplatesContainer'); 
-            if(!container) return; 
-            container.innerHTML = ""; 
-            if(mailList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz şablon eklemedin.</p>";
-            
+            const container = document.getElementById('mailTemplatesContainer'); if(!container) return; container.innerHTML = ""; if(mailList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz şablon eklemedin.</p>";
             mailList.forEach((mail, i) => {
-                let html = `
-                    <div class="mail-card">
-                        <div class="mail-header" onclick="toggleMailAccordion(${i})">
-                            <span><span id="mail-icon-${i}">▶️</span> 📌 ${mail.title}</span>
-                            <div>
-                                <button class="edit-btn" onclick="editMail(event, ${i})">✏️</button>
-                                <button class="delete-btn" onclick="deleteMail(event, ${i})">Sil</button>
-                            </div>
-                        </div>
-                        <div class="mail-body" id="mail-body-${i}">
-                            <div class="lang-row"><div class="lang-flag">🇹🇷</div><div class="lang-text">${mail.tr}</div><button class="lang-copy" onclick="copyRawText('${mail.tr.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                            <div class="lang-row"><div class="lang-flag">🇬🇧</div><div class="lang-text">${mail.en}</div><button class="lang-copy" onclick="copyRawText('${mail.en.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                            <div class="lang-row"><div class="lang-flag">🇫🇷</div><div class="lang-text">${mail.fr}</div><button class="lang-copy" onclick="copyRawText('${mail.fr.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                            <div class="lang-row"><div class="lang-flag">🇪🇸</div><div class="lang-text">${mail.es}</div><button class="lang-copy" onclick="copyRawText('${mail.es.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                            <div class="lang-row"><div class="lang-flag">🇮🇹</div><div class="lang-text">${mail.it}</div><button class="lang-copy" onclick="copyRawText('${mail.it.replace(/'/g, "\\'")}')">Kopyala</button></div>
-                        </div>
-                    </div>`; 
+                let html = `<div class="mail-card"><div class="mail-header" onclick="toggleMailAccordion(${i})"><span><span id="mail-icon-${i}">▶️</span> 📌 ${mail.title}</span><div><button class="edit-btn" onclick="editMail(event, ${i})">✏️</button><button class="delete-btn" onclick="deleteMail(event, ${i})">Sil</button></div></div><div class="mail-body" id="mail-body-${i}"><div class="lang-row"><div class="lang-flag">🇹🇷</div><div class="lang-text">${mail.tr}</div><button class="lang-copy" onclick="copyRawText('${mail.tr.replace(/'/g, "\\'")}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇬🇧</div><div class="lang-text">${mail.en}</div><button class="lang-copy" onclick="copyRawText('${mail.en.replace(/'/g, "\\'")}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇫🇷</div><div class="lang-text">${mail.fr}</div><button class="lang-copy" onclick="copyRawText('${mail.fr.replace(/'/g, "\\'")}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇪🇸</div><div class="lang-text">${mail.es}</div><button class="lang-copy" onclick="copyRawText('${mail.es.replace(/'/g, "\\'")}')">Kopyala</button></div><div class="lang-row"><div class="lang-flag">🇮🇹</div><div class="lang-text">${mail.it}</div><button class="lang-copy" onclick="copyRawText('${mail.it.replace(/'/g, "\\'")}')">Kopyala</button></div></div></div>`; 
                 container.innerHTML += html;
             });
         }
@@ -1104,62 +1010,25 @@
         // ==========================================
         // ESKİ SİSTEMLER: GEÇMİŞ
         // ==========================================
-        function deleteHistory(index) { 
-            if(confirm("Bu ürünü geçmişten silmek istediğinize emin misiniz?")) { 
-                historyList.splice(index, 1); 
-                localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList)); 
-                renderHistory(); 
-            } 
-        }
+        function deleteHistory(index) { if(confirm("Bu ürünü geçmişten silmek istediğinize emin misiniz?")) { historyList.splice(index, 1); localStorage.setItem('paraBassHistoryDb', JSON.stringify(historyList)); renderHistory(); } }
 
         function restoreFromHistory(index) {
             let item = historyList[index]; 
             if(localStorage.getItem('paraBassRole') === 'calisan') return alert("Çalışan yetkisiyle AI modülüne ürün geri yüklenemez.");
             
-            document.getElementById('urlInput').value = item.url; 
-            document.getElementById('resTitle').innerText = item.title; 
-            document.getElementById('resDesc').innerText = item.desc || "Yok"; 
-            document.getElementById('calcCostTL').value = item.priceTL; 
-            document.getElementById('resVideo').innerText = item.video || "Video bulunamadı";
+            document.getElementById('urlInput').value = item.url; document.getElementById('resTitle').innerText = item.title; document.getElementById('resDesc').innerText = item.desc || "Yok"; document.getElementById('calcCostTL').value = item.priceTL; document.getElementById('resVideo').innerText = item.video || "Video bulunamadı";
             
-            const imgContainer = document.getElementById('resImages'); 
-            imgContainer.innerHTML = ""; 
-            if (item.images && item.images.length > 0) { 
-                item.images.forEach(imgUrl => { 
-                    let img = document.createElement("img"); 
-                    img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`; 
-                    img.draggable = true; 
-                    imgContainer.appendChild(img); 
-                }); 
-            }
-            document.getElementById('fetchResults').style.display = "block"; 
-            document.getElementById('statusMessage').style.color = "#27ae60"; 
-            document.getElementById('statusMessage').innerText = "♻️ Başarılı! Veriler geçmişten 0 kredi ile geri yüklendi.";
-            calculatePrices(); 
-            switchTab('module-add', document.getElementById('menuAdd'));
+            const imgContainer = document.getElementById('resImages'); imgContainer.innerHTML = ""; 
+            if (item.images && item.images.length > 0) { item.images.forEach(imgUrl => { let img = document.createElement("img"); img.src = `https://wsrv.nl/?url=${encodeURIComponent(imgUrl)}&output=jpg`; img.draggable = true; imgContainer.appendChild(img); }); }
+            document.getElementById('fetchResults').style.display = "block"; document.getElementById('statusMessage').style.color = "#27ae60"; document.getElementById('statusMessage').innerText = "♻️ Başarılı! Veriler geçmişten 0 kredi ile geri yüklendi.";
+            calculatePrices(); switchTab('module-add', document.getElementById('menuAdd'));
         }
 
         function renderHistory() {
-            const container = document.getElementById('historyContainer'); 
-            if(!container) return; 
-            container.innerHTML = ""; 
-            if(historyList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün aratmadınız.</p>";
-            
+            const container = document.getElementById('historyContainer'); if(!container) return; container.innerHTML = ""; if(historyList.length === 0) return container.innerHTML = "<p style='color:#888; font-size:13px;'>Henüz hiç ürün aratmadınız.</p>";
             historyList.forEach((item, i) => {
-                let div = document.createElement("div"); 
-                div.className = "history-card"; 
-                div.innerHTML = `
-                    <div style="flex:1;">
-                        <div class="hist-title">${item.title}</div>
-                        <div class="hist-date">📅 ${item.date}</div>
-                    </div>
-                    <div class="hist-actions">
-                        <button class="action-btn" style="margin:0; padding:8px 12px; font-size:13px;" onclick="restoreFromHistory(${i})">Sisteme Yükle ♻️</button>
-                        <div style="display:flex; gap:5px;">
-                            <button class="small-btn" style="flex:1;" onclick="window.open('${item.url}', '_blank')">Link ↗️</button>
-                            <button class="delete-btn" style="flex:1; margin:0;" onclick="deleteHistory(${i})">Sil</button>
-                        </div>
-                    </div>`; 
+                let div = document.createElement("div"); div.className = "history-card"; 
+                div.innerHTML = `<div style="flex:1;"><div class="hist-title">${item.title}</div><div class="hist-date">📅 ${item.date}</div></div><div class="hist-actions"><button class="action-btn" style="margin:0; padding:8px 12px; font-size:13px;" onclick="restoreFromHistory(${i})">Sisteme Yükle ♻️</button><div style="display:flex; gap:5px;"><button class="small-btn" style="flex:1;" onclick="window.open('${item.url}', '_blank')">Link ↗️</button><button class="delete-btn" style="flex:1; margin:0;" onclick="deleteHistory(${i})">Sil</button></div></div>`; 
                 container.appendChild(div);
             });
         }
