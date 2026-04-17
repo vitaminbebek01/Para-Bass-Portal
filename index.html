@@ -521,57 +521,72 @@
         async function processPdf(input) {
             try {
                 const file = input.files[0];
-                const reader = new FileReader();
+                if (!file) return;
+
+                let allTrackings = Object.values(orders).map(o => o.tracking).filter(t => t && t.length >= 8);
+                let uniqueTrackings = [...new Set(allTrackings)];
+
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("trackings", JSON.stringify(uniqueTrackings));
+
+                // Ekranın en altına bilgi düşelim veya alert öncesi bekletelim
+                const statusEl = document.createElement('div');
+                statusEl.id = 'tempStatus';
+                statusEl.style.position = 'fixed';
+                statusEl.style.top = '20px';
+                statusEl.style.right = '20px';
+                statusEl.style.background = '#f39c12';
+                statusEl.style.color = '#fff';
+                statusEl.style.padding = '15px';
+                statusEl.style.borderRadius = '8px';
+                statusEl.style.zIndex = '9999';
+                statusEl.innerText = 'PDF Sunucuda İşleniyor, Lütfen Bekleyin... ⏳';
+                document.body.appendChild(statusEl);
                 
-                reader.onload = async function() {
-                    const typedarray = new Uint8Array(this.result);
-                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                    let text = "";
-                    for(let i=1; i<=pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const content = await page.getTextContent();
-                        text += content.items.map(s => s.str).join(" ");
-                    }
-                    
-                    let updatedCount = 0;
-                    let resultMsg = "📄 PDF İşleme Raporu:\n\n";
-                    
-                    let allTrackings = Object.values(orders).map(o => o.tracking).filter(t => t && t.length >= 8);
-                    let uniqueTrackings = [...new Set(allTrackings)];
+                const response = await fetch("http://localhost:8000/upload-pdf", {
+                    method: "POST",
+                    body: formData
+                });
+                
+                document.body.removeChild(statusEl);
 
-                    uniqueTrackings.forEach(track => {
-                        let safeTrack = track.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                        let regex = new RegExp(safeTrack + '[\\s\\S]{1,200}?(\\d+[,\\.]\\d{2})\\s*USD', 'g');
-                        let match;
-                        let total = 0;
-                        while((match = regex.exec(text)) !== null) {
-                            let val = parseFloat(match[1].replace(',', '.'));
-                            total += val;
-                        }
-                        if(total > 0) {
-                            Object.values(orders).forEach(o => {
-                                if(o.tracking === track) {
-                                    o.shipping = total;
-                                    updatedCount++;
-                                    resultMsg += `Takip: ${track} -> Toplam Kargo: ${total.toFixed(2)} $\n`;
-                                }
-                            });
-                        }
-                    });
+                const result = await response.json();
 
-                    if(updatedCount > 0) {
-                        localStorage.setItem('paraBassOrdersDb', JSON.stringify(orders));
-                        renderOrders();
-                        alert("✅ Başarılı! " + updatedCount + " siparişin kargo fiyatı PDF'ten çekildi.\n\n" + resultMsg);
-                    } else {
-                        alert("⚠️ PDF Okundu fakat sistemdeki takip numaraları ile USD fiyatları eşleşmedi. Doğru faturayı yüklediğinizden emin olun.");
-                    }
+                if (result.error) {
+                    alert("❌ Sunucu Hatası: " + result.error);
                     input.value = "";
-                };
-                reader.readAsArrayBuffer(file);
+                    return;
+                }
+
+                let updatedCount = 0;
+                let resultMsg = "📄 PDF İşleme Raporu:\n\n";
+
+                if (result.data) {
+                    for (const [track, total] of Object.entries(result.data)) {
+                        Object.values(orders).forEach(o => {
+                            if (o.tracking === track) {
+                                o.shipping = total;
+                                updatedCount++;
+                                resultMsg += `Takip: ${track} -> Toplam Kargo: ${total.toFixed(2)} $\n`;
+                            }
+                        });
+                    }
+                }
+
+                if(updatedCount > 0) {
+                    localStorage.setItem('paraBassOrdersDb', JSON.stringify(orders));
+                    renderOrders();
+                    alert("✅ Başarılı! " + updatedCount + " siparişin kargo fiyatı PDF'ten çekildi.\n\n" + resultMsg);
+                } else {
+                    alert("⚠️ PDF Okundu fakat sistemdeki takip numaraları ile USD fiyatları eşleşmedi. Doğru faturayı yüklediğinizden emin olun.\n(Ayrıca backend üzerinde regex deseni de kontrol edilebilir)");
+                }
+                input.value = "";
             } catch(e) {
                 console.error(e);
-                alert("❌ PDF Okuma Hatası! Lütfen geçerli bir fatura yükleyin.");
+                const statusEl = document.getElementById('tempStatus');
+                if(statusEl) document.body.removeChild(statusEl);
+                alert("❌ Sunucuya Bağlanılamadı! Python arka yüzünün (FastAPI) çalıştığından emin olun.");
                 input.value = "";
             }
         }
