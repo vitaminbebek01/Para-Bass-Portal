@@ -53,24 +53,29 @@ async def process_pdf(file: UploadFile = File(...), trackings: str = Form(...)):
     if os.path.exists(temp_path):
         os.remove(temp_path)
 
-    # Clean up excessive newlines
-    text = re.sub(r'\n+', '\n', text)
+    # Clean up excessive newlines and split into lines
+    lines = text.split('\n')
     
-    # Now, find tracking numbers and the nearby USD amount
-    for track in tracking_list:
-        safe_track = re.escape(track)
-        # Look for the tracking number, then some characters, then a price in USD
-        # Example pattern: 123456789 ... 12.34 USD
-        # We allow up to 200 characters between them, taking the first match
-        pattern = safe_track + r'[\s\S]{1,200}?(\d+[,.]\d{2})\s*USD'
-        matches = re.finditer(pattern, text, re.IGNORECASE)
-        
-        total = 0.0
-        for match in matches:
-            val_str = match.group(1).replace(',', '.')
-            total += float(val_str)
+    # Process line by line to accurately match tracking numbers and their row totals
+    for line in lines:
+        for track in tracking_list:
+            safe_track = str(track).strip()
+            if not safe_track:
+                continue
             
-        if total > 0:
-            results[track] = total
+            # Check if this tracking number is in the line (as a distinct word/number)
+            if re.search(r'\b' + re.escape(safe_track) + r'\b', line):
+                # Find all monetary values (e.g. 12.34 or 12,34) on the same line
+                prices = re.findall(r'\b\d+[,.]\d{2}\b', line)
+                if prices:
+                    # Take the last monetary value on the line (usually the total for that row)
+                    val_str = prices[-1].replace(',', '.')
+                    val_float = float(val_str)
+                    
+                    if safe_track in results:
+                        results[safe_track] += val_float
+                    else:
+                        results[safe_track] = val_float
+                break # Found the track for this line, go to next line
 
     return {"status": "success", "data": results, "extracted_text_preview": text[:500]}
