@@ -380,10 +380,12 @@
                     <option value="/11/">Kasım</option>
                     <option value="/12/">Aralık</option>
                 </select>
-                <select id="catFilter" style="flex: 1; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
-                    <option value="">Tüm Kategoriler</option>
-                </select>
-                <button onclick="manageCategories()" style="padding:8px 12px; border:none; background:#3498db; color:white; border-radius:4px; font-weight:bold; cursor:pointer;">⚙️ Kategori Düzenle</button>
+                <div style="display:flex; align-items:center; flex:1; border:1px solid #ddd; border-radius:4px; padding-right:8px; background:white;">
+                    <select id="catFilter" style="flex: 1; padding:8px; border:none; outline:none; background:transparent;" onchange="renderOrders()">
+                        <option value="">Tüm Kategoriler</option>
+                    </select>
+                    <span onclick="manageCategories()" style="cursor:pointer; font-size:16px;" title="Kategorileri Düzenle">✏️</span>
+                </div>
                 <select id="statusFilter" style="flex: 1.5; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
                     <option value="">Tüm Durumlar</option>
                     <option value="kargolanmayı bekliyor">Kargolanmayı Bekliyor</option>
@@ -787,7 +789,6 @@
             document.getElementById('headMargin').innerText = "%" + margin.toFixed(2);
             
             document.getElementById('headRefund').innerText = "$" + stats.refund.toFixed(2);
-            document.getElementById('headLate').innerText = stats.late;
             document.getElementById('headPending').innerText = "$" + stats.pending.toFixed(2);
             
             document.getElementById('statTotalSales').innerText = stats.totalSales;
@@ -1121,15 +1122,59 @@
         }
 
         function manageCategories() {
-            let catsStr = orderCategories.join(', ');
-            let result = prompt("Mevcut Kategoriler (virgülle ayırarak düzenleyin):\nNot: Çıkarmak istediğinizi silin, yenisini virgülle ekleyin.", catsStr);
-            if(result !== null) {
-                let newCats = result.split(',').map(s => s.trim()).filter(s => s !== "");
-                orderCategories = newCats;
+            let overlay = document.createElement('div');
+            overlay.id = "catModal";
+            overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:9999;";
+            
+            let box = document.createElement('div');
+            box.style.cssText = "background:white; padding:20px; border-radius:8px; width:400px; max-width:90%;";
+            box.innerHTML = `
+                <h3 style="margin-top:0;">Kategori Yönetimi</h3>
+                <div style="display:flex; gap:10px; margin-bottom:15px;">
+                    <input type="text" id="newCatInput" class="fin-input" placeholder="Yeni kategori adı..." style="margin-bottom:0;">
+                    <button onclick="addCategory()" style="background:#27ae60; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Ekle</button>
+                </div>
+                <div id="catModalList" style="max-height:300px; overflow-y:auto;"></div>
+                <div style="text-align:right; margin-top:15px;">
+                    <button onclick="document.body.removeChild(document.getElementById('catModal')); renderOrders();" style="background:#95a5a6; color:white; border:none; padding:8px 15px; border-radius:4px; cursor:pointer;">Kapat</button>
+                </div>
+            `;
+            
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+            renderCatModalList();
+        }
+
+        function renderCatModalList() {
+            let list = document.getElementById('catModalList');
+            if(!list) return;
+            list.innerHTML = "";
+            orderCategories.forEach((c, i) => {
+                list.innerHTML += `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee;">
+                    <span>${c}</span>
+                    <span onclick="deleteCategory(${i})" style="color:#e74c3c; cursor:pointer; font-weight:bold;">✖</span>
+                </div>`;
+            });
+        }
+
+        function addCategory() {
+            let input = document.getElementById('newCatInput');
+            let val = input.value.trim();
+            if(val && !orderCategories.includes(val)) {
+                orderCategories.push(val);
                 localStorage.setItem('paraBassCategories', JSON.stringify(orderCategories));
+                input.value = "";
+                renderCatModalList();
                 populateCategoryFilters();
-                renderOrders();
-                alert("Kategoriler başarıyla güncellendi!");
+            }
+        }
+
+        function deleteCategory(i) {
+            if(confirm("Bu kategoriyi silmek istediğinize emin misiniz?")) {
+                orderCategories.splice(i, 1);
+                localStorage.setItem('paraBassCategories', JSON.stringify(orderCategories));
+                renderCatModalList();
+                populateCategoryFilters();
             }
         }
 
