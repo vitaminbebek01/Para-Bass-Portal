@@ -380,6 +380,10 @@
                     <option value="/11/">Kasım</option>
                     <option value="/12/">Aralık</option>
                 </select>
+                <select id="catFilter" style="flex: 1; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
+                    <option value="">Tüm Kategoriler</option>
+                </select>
+                <button onclick="manageCategories()" style="padding:8px 12px; border:none; background:#3498db; color:white; border-radius:4px; font-weight:bold; cursor:pointer;">⚙️ Kategori Düzenle</button>
                 <select id="statusFilter" style="flex: 1.5; padding:8px; border:1px solid #ddd; border-radius:4px;" onchange="renderOrders()">
                     <option value="">Tüm Durumlar</option>
                     <option value="kargolanmayı bekliyor">Kargolanmayı Bekliyor</option>
@@ -406,6 +410,7 @@
         let historyList = JSON.parse(localStorage.getItem('paraBassHistoryDb')) || [];
         let gtipList = JSON.parse(localStorage.getItem('paraBassGtipDb')) || [];
         let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
+        let orderCategories = JSON.parse(localStorage.getItem('paraBassCategories')) || ["Epoksi Magnet", "Silah Kılıfı", "Mum", "Anahtarlık"];
         
         let openAccordions = new Set(); 
 
@@ -622,6 +627,7 @@
             const year = document.getElementById('yearFilter').value;
             const month = document.getElementById('monthFilter').value;
             const statusF = document.getElementById('statusFilter').value.toLowerCase();
+            const catF = document.getElementById('catFilter') ? document.getElementById('catFilter').value : "";
             
             container.innerHTML = "";
 
@@ -640,6 +646,7 @@
                 if(!orderD.includes(year) && !payD.includes(year)) return;
                 if(month && !orderD.includes(month)) return;
                 if(statusF && !sLow.includes(statusF)) return;
+                if(catF && String(o.cat || "") !== catF) return;
                 if(search && !safeId.includes(search) && !safeBuyer.includes(search) && !safeTrack.includes(search)) return;
 
                 stats.totalSales++;
@@ -688,7 +695,7 @@
                     if(cDate) {
                         const diff = Math.ceil(((cDate.getTime() + (14 * 24 * 60 * 60 * 1000)) - new Date()) / (1000 * 60 * 60 * 24));
                         countdown = diff > 0 ? diff + " Gün Kaldı" : "Para Yattı ✅";
-                        if(diff > 0) stats.pending += o.earned;
+                        if(diff > 0) stats.pending += earned;
                     }
                 }
 
@@ -743,11 +750,8 @@
                             <label style="margin-top:5px;">Kategori Seç / Ekle</label>
                             <div style="display:flex; gap:5px;">
                                 <select class="fin-input" style="flex:1;" onchange="updateFinOrder('${o.id}', 'cat', this.value)">
-                                    <option value="${o.cat}">${o.cat}</option>
-                                    <option value="Epoksi Magnet">Epoksi Magnet</option>
-                                    <option value="Silah Kılıfı">Silah Kılıfı</option>
-                                    <option value="Mum">Mum</option>
-                                    <option value="Anahtarlık">Anahtarlık</option>
+                                    <option value="${o.cat || ''}">${o.cat || 'Kategori Seç'}</option>
+                                    ${orderCategories.map(c => `<option value="${c}">${c}</option>`).join('')}
                                 </select>
                                 <input type="text" class="fin-input" style="flex:1;" placeholder="Manuel..." onchange="updateFinOrder('${o.id}', 'cat', this.value)">
                             </div>
@@ -1106,6 +1110,29 @@
             });
         }
 
+        function populateCategoryFilters() {
+            const catFilter = document.getElementById('catFilter');
+            if(catFilter) {
+                catFilter.innerHTML = '<option value="">Tüm Kategoriler</option>';
+                orderCategories.forEach(cat => {
+                    catFilter.innerHTML += `<option value="${cat}">${cat}</option>`;
+                });
+            }
+        }
+
+        function manageCategories() {
+            let catsStr = orderCategories.join(', ');
+            let result = prompt("Mevcut Kategoriler (virgülle ayırarak düzenleyin):\nNot: Çıkarmak istediğinizi silin, yenisini virgülle ekleyin.", catsStr);
+            if(result !== null) {
+                let newCats = result.split(',').map(s => s.trim()).filter(s => s !== "");
+                orderCategories = newCats;
+                localStorage.setItem('paraBassCategories', JSON.stringify(orderCategories));
+                populateCategoryFilters();
+                renderOrders();
+                alert("Kategoriler başarıyla güncellendi!");
+            }
+        }
+
         // ==========================================
         // AÇILIŞ (ONLOAD)
         // ==========================================
@@ -1125,6 +1152,8 @@
             try { renderGtibs(); } catch(e){ console.error("gtip err:", e); } 
             try { renderMails(); } catch(e){ console.error("mail err:", e); } 
             try { renderHistory(); } catch(e){ console.error("history err:", e); }
+            try { populateCategoryFilters(); } catch(e){ console.error("catFilter err:", e); }
+            try { renderOrders(); } catch(e){ console.error("renderOrders err:", e); }
         };
     </script>
 </body>
