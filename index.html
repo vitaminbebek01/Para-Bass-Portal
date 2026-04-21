@@ -329,11 +329,13 @@
                 ⚠️ DİKKAT: Gönderim tarihinden itibaren 22 günü geçen ve hala onaylanmamış siparişleriniz var! Lütfen kırmızı işaretli siparişleri kontrol edin.
             </div>
             
-            <div class="stats-grid">
-                <div class="stat-card"><h4>Aylık Ciro (Net Yatan)</h4><div class="val" id="headRevenue">$0.00</div></div>
-                <div class="stat-card" style="border-color:#27ae60;"><h4>Toplam Kâr</h4><div class="val" id="headProfit" style="color:#27ae60;">$0.00</div></div>
-                <div class="stat-card" style="border-color:#e74c3c;"><h4>İade Zararı ($)</h4><div class="val" id="headRefund" style="color:#e74c3c;">$0.00</div></div>
-                <div class="stat-card" style="border-color:#f39c12;"><h4>Bekleyen Para (14G)</h4><div class="val" id="headPending" style="color:#f39c12;">$0.00</div></div>
+            <div class="stats-grid" style="display: flex; flex-wrap: nowrap; gap: 10px; margin-bottom: 10px; overflow-x: auto;">
+                <div class="stat-card" style="flex:1; min-width: 140px;"><h4>Aylık Ciro (Net Yatan)</h4><div class="val" id="headRevenue">$0.00</div></div>
+                <div class="stat-card" style="border-color:#3498db; flex:1; min-width: 140px;"><h4>Toplam Maliyet</h4><div class="val" id="headCost" style="color:#3498db;">$0.00</div></div>
+                <div class="stat-card" style="border-color:#27ae60; flex:1; min-width: 140px;"><h4>Toplam Kâr</h4><div class="val" id="headProfit" style="color:#27ae60;">$0.00</div></div>
+                <div class="stat-card" style="border-color:#9b59b6; flex:1; min-width: 140px;"><h4>Kâr Marjı</h4><div class="val" id="headMargin" style="color:#9b59b6;">%0.00</div></div>
+                <div class="stat-card" style="border-color:#e74c3c; flex:1; min-width: 140px;"><h4>İade Zararı ($)</h4><div class="val" id="headRefund" style="color:#e74c3c;">$0.00</div></div>
+                <div class="stat-card" style="border-color:#f39c12; flex:1; min-width: 140px;"><h4>Bekleyen Para (14G)</h4><div class="val" id="headPending" style="color:#f39c12;">$0.00</div></div>
             </div>
             <div class="stats-grid" style="display: flex; flex-wrap: nowrap; gap: 10px; margin-top: 10px; overflow-x: auto;">
                 <div class="stat-card" style="padding:10px; flex: 1; min-width: 120px;"><h4>Sipariş</h4><div class="val" style="font-size:20px;" id="statTotalSales">0</div></div>
@@ -623,17 +625,17 @@
             
             container.innerHTML = "";
 
-            let stats = { revenue: 0, profit: 0, late: 0, pending: 0, refund: 0, totalSales: 0, totalRefunds: 0, waitingApproval: 0, completed: 0, waitingShipment: 0 };
+            let stats = { revenue: 0, profit: 0, late: 0, pending: 0, refund: 0, totalSales: 0, totalRefunds: 0, waitingApproval: 0, completed: 0, waitingShipment: 0, totalCost: 0 };
             let hasLateWarning = false;
             let orderIndex = 1;
 
             Object.values(orders).reverse().forEach(o => {
-                let orderD = o.orderDate || "";
-                let payD = o.payDate || "";
-                let sLow = (o.status || "").toLowerCase();
-                let safeBuyer = (o.buyer || "").toLowerCase();
-                let safeTrack = (o.tracking || "").toLowerCase();
-                let safeId = o.id || "";
+                let orderD = String(o.orderDate || "");
+                let payD = String(o.payDate || "");
+                let sLow = String(o.status || "").toLowerCase();
+                let safeBuyer = String(o.buyer || "").toLowerCase();
+                let safeTrack = String(o.tracking || "").toLowerCase();
+                let safeId = String(o.id || "");
 
                 if(!orderD.includes(year) && !payD.includes(year)) return;
                 if(month && !orderD.includes(month)) return;
@@ -642,15 +644,21 @@
 
                 stats.totalSales++;
 
-                let profit = o.earned - o.cost - o.shipping;
+                let earned = parseFloat(o.earned) || 0;
+                let cost = parseFloat(o.cost) || 0;
+                let shipping = parseFloat(o.shipping) || 0;
+
+                stats.totalCost += (cost + shipping);
+
+                let profit = earned - cost - shipping;
                 if (o.isRefunded) {
                     stats.totalRefunds++;
-                    let refundLoss = o.earned > (o.cost + o.shipping) ? o.earned : (o.cost + o.shipping);
+                    let refundLoss = earned > (cost + shipping) ? earned : (cost + shipping);
                     stats.refund += refundLoss; 
                     profit = -refundLoss; 
                     stats.profit += profit; 
                 } else {
-                    stats.revenue += o.earned; 
+                    stats.revenue += earned; 
                     stats.profit += profit;
                 }
 
@@ -768,7 +776,12 @@
             });
 
             document.getElementById('headRevenue').innerText = "$" + stats.revenue.toFixed(2);
+            document.getElementById('headCost').innerText = "$" + stats.totalCost.toFixed(2);
             document.getElementById('headProfit').innerText = "$" + stats.profit.toFixed(2);
+            
+            let margin = stats.revenue > 0 ? (stats.profit / stats.revenue) * 100 : 0;
+            document.getElementById('headMargin').innerText = "%" + margin.toFixed(2);
+            
             document.getElementById('headRefund').innerText = "$" + stats.refund.toFixed(2);
             document.getElementById('headLate').innerText = stats.late;
             document.getElementById('headPending').innerText = "$" + stats.pending.toFixed(2);
