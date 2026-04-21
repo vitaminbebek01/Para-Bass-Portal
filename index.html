@@ -335,13 +335,13 @@
                 <div class="stat-card" style="border-color:#e74c3c;"><h4>İade Zararı ($)</h4><div class="val" id="headRefund" style="color:#e74c3c;">$0.00</div></div>
                 <div class="stat-card" style="border-color:#f39c12;"><h4>Bekleyen Para (14G)</h4><div class="val" id="headPending" style="color:#f39c12;">$0.00</div></div>
             </div>
-            <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top:10px;">
-                <div class="stat-card" style="padding:10px;"><h4>Sipariş</h4><div class="val" style="font-size:20px;" id="statTotalSales">0</div></div>
-                <div class="stat-card" style="padding:10px; border-color:#e74c3c;"><h4>İade</h4><div class="val" style="font-size:20px; color:#e74c3c;" id="statTotalRefunds">0</div></div>
-                <div class="stat-card" style="padding:10px; border-color:#9b59b6;"><h4>Onay Bekleyen</h4><div class="val" style="font-size:20px; color:#9b59b6;" id="statWaitingApproval">0</div></div>
-                <div class="stat-card" style="padding:10px; border-color:#27ae60;"><h4>Tamamlandı</h4><div class="val" style="font-size:20px; color:#27ae60;" id="statCompleted">0</div></div>
-                <div class="stat-card" style="padding:10px; border-color:#e67e22;"><h4>Kargo Bekleyen</h4><div class="val" style="font-size:20px; color:#e67e22;" id="statWaitingShipment">0</div></div>
-                <div class="stat-card" style="padding:10px; border-color:#c0392b;"><h4>Geciken</h4><div class="val" style="font-size:20px; color:#c0392b;" id="statLate">0</div></div>
+            <div class="stats-grid" style="display: flex; flex-wrap: nowrap; gap: 10px; margin-top: 10px; overflow-x: auto;">
+                <div class="stat-card" style="padding:10px; flex: 1; min-width: 120px;"><h4>Sipariş</h4><div class="val" style="font-size:20px;" id="statTotalSales">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#e74c3c; flex: 1; min-width: 120px;"><h4>İade</h4><div class="val" style="font-size:20px; color:#e74c3c;" id="statTotalRefunds">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#9b59b6; flex: 1; min-width: 120px;"><h4>Onay Bekleyen</h4><div class="val" style="font-size:20px; color:#9b59b6;" id="statWaitingApproval">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#27ae60; flex: 1; min-width: 120px;"><h4>Tamamlandı</h4><div class="val" style="font-size:20px; color:#27ae60;" id="statCompleted">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#e67e22; flex: 1; min-width: 120px;"><h4>Kargo Bekleyen</h4><div class="val" style="font-size:20px; color:#e67e22;" id="statWaitingShipment">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#c0392b; flex: 1; min-width: 120px;"><h4>Geciken</h4><div class="val" style="font-size:20px; color:#c0392b;" id="statLate">0</div></div>
             </div>
             
             <div class="drop-zones">
@@ -648,12 +648,13 @@
                 }
 
                 let isLate = false;
-                let sLow = o.status.toLowerCase();
+                let sLow = (o.status || "").toLowerCase();
                 let daysPassed = 0;
                 
                 if(sLow.includes("tamamlandı") || sLow.includes("finished")) stats.completed++;
                 else if(sLow.includes("onay") || sLow.includes("receipt")) stats.waitingApproval++;
                 else if(sLow.includes("kargo") || sLow.includes("shipment")) stats.waitingShipment++;
+                else if(sLow.includes("gecikti")) { stats.late++; isLate = true; }
                 
                 if(o.shipDate && !sLow.includes("tamamlandı") && !sLow.includes("finished") && !sLow.includes("kapatıldı") && !sLow.includes("closed")) {
                     const sDate = parseDateCustom(o.shipDate);
@@ -696,11 +697,13 @@
                 div.style.background = rowBg;
                 
                 let refundBadge = o.isRefunded ? '<span style="color:#e74c3c; font-weight:bold; font-size:11px; display:block; margin-top:4px;">🔴 İADE EDİLDİ</span>' : '';
+                let notShippedBadge = o.isNotShipped ? '<span style="color:#d35400; font-weight:bold; font-size:11px; display:block; margin-top:4px;">🚫 GÖNDERİLMEDİ</span>' : '';
                 let lateCounterText = (sLow.includes("onay") && daysPassed > 0) ? `<br><small style="color:${isLate ? '#e74c3c' : '#9b59b6'}; font-weight:bold;">Kargoda: ${daysPassed}. Gün</small>` : '';
 
                 div.innerHTML = `
                     <div class="order-header" onclick="toggleFinDetails('${o.id}')" style="border-left: ${leftBorder};">
-                        <span><span style="color:#555;">${orderIndex}. </span><b>#${o.id}</b><br><small style="color:#7f8c8d;">${o.orderDate.split(' ')[0]}</small>${refundBadge}</span>
+                        <span style="flex:0 0 30px; font-weight:bold; font-size:18px; color:#7f8c8d;">${orderIndex}.</span>
+                        <span><b>#${o.id}</b><br><small style="color:#7f8c8d;">${(o.orderDate||'').split(' ')[0]}</small>${refundBadge}${notShippedBadge}</span>
                         <span>${o.buyer} ${lateCounterText}</span>
                         <span>🚩 ${o.country}</span>
                         <span><span style="font-size:18px;">${statusIcon}</span> <span class="badge ${badgeClass}">${isLate ? 'GECİKTİ!' : o.status}</span></span>
@@ -717,9 +720,10 @@
                             </div>
                             <label>Durum (Manuel Değiştir)</label>
                             <select class="fin-input" onchange="updateFinOrder('${o.id}', 'status', this.value)">
-                                <option value="${o.status}">${o.status}</option>
+                                <option value="${o.status || ''}">${o.status || 'Durum Seç'}</option>
                                 <option value="Kargolanmayı Bekliyor">Kargolanmayı Bekliyor</option>
                                 <option value="Alıcı Onayı Bekleniyor">Alıcı Onayı Bekleniyor</option>
+                                <option value="Gecikti">Gecikti</option>
                                 <option value="Tamamlandı">Tamamlandı</option>
                                 <option value="Kapatıldı">Kapatıldı</option>
                             </select>
@@ -746,6 +750,9 @@
                             <p><b>Mail:</b> <span style="color:#3498db; font-weight:bold;">${o.email || 'Yok'}</span></p>
                             <label style="margin-top:10px; display:inline-block; cursor:pointer; font-weight:bold; color:#c0392b; background:#ffefef; padding:5px; border-radius:4px; width:100%;">
                                 <input type="checkbox" onchange="updateFinOrder('${o.id}', 'isRefunded', this.checked)" ${o.isRefunded ? 'checked' : ''}> 🔴 Sipariş İade Edildi
+                            </label>
+                            <label style="margin-top:5px; display:inline-block; cursor:pointer; font-weight:bold; color:#d35400; background:#fdf2e9; padding:5px; border-radius:4px; width:100%;">
+                                <input type="checkbox" onchange="updateFinOrder('${o.id}', 'isNotShipped', this.checked)" ${o.isNotShipped ? 'checked' : ''}> 🚫 Gönderilmedi
                             </label>
                             <button onclick="delFinOrder('${o.id}')" style="background:#e74c3c; color:white; border:none; padding:8px; width:100%; cursor:pointer; margin-top:10px; border-radius: 4px;">Siparişi Tamamen Sil</button>
                         </div>
