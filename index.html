@@ -628,10 +628,17 @@
             let orderIndex = 1;
 
             Object.values(orders).reverse().forEach(o => {
-                if(!o.orderDate.includes(year) && !o.payDate.includes(year)) return;
-                if(month && !o.orderDate.includes(month)) return;
-                if(statusF && !o.status.toLowerCase().includes(statusF)) return;
-                if(search && !o.id.includes(search) && !o.buyer.toLowerCase().includes(search) && !o.tracking.toLowerCase().includes(search)) return;
+                let orderD = o.orderDate || "";
+                let payD = o.payDate || "";
+                let sLow = (o.status || "").toLowerCase();
+                let safeBuyer = (o.buyer || "").toLowerCase();
+                let safeTrack = (o.tracking || "").toLowerCase();
+                let safeId = o.id || "";
+
+                if(!orderD.includes(year) && !payD.includes(year)) return;
+                if(month && !orderD.includes(month)) return;
+                if(statusF && !sLow.includes(statusF)) return;
+                if(search && !safeId.includes(search) && !safeBuyer.includes(search) && !safeTrack.includes(search)) return;
 
                 stats.totalSales++;
 
@@ -648,7 +655,6 @@
                 }
 
                 let isLate = false;
-                let sLow = (o.status || "").toLowerCase();
                 let daysPassed = 0;
                 
                 if(sLow.includes("tamamlandı") || sLow.includes("finished")) stats.completed++;
@@ -702,8 +708,7 @@
 
                 div.innerHTML = `
                     <div class="order-header" onclick="toggleFinDetails('${o.id}')" style="border-left: ${leftBorder};">
-                        <span style="flex:0 0 30px; font-weight:bold; font-size:18px; color:#7f8c8d;">${orderIndex}.</span>
-                        <span><b>#${o.id}</b><br><small style="color:#7f8c8d;">${(o.orderDate||'').split(' ')[0]}</small>${refundBadge}${notShippedBadge}</span>
+                        <span><span style="display:inline-block; width:25px; font-weight:bold; font-size:16px; color:#95a5a6;">${orderIndex}.</span><b>#${o.id}</b><br><small style="color:#7f8c8d; margin-left:25px;">${(o.orderDate||'').split(' ')[0]}</small>${refundBadge}${notShippedBadge}</span>
                         <span>${o.buyer} ${lateCounterText}</span>
                         <span>🚩 ${o.country}</span>
                         <span><span style="font-size:18px;">${statusIcon}</span> <span class="badge ${badgeClass}">${isLate ? 'GECİKTİ!' : o.status}</span></span>
