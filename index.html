@@ -335,14 +335,22 @@
                 <div class="stat-card" style="border-color:#e74c3c;"><h4>İade Zararı ($)</h4><div class="val" id="headRefund" style="color:#e74c3c;">$0.00</div></div>
                 <div class="stat-card" style="border-color:#f39c12;"><h4>Bekleyen Para (14G)</h4><div class="val" id="headPending" style="color:#f39c12;">$0.00</div></div>
             </div>
+            <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top:10px;">
+                <div class="stat-card" style="padding:10px;"><h4>Sipariş</h4><div class="val" style="font-size:20px;" id="statTotalSales">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#e74c3c;"><h4>İade</h4><div class="val" style="font-size:20px; color:#e74c3c;" id="statTotalRefunds">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#9b59b6;"><h4>Onay Bekleyen</h4><div class="val" style="font-size:20px; color:#9b59b6;" id="statWaitingApproval">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#27ae60;"><h4>Tamamlandı</h4><div class="val" style="font-size:20px; color:#27ae60;" id="statCompleted">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#e67e22;"><h4>Kargo Bekleyen</h4><div class="val" style="font-size:20px; color:#e67e22;" id="statWaitingShipment">0</div></div>
+                <div class="stat-card" style="padding:10px; border-color:#c0392b;"><h4>Geciken</h4><div class="val" style="font-size:20px; color:#c0392b;" id="statLate">0</div></div>
+            </div>
             
             <div class="drop-zones">
-                <div class="drop-box" onclick="document.getElementById('xlInp').click()">
+                <div class="drop-box" onclick="document.getElementById('xlInp').click()" ondragover="event.preventDefault();" ondrop="event.preventDefault(); document.getElementById('xlInp').files = event.dataTransfer.files; processExcel(document.getElementById('xlInp'));">
                     <span style="font-size:30px; margin-bottom:10px;">📁</span>
                     AliExpress Excel'i Bırak<br><span style="font-size:11px; font-weight:normal; margin-top:5px;">(Sipariş durumları güncellenir)</span>
                     <input type="file" id="xlInp" hidden onchange="processExcel(this)">
                 </div>
-                <div class="drop-box" onclick="document.getElementById('pdfInp').click()" style="border-color:#9b59b6; color:#9b59b6;">
+                <div class="drop-box" onclick="document.getElementById('pdfInp').click()" style="border-color:#9b59b6; color:#9b59b6;" ondragover="event.preventDefault();" ondrop="event.preventDefault(); document.getElementById('pdfInp').files = event.dataTransfer.files; processPdf(document.getElementById('pdfInp'));">
                     <span style="font-size:30px; margin-bottom:10px;">📄</span>
                     Kargo Faturası (PDF) Bırak<br><span style="font-size:11px; font-weight:normal; margin-top:5px;">(Kargo Fiyatları Otomatik İşlenir)</span>
                     <input type="file" id="pdfInp" hidden accept=".pdf" onchange="processPdf(this)">
@@ -465,16 +473,19 @@
             const reader = new FileReader();
             reader.onload = (e) => {
                 const workbook = XLSX.read(e.target.result, { type: 'binary' });
-                const data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const data = XLSX.utils.sheet_to_json(sheet);
+                const dataWithA = XLSX.utils.sheet_to_json(sheet, { header: "A", defval: "" });
                 
-                data.forEach(row => {
+                data.forEach((row, index) => {
                     const id = String(row["Sipariş numarası"] || row["Order ID"]);
                     if(!id || id === "undefined") return;
                     
                     let currentStatus = row["Sipariş Durumu"] || "Durum Yok";
                     if(currentStatus.toLowerCase().includes("ödeme bekleniyor") || currentStatus.toLowerCase().includes("payment")) return;
 
-                    let buyerName = row["Alıcının Adı_1"] || row["Alıcının Adı 1"] || row["Contact Name"] || row["Alıcının Adı"] || "İsimsiz";
+                    let rawRow = dataWithA[index + 1] || {};
+                    let buyerName = rawRow["Y"] || row["Alıcının Adı_1"] || row["Alıcının Adı 1"] || row["Contact Name"] || row["Alıcının Adı"] || "İsimsiz";
                     let email = row["Email"] || row["E-posta"] || row["Buyer Email"] || "Belirtilmemiş";
                     let phone = (row["Telefon"] || "") + " " + (row["Cep Telefonu"] || "");
                     let tracking = String(row["Takip Numarası"] || row["Lojistik Takip No"] || "").replace('null:', '').trim();
@@ -612,8 +623,9 @@
             
             container.innerHTML = "";
 
-            let stats = { revenue: 0, profit: 0, late: 0, pending: 0, refund: 0 };
+            let stats = { revenue: 0, profit: 0, late: 0, pending: 0, refund: 0, totalSales: 0, totalRefunds: 0, waitingApproval: 0, completed: 0, waitingShipment: 0 };
             let hasLateWarning = false;
+            let orderIndex = 1;
 
             Object.values(orders).reverse().forEach(o => {
                 if(!o.orderDate.includes(year) && !o.payDate.includes(year)) return;
@@ -621,10 +633,14 @@
                 if(statusF && !o.status.toLowerCase().includes(statusF)) return;
                 if(search && !o.id.includes(search) && !o.buyer.toLowerCase().includes(search) && !o.tracking.toLowerCase().includes(search)) return;
 
+                stats.totalSales++;
+
                 let profit = o.earned - o.cost - o.shipping;
                 if (o.isRefunded) {
-                    stats.refund += (o.cost + o.shipping); 
-                    profit = 0 - o.cost - o.shipping; 
+                    stats.totalRefunds++;
+                    let refundLoss = o.earned > (o.cost + o.shipping) ? o.earned : (o.cost + o.shipping);
+                    stats.refund += refundLoss; 
+                    profit = -refundLoss; 
                     stats.profit += profit; 
                 } else {
                     stats.revenue += o.earned; 
@@ -634,6 +650,10 @@
                 let isLate = false;
                 let sLow = o.status.toLowerCase();
                 let daysPassed = 0;
+                
+                if(sLow.includes("tamamlandı") || sLow.includes("finished")) stats.completed++;
+                else if(sLow.includes("onay") || sLow.includes("receipt")) stats.waitingApproval++;
+                else if(sLow.includes("kargo") || sLow.includes("shipment")) stats.waitingShipment++;
                 
                 if(o.shipDate && !sLow.includes("tamamlandı") && !sLow.includes("finished") && !sLow.includes("kapatıldı") && !sLow.includes("closed")) {
                     const sDate = parseDateCustom(o.shipDate);
@@ -680,7 +700,7 @@
 
                 div.innerHTML = `
                     <div class="order-header" onclick="toggleFinDetails('${o.id}')" style="border-left: ${leftBorder};">
-                        <span><b>#${o.id}</b><br><small style="color:#7f8c8d;">${o.orderDate.split(' ')[0]}</small>${refundBadge}</span>
+                        <span><span style="color:#555;">${orderIndex}. </span><b>#${o.id}</b><br><small style="color:#7f8c8d;">${o.orderDate.split(' ')[0]}</small>${refundBadge}</span>
                         <span>${o.buyer} ${lateCounterText}</span>
                         <span>🚩 ${o.country}</span>
                         <span><span style="font-size:18px;">${statusIcon}</span> <span class="badge ${badgeClass}">${isLate ? 'GECİKTİ!' : o.status}</span></span>
@@ -716,7 +736,7 @@
                             </div>
                         </div>
                         <div>
-                            <label>YATAN NET ($)</label><input class="fin-input" type="number" step="0.01" value="${o.earned}" style="border-color:#27ae60; background:#eafaf1;" onchange="updateFinOrder('${o.id}', 'earned', this.value)" ${o.isRefunded ? 'disabled' : ''}>
+                            <label>YATAN NET ($)</label><input class="fin-input" type="number" step="0.01" value="${o.earned}" style="border-color:#27ae60; background:#eafaf1;" onchange="updateFinOrder('${o.id}', 'earned', this.value)">
                             <label>Maliyet ($)</label><input class="fin-input" type="number" step="0.01" value="${o.cost}" onchange="updateFinOrder('${o.id}', 'cost', this.value)">
                             <label>Kargo ($)</label><input class="fin-input" type="number" step="0.01" value="${o.shipping}" onchange="updateFinOrder('${o.id}', 'shipping', this.value)">
                         </div>
@@ -732,6 +752,7 @@
                     </div>
                 `;
                 container.appendChild(div);
+                orderIndex++;
             });
 
             document.getElementById('headRevenue').innerText = "$" + stats.revenue.toFixed(2);
@@ -740,6 +761,13 @@
             document.getElementById('headLate').innerText = stats.late;
             document.getElementById('headPending').innerText = "$" + stats.pending.toFixed(2);
             
+            document.getElementById('statTotalSales').innerText = stats.totalSales;
+            document.getElementById('statTotalRefunds').innerText = stats.totalRefunds;
+            document.getElementById('statWaitingApproval').innerText = stats.waitingApproval;
+            document.getElementById('statCompleted').innerText = stats.completed;
+            document.getElementById('statWaitingShipment').innerText = stats.waitingShipment;
+            document.getElementById('statLate').innerText = stats.late;
+
             const warningBox = document.getElementById('lateWarningBox');
             if(warningBox) warningBox.style.display = hasLateWarning ? 'block' : 'none';
         }
