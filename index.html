@@ -537,7 +537,7 @@
             reader.readAsBinaryString(input.files[0]);
         }
 
-        // PDF OKUMA VE KARGO AVCI MOTORU
+        // PDF OKUMA VE KARGO AVCI MOTORU (Tamamen Tarayıcı Tabanlı, Python Gerektirmez!)
         async function processPdf(input) {
             try {
                 const file = input.files[0];
@@ -546,67 +546,101 @@
                 let allTrackings = Object.values(orders).map(o => o.tracking).filter(t => t && t.length >= 8);
                 let uniqueTrackings = [...new Set(allTrackings)];
 
-                const formData = new FormData();
-                formData.append("file", file);
-                formData.append("trackings", JSON.stringify(uniqueTrackings));
-
-                // Ekranın en altına bilgi düşelim veya alert öncesi bekletelim
                 const statusEl = document.createElement('div');
                 statusEl.id = 'tempStatus';
-                statusEl.style.position = 'fixed';
-                statusEl.style.top = '20px';
-                statusEl.style.right = '20px';
-                statusEl.style.background = '#f39c12';
-                statusEl.style.color = '#fff';
-                statusEl.style.padding = '15px';
-                statusEl.style.borderRadius = '8px';
-                statusEl.style.zIndex = '9999';
-                statusEl.innerText = 'PDF Sunucuda İşleniyor, Lütfen Bekleyin... ⏳';
+                statusEl.style.cssText = 'position:fixed; top:20px; right:20px; background:#f39c12; color:#fff; padding:15px; border-radius:8px; z-index:9999;';
+                statusEl.innerText = 'PDF Taranıyor, Lütfen Bekleyin... ⏳';
                 document.body.appendChild(statusEl);
-                
-                const response = await fetch("http://localhost:8000/upload-pdf", {
-                    method: "POST",
-                    body: formData
-                });
-                
-                document.body.removeChild(statusEl);
 
-                const result = await response.json();
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                
+                let extractedLines = [];
 
-                if (result.error) {
-                    alert("❌ Sunucu Hatası: " + result.error);
-                    input.value = "";
-                    return;
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+                    
+                    let items = textContent.items;
+                    items.sort((a, b) => {
+                        // PDF Y-axis is from bottom up, so descending Y = top to bottom
+                        if (Math.abs(a.transform[5] - b.transform[5]) > 3) {
+                            return b.transform[5] - a.transform[5];
+                        }
+                        // Ascending X = left to right
+                        return a.transform[4] - b.transform[4];
+                    });
+
+                    let currentY = null;
+                    let currentLine = "";
+                    
+                    for (let item of items) {
+                        let y = item.transform[5];
+                        if (currentY === null || Math.abs(currentY - y) > 3) {
+                            if (currentLine.trim()) extractedLines.push(currentLine.trim());
+                            currentLine = item.str;
+                            currentY = y;
+                        } else {
+                            currentLine += " " + item.str;
+                        }
+                    }
+                    if (currentLine.trim()) extractedLines.push(currentLine.trim());
                 }
+
+                document.body.removeChild(statusEl);
 
                 let updatedCount = 0;
                 let resultMsg = "📄 PDF İşleme Raporu:\n\n";
+                let results = {};
 
-                if (result.data) {
-                    for (const [track, total] of Object.entries(result.data)) {
-                        Object.values(orders).forEach(o => {
-                            if (o.tracking === track) {
-                                o.shipping = total;
-                                updatedCount++;
-                                resultMsg += `Takip: ${track} -> Toplam Kargo: ${total.toFixed(2)} $\n`;
+                for (let line of extractedLines) {
+                    for (let track of uniqueTrackings) {
+                        let safeTrack = String(track).trim();
+                        if (!safeTrack) continue;
+
+                        // Create a safe regex string to find the exact tracking number as a separate word
+                        let escapedTrack = safeTrack.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                        let trackRegex = new RegExp('\\b' + escapedTrack + '\\b');
+                        
+                        if (trackRegex.test(line)) {
+                            // Find all monetary values (e.g. 12.34 or 12,34) on the same line
+                            let prices = line.match(/\b\d+[,.]\d{2}\b/g);
+                            if (prices && prices.length > 0) {
+                                // Take the last monetary value on the line (usually the total for that row)
+                                let valStr = prices[prices.length - 1].replace(',', '.');
+                                let valFloat = parseFloat(valStr);
+                                if (!isNaN(valFloat)) {
+                                    results[safeTrack] = (results[safeTrack] || 0) + valFloat;
+                                }
                             }
-                        });
+                            break; 
+                        }
                     }
+                }
+
+                for (const [track, total] of Object.entries(results)) {
+                    Object.values(orders).forEach(o => {
+                        if (o.tracking === track) {
+                            o.shipping = parseFloat(total.toFixed(2));
+                            updatedCount++;
+                            resultMsg += `Takip: ${track} -> Toplam Kargo: $${o.shipping}\n`;
+                        }
+                    });
                 }
 
                 if(updatedCount > 0) {
                     localStorage.setItem('paraBassOrdersDb', JSON.stringify(orders));
                     renderOrders();
-                    alert("✅ Başarılı! " + updatedCount + " siparişin kargo fiyatı PDF'ten çekildi.\n\n" + resultMsg);
+                    alert("✅ Başarılı! " + updatedCount + " siparişin kargo fiyatı doğrudan tarayıcı içinde eşleşti!\nArtık arkaplan sunucusuna ihtiyaç yok!\n\n" + resultMsg);
                 } else {
-                    alert("⚠️ PDF Okundu fakat sistemdeki takip numaraları ile USD fiyatları eşleşmedi. Doğru faturayı yüklediğinizden emin olun.\n(Ayrıca backend üzerinde regex deseni de kontrol edilebilir)");
+                    alert("⚠️ PDF Okundu fakat sistemdeki takip numaraları ile USD fiyatları eşleşmedi. Doğru faturayı yüklediğinizden veya sisteme işlediğinizden emin olun.");
                 }
                 input.value = "";
             } catch(e) {
                 console.error(e);
                 const statusEl = document.getElementById('tempStatus');
                 if(statusEl) document.body.removeChild(statusEl);
-                alert("❌ Sunucuya Bağlanılamadı! Python arka yüzünün (FastAPI) çalıştığından emin olun.");
+                alert("❌ Hata! Tarayıcı PDF'i okurken bir sorun yaşadı: " + e.message);
                 input.value = "";
             }
         }
