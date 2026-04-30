@@ -408,7 +408,11 @@
                     <h3 style="margin-top:0; font-size:16px; color:#34495e;">1. Görsel Kaynakları</h3>
                     
                     <label>Ana Ürün Görselleri (Çoklu Seçim)</label>
-                    <div style="border:2px dashed #3498db; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; margin-bottom:15px; transition:0.3s;" onclick="document.getElementById('aiMainImages').click()" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='white'">
+                    <div id="aiMainDropzone" style="border:2px dashed #3498db; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; margin-bottom:15px; transition:0.3s;" 
+                         onclick="document.getElementById('aiMainImages').click()" 
+                         ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='#e0f7fa';" 
+                         ondragleave="event.preventDefault(); event.stopPropagation(); this.style.background='white';" 
+                         ondrop="handleAiDrop(event, 'aiMainImages', 'aiMainPreview')">
                         <span style="font-size:24px;">📸</span><br>
                         <span style="font-size:13px; color:#555;">Ürün fotoğraflarını buraya sürükleyin veya seçin</span>
                         <input type="file" id="aiMainImages" multiple accept="image/*" style="display:none;" onchange="previewAiImages(this, 'aiMainPreview')">
@@ -416,9 +420,13 @@
                     <div id="aiMainPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"></div>
 
                     <label>Rakip / İlham Görseli (Opsiyonel)</label>
-                    <div style="border:2px dashed #9b59b6; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; transition:0.3s;" onclick="document.getElementById('aiRefImage').click()" onmouseover="this.style.background='#fdf5ff'" onmouseout="this.style.background='white'">
+                    <div id="aiRefDropzone" style="border:2px dashed #9b59b6; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; transition:0.3s;" 
+                         onclick="document.getElementById('aiRefImage').click()" 
+                         ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='#fdf5ff';" 
+                         ondragleave="event.preventDefault(); event.stopPropagation(); this.style.background='white';" 
+                         ondrop="handleAiDrop(event, 'aiRefImage', 'aiRefPreview', true)">
                         <span style="font-size:24px;">💡</span><br>
-                        <span style="font-size:13px; color:#555;">Arka planını kullanmak istediğiniz referans görsel (AI Ürünü maskeleyip yerleştirir)</span>
+                        <span style="font-size:13px; color:#555;">Arka planını kullanmak istediğiniz referans görseli sürükleyin (AI Ürünü maskeleyip yerleştirir)</span>
                         <input type="file" id="aiRefImage" accept="image/*" style="display:none;" onchange="previewAiImages(this, 'aiRefPreview', true)">
                     </div>
                     <div id="aiRefPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;"></div>
@@ -428,11 +436,13 @@
                 <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
                     <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. Prompt & Ayarlar</h3>
                     
-                    <label>Kayıtlı Konseptler (Çoklu Seçilebilir)</label>
-                    <div style="background:white; border:1px solid #ddd; padding:10px; border-radius:6px; max-height:120px; overflow-y:auto; margin-bottom:10px;" id="aiPromptList">
-                        <label style="display:flex; align-items:center; gap:8px; margin-bottom:5px; text-transform:none; font-weight:normal; cursor:pointer;"><input type="checkbox" value="minimalist white studio background, bright lighting"> Minimalist Beyaz Stüdyo</label>
-                        <label style="display:flex; align-items:center; gap:8px; margin-bottom:5px; text-transform:none; font-weight:normal; cursor:pointer;"><input type="checkbox" value="placed on a wooden table, cozy home atmosphere, sunlight from window"> Ahşap Masa & Ev Ortamı</label>
-                        <label style="display:flex; align-items:center; gap:8px; margin-bottom:5px; text-transform:none; font-weight:normal; cursor:pointer;"><input type="checkbox" value="luxury dark marble surface, dramatic moody lighting"> Koyu Mermer Lüks Görünüm</label>
+                    <label>Dinamik Prompt Listesi (Çoklu Seçilebilir)</label>
+                    <div style="display:flex; gap:5px; margin-bottom:10px;">
+                        <input type="text" id="aiNewPromptInput" class="fin-input" style="margin:0; flex:1;" placeholder="Yeni prompt girin..." onkeypress="if(event.key==='Enter') addAiPrompt()">
+                        <button class="small-btn" style="background:#3498db;" onclick="addAiPrompt()">Ekle</button>
+                    </div>
+                    <div style="background:white; border:1px solid #ddd; padding:10px; border-radius:6px; max-height:150px; overflow-y:auto; margin-bottom:10px;" id="aiPromptList">
+                        <!-- Prompts JS ile buraya yüklenecek -->
                     </div>
                     
                     <label>Özel Konsept / Ekstra Detay</label>
@@ -1290,6 +1300,57 @@
         // ==========================================
         // AI GÖRSEL STÜDYOSU SCRIPTLERİ
         // ==========================================
+        
+        let aiPrompts = JSON.parse(localStorage.getItem('paraBassAiPrompts')) || [
+            "Minimalist white studio background, bright lighting",
+            "Placed on a wooden table, cozy home atmosphere, sunlight from window",
+            "Luxury dark marble surface, dramatic moody lighting"
+        ];
+
+        function renderAiPrompts() {
+            const list = document.getElementById('aiPromptList');
+            if(!list) return;
+            list.innerHTML = '';
+            aiPrompts.forEach((p, idx) => {
+                list.innerHTML += `
+                    <div style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #eee;">
+                        <input type="checkbox" class="ai-prompt-checkbox" value="${p.replace(/"/g, '&quot;')}" checked style="margin-top:4px;">
+                        <span style="flex:1; font-size:12px; color:#333;">${p}</span>
+                        <span onclick="deleteAiPrompt(${idx})" style="color:#e74c3c; cursor:pointer; font-weight:bold; font-size:14px;" title="Sil">✖</span>
+                    </div>
+                `;
+            });
+        }
+
+        function addAiPrompt() {
+            const input = document.getElementById('aiNewPromptInput');
+            const val = input.value.trim();
+            if(val) {
+                aiPrompts.push(val);
+                localStorage.setItem('paraBassAiPrompts', JSON.stringify(aiPrompts));
+                input.value = '';
+                renderAiPrompts();
+            }
+        }
+
+        function deleteAiPrompt(idx) {
+            aiPrompts.splice(idx, 1);
+            localStorage.setItem('paraBassAiPrompts', JSON.stringify(aiPrompts));
+            renderAiPrompts();
+        }
+
+        function handleAiDrop(e, inputId, previewId, isSingle = false) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.style.background = 'white';
+            
+            const input = document.getElementById(inputId);
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                input.files = e.dataTransfer.files;
+                previewAiImages(input, previewId, isSingle);
+            }
+        }
+
         function previewAiImages(input, targetId, isSingle = false) {
             const container = document.getElementById(targetId);
             if(isSingle) container.innerHTML = '';
@@ -1308,23 +1369,38 @@
         }
 
         function generateAiImages() {
-            alert("Backend entegrasyonu aşaması tamamlandığında bu buton görselleri Colab tüneli üzerinden işleyecektir.\nArayüz şu an hazır.");
+            const checkboxes = document.querySelectorAll('.ai-prompt-checkbox:checked');
+            let selectedPrompts = Array.from(checkboxes).map(cb => cb.value);
             
-            // Dummy görsel ekleme (Test amaçlı)
+            const customPrompt = document.getElementById('aiCustomPrompt').value.trim();
+            if(customPrompt) selectedPrompts.push(customPrompt);
+            
+            if(selectedPrompts.length === 0) {
+                alert("Lütfen listeden en az 1 prompt seçin veya özel konsept girin.");
+                return;
+            }
+            
+            alert("Backend entegrasyonu aşaması tamamlandığında bu buton seçili " + selectedPrompts.length + " promptu Colab tüneline iletecektir.\nArayüz şu an hazır.");
+            
             const gallery = document.getElementById('aiGallery');
             if(gallery.innerHTML.includes('Henüz üretim')) gallery.innerHTML = '';
             
-            const div = document.createElement('div');
-            div.style.cssText = "background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px;";
-            div.innerHTML = `
-                <img src="https://via.placeholder.com/2000" draggable="true" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="openInpaintModal(this.src)" title="İnce ayar (Inpainting) için tıkla">
-                <div style="display:flex; gap:5px;">
-                    <button class="small-btn" style="flex:1; background:#27ae60;">Seç</button>
-                    <button class="small-btn" style="flex:1; background:#95a5a6;" onclick="window.open('https://via.placeholder.com/2000', '_blank')">İndir</button>
-                    <button class="small-btn" style="flex:1; background:#e74c3c;" onclick="this.parentElement.parentElement.remove()">Sil</button>
-                </div>
-            `;
-            gallery.appendChild(div);
+            selectedPrompts.forEach((promptText, index) => {
+                const div = document.createElement('div');
+                div.style.cssText = "background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px;";
+                div.innerHTML = `
+                    <img src="https://via.placeholder.com/2000?text=AI+Render+${index+1}" draggable="true" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="openInpaintModal(this.src)" title="İnce ayar (Inpainting) için tıkla">
+                    <p style="margin:0; font-size:11px; color:#555; text-align:center; height:32px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;" title="${promptText}">
+                        <strong>Çıktı #${index+1}:</strong> ${promptText}
+                    </p>
+                    <div style="display:flex; gap:5px;">
+                        <button class="small-btn" style="flex:1; background:#27ae60;">Seç</button>
+                        <button class="small-btn" style="flex:1; background:#95a5a6;" onclick="window.open('https://via.placeholder.com/2000?text=AI+Render+${index+1}', '_blank')">İndir</button>
+                        <button class="small-btn" style="flex:1; background:#e74c3c;" onclick="this.parentElement.parentElement.remove()">Sil</button>
+                    </div>
+                `;
+                gallery.appendChild(div);
+            });
         }
 
         let inpaintCtx = null;
@@ -1384,6 +1460,7 @@
             try { renderMails(); } catch(e){ console.error("mail err:", e); } 
             try { renderHistory(); } catch(e){ console.error("history err:", e); }
             try { populateCategoryFilters(); } catch(e){ console.error("catFilter err:", e); }
+            try { renderAiPrompts(); } catch(e){ console.error("aiPrompts err:", e); }
             try { renderOrders(); } catch(e){ console.error("renderOrders err:", e); }
         };
     </script>
