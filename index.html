@@ -1333,7 +1333,7 @@
         function openInpaintModal(imgSrc) {
             document.getElementById('inpaintModal').style.display = 'flex';
             const container = document.getElementById('inpaintCanvasContainer');
-            container.style.background = \`url(\${imgSrc}) center/cover no-repeat\`;
+            container.style.background = `url(${imgSrc}) center/cover no-repeat`;
             
             const canvas = document.getElementById('inpaintCanvas');
             canvas.width = container.clientWidth;
