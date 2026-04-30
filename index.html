@@ -140,6 +140,7 @@
         <div class="menu-item" onclick="switchTab('module-mail', this)" id="menuMail">✉️ Müşteri Mailleri</div>
         <div class="menu-item" onclick="switchTab('module-history', this)" id="menuHistory">⏳ Geçmiş Ürün Listelerim</div>
         <div class="menu-item" onclick="switchTab('module-finance', this)" id="menuFinance">📊 Sipariş & Finans</div>
+        <div class="menu-item" onclick="switchTab('module-studio', this)" id="menuStudio">🎨 AI Görsel Stüdyosu</div>
         
         <div style="margin-top: auto;">
             <div class="logout-btn" onclick="logout()">Çıkış Yap 🚪</div>
@@ -397,6 +398,80 @@
             <div id="orderListContainer"></div>
         </div>
 
+        <!-- AI GÖRSEL STÜDYOSU MODÜLÜ -->
+        <div id="module-studio" class="module">
+            <h2>🎨 AI Görsel Stüdyosu <span style="font-size:12px; color:#95a5a6; font-weight:normal;">(Bağımsız Colab Node Bağlantısı)</span></h2>
+            
+            <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+                <!-- Sol Kolon: Yüklemeler -->
+                <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
+                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">1. Görsel Kaynakları</h3>
+                    
+                    <label>Ana Ürün Görselleri (Çoklu Seçim)</label>
+                    <div style="border:2px dashed #3498db; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; margin-bottom:15px; transition:0.3s;" onclick="document.getElementById('aiMainImages').click()" onmouseover="this.style.background='#f0f8ff'" onmouseout="this.style.background='white'">
+                        <span style="font-size:24px;">📸</span><br>
+                        <span style="font-size:13px; color:#555;">Ürün fotoğraflarını buraya sürükleyin veya seçin</span>
+                        <input type="file" id="aiMainImages" multiple accept="image/*" style="display:none;" onchange="previewAiImages(this, 'aiMainPreview')">
+                    </div>
+                    <div id="aiMainPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"></div>
+
+                    <label>Rakip / İlham Görseli (Opsiyonel)</label>
+                    <div style="border:2px dashed #9b59b6; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; transition:0.3s;" onclick="document.getElementById('aiRefImage').click()" onmouseover="this.style.background='#fdf5ff'" onmouseout="this.style.background='white'">
+                        <span style="font-size:24px;">💡</span><br>
+                        <span style="font-size:13px; color:#555;">Arka planını kullanmak istediğiniz referans görsel (AI Ürünü maskeleyip yerleştirir)</span>
+                        <input type="file" id="aiRefImage" accept="image/*" style="display:none;" onchange="previewAiImages(this, 'aiRefPreview', true)">
+                    </div>
+                    <div id="aiRefPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;"></div>
+                </div>
+
+                <!-- Sağ Kolon: Prompt & Ayarlar -->
+                <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
+                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. Prompt & Ayarlar</h3>
+                    
+                    <label>Kayıtlı Konseptler (Çoklu Seçilebilir)</label>
+                    <div style="background:white; border:1px solid #ddd; padding:10px; border-radius:6px; max-height:120px; overflow-y:auto; margin-bottom:10px;" id="aiPromptList">
+                        <label style="display:flex; align-items:center; gap:8px; margin-bottom:5px; text-transform:none; font-weight:normal; cursor:pointer;"><input type="checkbox" value="minimalist white studio background, bright lighting"> Minimalist Beyaz Stüdyo</label>
+                        <label style="display:flex; align-items:center; gap:8px; margin-bottom:5px; text-transform:none; font-weight:normal; cursor:pointer;"><input type="checkbox" value="placed on a wooden table, cozy home atmosphere, sunlight from window"> Ahşap Masa & Ev Ortamı</label>
+                        <label style="display:flex; align-items:center; gap:8px; margin-bottom:5px; text-transform:none; font-weight:normal; cursor:pointer;"><input type="checkbox" value="luxury dark marble surface, dramatic moody lighting"> Koyu Mermer Lüks Görünüm</label>
+                    </div>
+                    
+                    <label>Özel Konsept / Ekstra Detay</label>
+                    <textarea id="aiCustomPrompt" class="fin-input" rows="2" placeholder="Örn: Etrafında kırmızı gül yaprakları olsun..."></textarea>
+                    
+                    <label style="margin-top:10px;">Kamera / Kalite Ayarları (Sistem Sabiti)</label>
+                    <textarea id="aiQualityPrompt" class="fin-input" rows="3">4K resolution, photorealistic, shot on Canon EOS R5 with 50mm f/5.6 lens. IMPORTANT: Do NOT add any text, titles, captions, labels, logos, subtitles, or watermarks.</textarea>
+
+                    <button class="action-btn" style="background:#8e44ad; margin-top:10px;" onclick="generateAiImages()">✨ Görselleri Üret (Colab Tüneli)</button>
+                </div>
+            </div>
+
+            <!-- Sonuç Galerisi -->
+            <h3 style="border-bottom:2px solid #eee; padding-bottom:10px;">Üretilen Görseller Galerisi</h3>
+            <div id="aiGallery" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; min-height:200px; background:#fff; border:1px dashed #ccc; border-radius:8px; padding:20px;">
+                <p style="grid-column:1/-1; text-align:center; color:#999; margin-top:20px;">Henüz üretim yapılmadı...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- INPAINTING (MASKLEME) MODAL -->
+    <div id="inpaintModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; justify-content:center; align-items:center; flex-direction:column;">
+        <div style="background:white; padding:20px; border-radius:8px; width:90%; max-width:800px; display:flex; flex-direction:column; align-items:center;">
+            <div style="width:100%; display:flex; justify-content:space-between; margin-bottom:15px;">
+                <h3 style="margin:0;">Fırça ile İstemediğin Yeri Boya (Inpainting)</h3>
+                <button onclick="document.getElementById('inpaintModal').style.display='none'" style="background:none; border:none; font-size:20px; cursor:pointer;">✖</button>
+            </div>
+            
+            <div style="position:relative; width:100%; max-width:600px; height:400px; background:#eee; border:1px solid #ccc; border-radius:4px; overflow:hidden; cursor:crosshair;" id="inpaintCanvasContainer">
+                <canvas id="inpaintCanvas" style="position:absolute; top:0; left:0; z-index:2; opacity:0.6;"></canvas>
+            </div>
+            
+            <div style="width:100%; max-width:600px; margin-top:15px; display:flex; gap:10px;">
+                <input type="text" id="inpaintRevision" class="fin-input" style="flex:1; margin:0;" placeholder="Revizyon talimatı (örn: çiçeği kaldır, kahve fincanı ekle)...">
+                <button onclick="clearInpaintMask()" style="background:#e74c3c; color:white; border:none; padding:10px 15px; border-radius:4px; cursor:pointer;">Maskeyi Sil</button>
+                <button onclick="sendInpaintRequest()" style="background:#27ae60; color:white; border:none; padding:10px 20px; border-radius:4px; cursor:pointer; font-weight:bold;">Gönder</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1210,6 +1285,81 @@
                 renderCatModalList();
                 populateCategoryFilters();
             }
+        }
+
+        // ==========================================
+        // AI GÖRSEL STÜDYOSU SCRIPTLERİ
+        // ==========================================
+        function previewAiImages(input, targetId, isSingle = false) {
+            const container = document.getElementById(targetId);
+            if(isSingle) container.innerHTML = '';
+            
+            Array.from(input.files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const div = document.createElement('div');
+                    div.style.cssText = "position:relative; width:80px; height:80px; border-radius:6px; overflow:hidden; border:1px solid #ddd;";
+                    div.innerHTML = `<img src="${e.target.result}" style="width:100%; height:100%; object-fit:cover;">
+                                     <button style="position:absolute; top:2px; right:2px; background:rgba(231,76,60,0.8); color:white; border:none; border-radius:50%; width:20px; height:20px; font-size:10px; cursor:pointer;" onclick="this.parentElement.remove()">✖</button>`;
+                    container.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function generateAiImages() {
+            alert("Backend entegrasyonu aşaması tamamlandığında bu buton görselleri Colab tüneli üzerinden işleyecektir.\nArayüz şu an hazır.");
+            
+            // Dummy görsel ekleme (Test amaçlı)
+            const gallery = document.getElementById('aiGallery');
+            if(gallery.innerHTML.includes('Henüz üretim')) gallery.innerHTML = '';
+            
+            const div = document.createElement('div');
+            div.style.cssText = "background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px;";
+            div.innerHTML = `
+                <img src="https://via.placeholder.com/2000" draggable="true" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="openInpaintModal(this.src)" title="İnce ayar (Inpainting) için tıkla">
+                <div style="display:flex; gap:5px;">
+                    <button class="small-btn" style="flex:1; background:#27ae60;">Seç</button>
+                    <button class="small-btn" style="flex:1; background:#95a5a6;" onclick="window.open('https://via.placeholder.com/2000', '_blank')">İndir</button>
+                    <button class="small-btn" style="flex:1; background:#e74c3c;" onclick="this.parentElement.parentElement.remove()">Sil</button>
+                </div>
+            `;
+            gallery.appendChild(div);
+        }
+
+        let inpaintCtx = null;
+        let isPainting = false;
+
+        function openInpaintModal(imgSrc) {
+            document.getElementById('inpaintModal').style.display = 'flex';
+            const container = document.getElementById('inpaintCanvasContainer');
+            container.style.background = \`url(\${imgSrc}) center/cover no-repeat\`;
+            
+            const canvas = document.getElementById('inpaintCanvas');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            inpaintCtx = canvas.getContext('2d');
+            inpaintCtx.lineCap = 'round';
+            inpaintCtx.lineJoin = 'round';
+            inpaintCtx.lineWidth = 30;
+            inpaintCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; 
+            
+            canvas.onmousedown = (e) => { isPainting = true; inpaintCtx.beginPath(); inpaintCtx.moveTo(e.offsetX, e.offsetY); };
+            canvas.onmousemove = (e) => { if(isPainting) { inpaintCtx.lineTo(e.offsetX, e.offsetY); inpaintCtx.stroke(); } };
+            canvas.onmouseup = () => { isPainting = false; };
+            canvas.onmouseleave = () => { isPainting = false; };
+        }
+
+        function clearInpaintMask() {
+            if(inpaintCtx) {
+                const canvas = document.getElementById('inpaintCanvas');
+                inpaintCtx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        function sendInpaintRequest() {
+            alert("Backend entegrasyonu tamamlandığında maske ve komut sisteme iletilecektir.");
+            document.getElementById('inpaintModal').style.display = 'none';
         }
 
         // ==========================================
