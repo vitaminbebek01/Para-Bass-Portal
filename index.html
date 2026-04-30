@@ -1353,6 +1353,7 @@
                             <span style="flex:1; font-size:11px; color:#555;">${p}</span>
                             <div style="display:flex; gap:5px;">
                                 <button class="small-btn" style="background:#2ecc71; padding:2px 8px; font-size:12px;" onclick="addToActiveAi('${p.replace(/'/g, "\\'")}')" title="Aktif Listeye Ekle">➕ Ekle</button>
+                                <button class="small-btn" style="background:#f39c12; padding:2px 8px; font-size:12px;" onclick="editAiPoolPrompt(${idx})" title="Düzenle">✏️</button>
                                 <button class="small-btn" style="background:#e74c3c; padding:2px 8px; font-size:12px;" onclick="deleteFromAiPool(${idx})" title="Havuzdan Kalıcı Sil">✖</button>
                             </div>
                         </div>
@@ -1393,6 +1394,16 @@
         function deleteFromAiPool(idx) {
             if(confirm("Bu konsepti tamamen silmek istediğinize emin misiniz?")) {
                 aiPrompts.splice(idx, 1);
+                localStorage.setItem('paraBassAiPrompts', JSON.stringify(aiPrompts));
+                renderAiPrompts();
+            }
+        }
+
+        function editAiPoolPrompt(idx) {
+            const currentVal = aiPrompts[idx];
+            const newVal = prompt("Konsepti düzenleyin:", currentVal);
+            if(newVal !== null && newVal.trim() !== '') {
+                aiPrompts[idx] = newVal.trim();
                 localStorage.setItem('paraBassAiPrompts', JSON.stringify(aiPrompts));
                 renderAiPrompts();
             }
