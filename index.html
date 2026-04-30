@@ -520,23 +520,23 @@
         function applyRolePermissions() {
             const role = localStorage.getItem('paraBassRole');
             const menuAdd = document.getElementById('menuAdd');
-            const modAdd = document.getElementById('module-add');
             const menuHistory = document.getElementById('menuHistory');
-            const modHistory = document.getElementById('module-history');
-            const menuCalc = document.getElementById('menuCalc');
             const menuFinance = document.getElementById('menuFinance');
+            const menuStudio = document.getElementById('menuStudio');
+            const menuCalc = document.getElementById('menuCalc');
 
             if (role === 'calisan') {
                 if(menuAdd) menuAdd.style.display = 'none';
-                if(modAdd) modAdd.innerHTML = "<h2>Yetkisiz Erişim</h2><p>Bu modüle erişim yetkiniz bulunmamaktadır.</p>";
                 if(menuHistory) menuHistory.style.display = 'none';
-                if(modHistory) modHistory.innerHTML = "<h2>Yetkisiz Erişim</h2><p>Bu modüle erişim yetkiniz bulunmamaktadır.</p>";
                 if(menuFinance) menuFinance.style.display = 'none';
+                if(menuStudio) menuStudio.style.display = 'none';
                 switchTab('module-calc', menuCalc);
             } else {
+                // Patron Yetkileri (Hepsini Aç)
                 if(menuAdd) menuAdd.style.display = 'block';
                 if(menuHistory) menuHistory.style.display = 'block';
                 if(menuFinance) menuFinance.style.display = 'block';
+                if(menuStudio) menuStudio.style.display = 'block';
                 switchTab('module-add', menuAdd);
                 renderOrders();
             }
@@ -1375,6 +1375,8 @@
                 document.getElementById('loginOverlay').style.display = 'none'; 
                 try { applyRolePermissions(); } catch(e){ console.error(e); } 
                 try { fetchExchangeRate(); } catch(e){ console.error(e); } 
+            } else {
+                document.getElementById('loginOverlay').style.display = 'flex';
             }
             try { initDropZone(); } catch(e){} 
             try { calculatePrices(); } catch(e){ console.error("calc err:", e); } 
