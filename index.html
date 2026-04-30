@@ -402,63 +402,85 @@
         <div id="module-studio" class="module">
             <h2>🎨 AI Görsel Stüdyosu <span style="font-size:12px; color:#95a5a6; font-weight:normal;">(Bağımsız Colab Node Bağlantısı)</span></h2>
             
-            <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
-                <!-- Sol Kolon: Yüklemeler -->
-                <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
-                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">1. Görsel Kaynakları</h3>
-                    
-                    <label>Ana Ürün Görselleri (Çoklu Seçim)</label>
-                    <div id="aiMainDropzone" style="border:2px dashed #3498db; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; margin-bottom:15px; transition:0.3s;" 
-                         onclick="document.getElementById('aiMainImages').click()" 
-                         ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='#e0f7fa';" 
-                         ondragleave="event.preventDefault(); event.stopPropagation(); this.style.background='white';" 
-                         ondrop="handleAiDrop(event, 'aiMainImages', 'aiMainPreview')">
-                        <span style="font-size:24px;">📸</span><br>
-                        <span style="font-size:13px; color:#555;">Ürün fotoğraflarını buraya sürükleyin veya seçin</span>
-                        <input type="file" id="aiMainImages" multiple accept="image/*" style="display:none;" onchange="previewAiImages(this, 'aiMainPreview')">
-                    </div>
-                    <div id="aiMainPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"></div>
+            <div style="display:flex; border-bottom:2px solid #ddd; margin-bottom:20px; gap:5px;">
+                <button id="tabAiNew" onclick="switchAiTab('new')" style="padding:10px 20px; border:none; background:#3498db; color:white; border-radius:6px 6px 0 0; cursor:pointer; font-weight:bold;">✨ Yeni Görsel Üret</button>
+                <button id="tabAiHistory" onclick="switchAiTab('history')" style="padding:10px 20px; border:none; background:#f0f4f8; color:#333; border-radius:6px 6px 0 0; cursor:pointer; font-weight:bold;">🕰️ Geçmiş Üretimler</button>
+            </div>
 
-                    <label>Rakip / İlham Görseli (Opsiyonel)</label>
-                    <div id="aiRefDropzone" style="border:2px dashed #9b59b6; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; transition:0.3s;" 
-                         onclick="document.getElementById('aiRefImage').click()" 
-                         ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='#fdf5ff';" 
-                         ondragleave="event.preventDefault(); event.stopPropagation(); this.style.background='white';" 
-                         ondrop="handleAiDrop(event, 'aiRefImage', 'aiRefPreview', true)">
-                        <span style="font-size:24px;">💡</span><br>
-                        <span style="font-size:13px; color:#555;">Arka planını kullanmak istediğiniz referans görseli sürükleyin (AI Ürünü maskeleyip yerleştirir)</span>
-                        <input type="file" id="aiRefImage" accept="image/*" style="display:none;" onchange="previewAiImages(this, 'aiRefPreview', true)">
+            <!-- YENI GÖRSEL ÜRET ALANI -->
+            <div id="aiNewSection">
+                <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+                    <!-- Sol Kolon: Yüklemeler -->
+                    <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
+                        <h3 style="margin-top:0; font-size:16px; color:#34495e;">1. Görsel Kaynakları</h3>
+                        
+                        <label>Ana Ürün Görselleri (Çoklu Seçim)</label>
+                        <div id="aiMainDropzone" style="border:2px dashed #3498db; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; margin-bottom:15px; transition:0.3s;" 
+                             onclick="document.getElementById('aiMainImages').click()" 
+                             ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='#e0f7fa';" 
+                             ondragleave="event.preventDefault(); event.stopPropagation(); this.style.background='white';" 
+                             ondrop="handleAiDrop(event, 'aiMainImages', 'aiMainPreview')">
+                            <span style="font-size:24px;">📸</span><br>
+                            <span style="font-size:13px; color:#555;">Ürün fotoğraflarını buraya sürükleyin veya seçin</span>
+                            <input type="file" id="aiMainImages" multiple accept="image/*" style="display:none;" onchange="previewAiImages(this, 'aiMainPreview')">
+                        </div>
+                        <div id="aiMainPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px;"></div>
+
+                        <label>Rakip / İlham Görseli (Opsiyonel)</label>
+                        <div id="aiRefDropzone" style="border:2px dashed #9b59b6; padding:20px; text-align:center; border-radius:8px; cursor:pointer; background:white; transition:0.3s;" 
+                             onclick="document.getElementById('aiRefImage').click()" 
+                             ondragover="event.preventDefault(); event.stopPropagation(); this.style.background='#fdf5ff';" 
+                             ondragleave="event.preventDefault(); event.stopPropagation(); this.style.background='white';" 
+                             ondrop="handleAiDrop(event, 'aiRefImage', 'aiRefPreview', true)">
+                            <span style="font-size:24px;">💡</span><br>
+                            <span style="font-size:13px; color:#555;">Arka planını kullanmak istediğiniz referans görseli sürükleyin (AI Ürünü maskeleyip yerleştirir)</span>
+                            <input type="file" id="aiRefImage" accept="image/*" style="display:none;" onchange="previewAiImages(this, 'aiRefPreview', true)">
+                        </div>
+                        <div id="aiRefPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;"></div>
                     </div>
-                    <div id="aiRefPreview" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;"></div>
+
+                    <!-- Sağ Kolon: Prompt & Ayarlar -->
+                    <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
+                        <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. Prompt & Ayarlar</h3>
+                        
+                        <label>Konsept Havuzu (Sistem Sabitleri ve Ekledikleriniz)</label>
+                        <div style="display:flex; gap:5px; margin-bottom:10px;">
+                            <input type="text" id="aiNewPromptInput" class="fin-input" style="margin:0; flex:1;" placeholder="Havuza yeni konsept ekle..." onkeypress="if(event.key==='Enter') addAiPrompt()">
+                            <button class="small-btn" style="background:#3498db;" onclick="addAiPrompt()">Havuza Ekle</button>
+                        </div>
+                        <div style="background:#f4f6f7; border:1px solid #ddd; padding:10px; border-radius:6px; max-height:100px; overflow-y:auto; margin-bottom:15px;" id="aiPromptPoolList">
+                            <!-- Prompts JS ile buraya yüklenecek -->
+                        </div>
+                        
+                        <label>Üretime Girecek Aktif Konseptler (Sıralı)</label>
+                        <div style="background:white; border:2px solid #3498db; padding:10px; border-radius:6px; min-height:80px; margin-bottom:10px;" id="aiActivePromptList">
+                            <!-- JS -->
+                        </div>
+                        
+                        <label>Özel Konsept / Ekstra Detay</label>
+                        <textarea id="aiCustomPrompt" class="fin-input" rows="2" placeholder="Örn: Etrafında kırmızı gül yaprakları olsun..."></textarea>
+                        
+                        <label style="margin-top:10px;">Kamera / Kalite Ayarları (Sistem Sabiti)</label>
+                        <textarea id="aiQualityPrompt" class="fin-input" rows="3">4K resolution, photorealistic, shot on Canon EOS R5 with 50mm f/5.6 lens. IMPORTANT: Do NOT add any text, titles, captions, labels, logos, subtitles, or watermarks.</textarea>
+
+                        <button class="action-btn" style="background:#8e44ad; margin-top:10px;" onclick="generateAiImages()">✨ Görselleri Üret (Colab Tüneli)</button>
+                    </div>
                 </div>
 
-                <!-- Sağ Kolon: Prompt & Ayarlar -->
-                <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
-                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. Prompt & Ayarlar</h3>
-                    
-                    <label>Dinamik Prompt Listesi (Çoklu Seçilebilir)</label>
-                    <div style="display:flex; gap:5px; margin-bottom:10px;">
-                        <input type="text" id="aiNewPromptInput" class="fin-input" style="margin:0; flex:1;" placeholder="Yeni prompt girin..." onkeypress="if(event.key==='Enter') addAiPrompt()">
-                        <button class="small-btn" style="background:#3498db;" onclick="addAiPrompt()">Ekle</button>
-                    </div>
-                    <div style="background:white; border:1px solid #ddd; padding:10px; border-radius:6px; max-height:150px; overflow-y:auto; margin-bottom:10px;" id="aiPromptList">
-                        <!-- Prompts JS ile buraya yüklenecek -->
-                    </div>
-                    
-                    <label>Özel Konsept / Ekstra Detay</label>
-                    <textarea id="aiCustomPrompt" class="fin-input" rows="2" placeholder="Örn: Etrafında kırmızı gül yaprakları olsun..."></textarea>
-                    
-                    <label style="margin-top:10px;">Kamera / Kalite Ayarları (Sistem Sabiti)</label>
-                    <textarea id="aiQualityPrompt" class="fin-input" rows="3">4K resolution, photorealistic, shot on Canon EOS R5 with 50mm f/5.6 lens. IMPORTANT: Do NOT add any text, titles, captions, labels, logos, subtitles, or watermarks.</textarea>
-
-                    <button class="action-btn" style="background:#8e44ad; margin-top:10px;" onclick="generateAiImages()">✨ Görselleri Üret (Colab Tüneli)</button>
+                <!-- Sonuç Galerisi -->
+                <h3 style="border-bottom:2px solid #eee; padding-bottom:10px;">Üretilen Görseller Galerisi</h3>
+                <div id="aiGallery" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; min-height:200px; background:#fff; border:1px dashed #ccc; border-radius:8px; padding:20px;">
+                    <p style="grid-column:1/-1; text-align:center; color:#999; margin-top:20px;">Henüz üretim yapılmadı...</p>
                 </div>
             </div>
 
-            <!-- Sonuç Galerisi -->
-            <h3 style="border-bottom:2px solid #eee; padding-bottom:10px;">Üretilen Görseller Galerisi</h3>
-            <div id="aiGallery" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; min-height:200px; background:#fff; border:1px dashed #ccc; border-radius:8px; padding:20px;">
-                <p style="grid-column:1/-1; text-align:center; color:#999; margin-top:20px;">Henüz üretim yapılmadı...</p>
+            <!-- GECMIS URETIMLER ALANI -->
+            <div id="aiHistorySection" style="display:none;">
+                <h3 style="margin-top:0;">Daha Önce Üretilen Görseller</h3>
+                <p style="color:#666; font-size:13px;">Sistemde kaydedilmiş tüm geçmiş AI çıktılarınız burada listelenir.</p>
+                <div id="aiHistoryGallery" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; min-height:200px; background:#fff; border:1px dashed #ccc; border-radius:8px; padding:20px;">
+                    <p style="grid-column:1/-1; text-align:center; color:#999; margin-top:20px;">Henüz geçmişte kaydedilmiş bir görsel yok.</p>
+                </div>
             </div>
         </div>
 
@@ -1306,20 +1328,55 @@
             "Placed on a wooden table, cozy home atmosphere, sunlight from window",
             "Luxury dark marble surface, dramatic moody lighting"
         ];
+        
+        let aiActivePrompts = [];
+        let aiHistoryImages = JSON.parse(localStorage.getItem('paraBassAiHistory')) || [];
+
+        function switchAiTab(tab) {
+            document.getElementById('aiNewSection').style.display = tab === 'new' ? 'block' : 'none';
+            document.getElementById('aiHistorySection').style.display = tab === 'history' ? 'block' : 'none';
+            document.getElementById('tabAiNew').style.background = tab === 'new' ? '#3498db' : '#f0f4f8';
+            document.getElementById('tabAiNew').style.color = tab === 'new' ? 'white' : '#333';
+            document.getElementById('tabAiHistory').style.background = tab === 'history' ? '#3498db' : '#f0f4f8';
+            document.getElementById('tabAiHistory').style.color = tab === 'history' ? 'white' : '#333';
+            if(tab === 'history') renderAiHistory();
+        }
 
         function renderAiPrompts() {
-            const list = document.getElementById('aiPromptList');
-            if(!list) return;
-            list.innerHTML = '';
-            aiPrompts.forEach((p, idx) => {
-                list.innerHTML += `
-                    <div style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #eee;">
-                        <input type="checkbox" class="ai-prompt-checkbox" value="${p.replace(/"/g, '&quot;')}" checked style="margin-top:4px;">
-                        <span style="flex:1; font-size:12px; color:#333;">${p}</span>
-                        <span onclick="deleteAiPrompt(${idx})" style="color:#e74c3c; cursor:pointer; font-weight:bold; font-size:14px;" title="Sil">✖</span>
-                    </div>
-                `;
-            });
+            // Havuzu Renderla
+            const poolList = document.getElementById('aiPromptPoolList');
+            if(poolList) {
+                poolList.innerHTML = '';
+                aiPrompts.forEach((p, idx) => {
+                    poolList.innerHTML += `
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:5px; padding-bottom:5px; border-bottom:1px solid #eee;">
+                            <span style="flex:1; font-size:11px; color:#555;">${p}</span>
+                            <div style="display:flex; gap:5px;">
+                                <button class="small-btn" style="background:#2ecc71; padding:2px 8px; font-size:12px;" onclick="addToActiveAi('${p.replace(/'/g, "\\'")}')" title="Aktif Listeye Ekle">➕ Ekle</button>
+                                <button class="small-btn" style="background:#e74c3c; padding:2px 8px; font-size:12px;" onclick="deleteFromAiPool(${idx})" title="Havuzdan Kalıcı Sil">✖</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Aktifleri Renderla
+            const activeList = document.getElementById('aiActivePromptList');
+            if(activeList) {
+                activeList.innerHTML = '';
+                if(aiActivePrompts.length === 0) {
+                    activeList.innerHTML = '<span style="color:#999; font-size:12px;">Henüz aktif listeye konsept eklemediniz...</span>';
+                }
+                aiActivePrompts.forEach((p, idx) => {
+                    activeList.innerHTML += `
+                        <div style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; padding:8px; background:#f0f8ff; border-radius:4px; border:1px solid #cce7ff;">
+                            <span style="font-weight:bold; color:#3498db; font-size:12px;">${idx + 1}.</span>
+                            <span style="flex:1; font-size:12px; color:#333;">${p}</span>
+                            <span onclick="removeFromActiveAi(${idx})" style="color:#e74c3c; cursor:pointer; font-weight:bold; font-size:14px;" title="Listeden Çıkar">✖</span>
+                        </div>
+                    `;
+                });
+            }
         }
 
         function addAiPrompt() {
@@ -1333,9 +1390,21 @@
             }
         }
 
-        function deleteAiPrompt(idx) {
-            aiPrompts.splice(idx, 1);
-            localStorage.setItem('paraBassAiPrompts', JSON.stringify(aiPrompts));
+        function deleteFromAiPool(idx) {
+            if(confirm("Bu konsepti tamamen silmek istediğinize emin misiniz?")) {
+                aiPrompts.splice(idx, 1);
+                localStorage.setItem('paraBassAiPrompts', JSON.stringify(aiPrompts));
+                renderAiPrompts();
+            }
+        }
+
+        function addToActiveAi(text) {
+            aiActivePrompts.push(text);
+            renderAiPrompts();
+        }
+
+        function removeFromActiveAi(idx) {
+            aiActivePrompts.splice(idx, 1);
             renderAiPrompts();
         }
 
@@ -1369,14 +1438,13 @@
         }
 
         function generateAiImages() {
-            const checkboxes = document.querySelectorAll('.ai-prompt-checkbox:checked');
-            let selectedPrompts = Array.from(checkboxes).map(cb => cb.value);
+            let selectedPrompts = [...aiActivePrompts];
             
             const customPrompt = document.getElementById('aiCustomPrompt').value.trim();
             if(customPrompt) selectedPrompts.push(customPrompt);
             
             if(selectedPrompts.length === 0) {
-                alert("Lütfen listeden en az 1 prompt seçin veya özel konsept girin.");
+                alert("Lütfen havuza konsept ekleyip aktif listeye alın veya özel konsept alanını doldurun.");
                 return;
             }
             
@@ -1386,21 +1454,64 @@
             if(gallery.innerHTML.includes('Henüz üretim')) gallery.innerHTML = '';
             
             selectedPrompts.forEach((promptText, index) => {
+                let imgUrl = 'https://via.placeholder.com/2000?text=AI+Render+' + (index+1);
+                
+                aiHistoryImages.unshift({
+                    url: imgUrl,
+                    prompt: promptText,
+                    date: new Date().toLocaleString('tr-TR')
+                });
+                
                 const div = document.createElement('div');
                 div.style.cssText = "background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px;";
                 div.innerHTML = `
-                    <img src="https://via.placeholder.com/2000?text=AI+Render+${index+1}" draggable="true" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="openInpaintModal(this.src)" title="İnce ayar (Inpainting) için tıkla">
-                    <p style="margin:0; font-size:11px; color:#555; text-align:center; height:32px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;" title="${promptText}">
+                    <img src="${imgUrl}" draggable="true" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="openInpaintModal(this.src)" title="İnce ayar (Inpainting) için tıkla">
+                    <p style="margin:0; font-size:11px; color:#555; text-align:center; height:32px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;" title="${promptText.replace(/"/g, '&quot;')}">
                         <strong>Çıktı #${index+1}:</strong> ${promptText}
                     </p>
                     <div style="display:flex; gap:5px;">
                         <button class="small-btn" style="flex:1; background:#27ae60;">Seç</button>
-                        <button class="small-btn" style="flex:1; background:#95a5a6;" onclick="window.open('https://via.placeholder.com/2000?text=AI+Render+${index+1}', '_blank')">İndir</button>
+                        <button class="small-btn" style="flex:1; background:#95a5a6;" onclick="window.open('${imgUrl}', '_blank')">İndir</button>
                         <button class="small-btn" style="flex:1; background:#e74c3c;" onclick="this.parentElement.parentElement.remove()">Sil</button>
                     </div>
                 `;
                 gallery.appendChild(div);
             });
+            
+            localStorage.setItem('paraBassAiHistory', JSON.stringify(aiHistoryImages));
+        }
+
+        function renderAiHistory() {
+            const gallery = document.getElementById('aiHistoryGallery');
+            if(!gallery) return;
+            gallery.innerHTML = '';
+            if(aiHistoryImages.length === 0) {
+                gallery.innerHTML = '<p style="grid-column:1/-1; text-align:center; color:#999; margin-top:20px;">Henüz geçmişte kaydedilmiş bir görsel yok.</p>';
+                return;
+            }
+            aiHistoryImages.forEach((item, idx) => {
+                gallery.innerHTML += `
+                    <div style="background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:10px; display:flex; flex-direction:column; gap:10px;">
+                        <img src="${item.url}" draggable="true" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; cursor:pointer;" onclick="openInpaintModal(this.src)">
+                        <p style="margin:0; font-size:10px; color:#888; text-align:center;">${item.date}</p>
+                        <p style="margin:0; font-size:11px; color:#555; text-align:center; height:32px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;" title="${item.prompt.replace(/"/g, '&quot;')}">
+                            <strong>Konsept:</strong> ${item.prompt}
+                        </p>
+                        <div style="display:flex; gap:5px;">
+                            <button class="small-btn" style="flex:1; background:#95a5a6;" onclick="window.open('${item.url}', '_blank')">İndir</button>
+                            <button class="small-btn" style="flex:1; background:#e74c3c;" onclick="deleteAiHistoryItem(${idx})">Kalıcı Sil</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function deleteAiHistoryItem(idx) {
+            if(confirm("Bu geçmiş üretimi kalıcı olarak silmek istediğinize emin misiniz?")) {
+                aiHistoryImages.splice(idx, 1);
+                localStorage.setItem('paraBassAiHistory', JSON.stringify(aiHistoryImages));
+                renderAiHistory();
+            }
         }
 
         let inpaintCtx = null;
