@@ -1330,7 +1330,7 @@
         ];
         
         let aiActivePrompts = [];
-        let aiHistoryImages = JSON.parse(localStorage.getItem('paraBassAiHistory')) || [];
+        let aiHistoryImages = []; // LocalStorage'dan yükleme iptal edildi (Quota Error engellemek için)
 
         function switchAiTab(tab) {
             document.getElementById('aiNewSection').style.display = tab === 'new' ? 'block' : 'none';
@@ -1492,10 +1492,11 @@
                 btn.innerHTML = "⏳ Görsel Üretiliyor... (Bu işlem 10-15 saniye sürebilir)";
                 btn.disabled = true;
 
-                const response = await fetch('https://calm-rabbits-live.loca.lt/generate', {
+                const response = await fetch('https://weak-mugs-itch.loca.lt/generate', {
                     method: 'POST',
                     headers: {
-                        "Bypass-Tunnel-Reminder": "true"
+                        "Bypass-Tunnel-Reminder": "true",
+                        "ngrok-skip-browser-warning": "true"
                     },
                     body: formData
                 });
@@ -1558,9 +1559,11 @@
                     div.appendChild(p);
                     div.appendChild(actionsDiv);
                     
-                    gallery.prepend(div);
+                    // Sadece son üretilen görseli göstermek için galeriyi temizle (Kullanıcı talebi)
+                    gallery.innerHTML = ''; 
+                    gallery.appendChild(div);
                     
-                    localStorage.setItem('paraBassAiHistory', JSON.stringify(aiHistoryImages));
+                    // localStorage.setItem('paraBassAiHistory', JSON.stringify(aiHistoryImages)); // Quota Exceeded hatası için iptal edildi
                 } else {
                     alert("API başarılı yanıt verdi ancak içerisinde görsel verisi (image) bulunamadı!");
                 }
