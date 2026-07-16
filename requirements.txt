@@ -1,0 +1,4 @@
+supabase
+google-generativeai
+PyPDF2
+opencv-python-headless
