@@ -23,13 +23,16 @@ class handler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data)
 
-            category = data.get('category', '')
+            product_type = data.get('product_type', '')
+            concept = data.get('concept', '')
             keyword = data.get('keyword', '')
             
-            # Use keyword if provided, otherwise fallback to category
-            search_term = keyword if keyword else category
-            if not search_term:
-                self.send_error_json(400, "Kategori veya anahtar kelime gerekli.")
+            # Form search term for caching/fallback
+            base_category = f"{product_type} {concept}".strip()
+            search_term = keyword if keyword else base_category
+
+            if not base_category:
+                self.send_error_json(400, "Ürün tipi veya konsept seçilmelidir.")
                 return
             
             # 1. Check cache first (saves LLM tokens & time)
@@ -38,8 +41,8 @@ class handler(BaseHTTPRequestHandler):
                 self.send_success_json(cached)
                 return
 
-            # 2. Fetch high volume keywords from eRank DB
-            erank_data = get_erank_keywords(search_term)
+            # 2. Fetch high volume keywords from eRank DB using the concept as category tag
+            erank_data = get_erank_keywords(concept if concept else product_type)
             keywords_list = [item.get('keyword') for item in erank_data] if erank_data else [search_term]
 
             # 3. Generate listing using Gemini RAG Engine

@@ -496,18 +496,30 @@
                 <div style="flex:1; min-width:350px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
                     <h3 style="margin-top:0; font-size:16px; color:#34495e;">1. Ürün Verisi ve RAG SEO</h3>
                     
-                    <div class="form-group">
-                        <label>Kategori Seçimi</label>
-                        <select id="etsyDraftCategory">
-                            <option value="wooden_decor">Ahşap Dekor (Wooden Decor)</option>
-                            <option value="epoxy_resin">Epoksi Reçine (Epoxy Resin)</option>
-                            <option value="candle">Mum (Candle)</option>
-                            <option value="jewelry">Takı / Mücevher (Jewelry)</option>
-                        </select>
+                    <div class="form-group" style="display:flex; gap:10px;">
+                        <div style="flex:1;">
+                            <label>Ürün Tipi</label>
+                            <select id="etsyDraftProductType">
+                                <option value="Candle">Mum (Candle)</option>
+                                <option value="Epoxy Magnet">Epoksi Magnet</option>
+                                <option value="Keychain">Anahtarlık (Keychain)</option>
+                            </select>
+                        </div>
+                        <div style="flex:1;">
+                            <label>Konsept</label>
+                            <select id="etsyDraftConcept">
+                                <option value="Wedding">Wedding</option>
+                                <option value="Baptism">Baptism</option>
+                                <option value="Birthday">Birthday</option>
+                                <option value="Baby Shower">Baby Shower</option>
+                                <option value="Halloween">Halloween</option>
+                                <option value="Christmas">Christmas</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="form-group">
-                        <label>Özel Anahtar Kelime (eRank'ı tetikler)</label>
+                        <label>Özel Anahtar Kelime (Opsiyonel)</label>
                         <input type="text" id="etsyDraftKeyword" placeholder="Örn: rustic wall art">
                     </div>
 
@@ -554,13 +566,48 @@
                         <button class="action-btn" style="background:#9b59b6;" onclick="removeEtsyWatermark()">🪄 Sağ Alt Filigranı Temizle</button>
                     </div>
 
-                    <div style="background:#fdfdfd; padding:20px; border-radius:8px; border:1px solid #e1e8ed; flex:1;">
-                        <h3 style="margin-top:0; font-size:16px; color:#34495e;">3. Prompt Havuzu (Veritabanı)</h3>
-                        <p style="font-size:12px; color:#7f8c8d;">Manuel görsel üretimi için Supabase `prompt_pool` tablosundan gelen şablonlar:</p>
-                        <div id="etsyPromptPool" style="background:#fff; border:1px solid #ddd; border-radius:6px; padding:10px; height:150px; overflow-y:auto; font-size:12px; color:#555;">
-                            <em>Yükleniyor...</em>
+                    <div style="background:#fdfdfd; padding:20px; border-radius:8px; border:1px solid #e1e8ed; flex:1; display:flex; flex-direction:column; gap:15px;">
+                        
+                        <!-- CSV UPLOAD BÖLÜMÜ -->
+                        <div>
+                            <h3 style="margin-top:0; font-size:16px; color:#34495e;">3. eRank CSV Yükle</h3>
+                            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                                <select id="erankCsvConcept" style="flex:1; padding:5px;">
+                                    <option value="Wedding">Wedding</option>
+                                    <option value="Baptism">Baptism</option>
+                                    <option value="Birthday">Birthday</option>
+                                    <option value="Baby Shower">Baby Shower</option>
+                                    <option value="Halloween">Halloween</option>
+                                    <option value="Christmas">Christmas</option>
+                                </select>
+                                <input type="file" id="erankCsvFile" accept=".csv" style="flex:2; font-size:12px;">
+                            </div>
+                            <button class="small-btn" style="width:100%; background:#27ae60;" onclick="uploadErankCsv()">📤 CSV Yükle ve Skorla</button>
                         </div>
-                        <button class="small-btn" style="margin-top:10px; width:100%;" onclick="loadPromptPool()">🔄 Havuzu Yenile</button>
+
+                        <hr style="border:0; border-top:1px solid #eee;">
+
+                        <!-- PROMPT HAVUZU -->
+                        <div style="flex:1; display:flex; flex-direction:column;">
+                            <h3 style="margin-top:0; font-size:16px; color:#34495e; display:flex; justify-content:space-between; align-items:center;">
+                                4. Prompt Havuzu
+                                <button class="small-btn" style="background:#2980b9;" onclick="document.getElementById('newPromptArea').style.display='block'">+ Yeni Ekle</button>
+                            </h3>
+                            
+                            <div id="newPromptArea" style="display:none; margin-bottom:10px;">
+                                <textarea id="newPromptText" placeholder="Yeni prompt metnini buraya girin..." style="width:100%; height:60px; resize:none; padding:5px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; font-size:12px;"></textarea>
+                                <div style="display:flex; gap:5px; margin-top:5px;">
+                                    <button class="small-btn" style="background:#27ae60; flex:1;" onclick="addPrompt()">Kaydet</button>
+                                    <button class="small-btn" style="background:#e74c3c; flex:1;" onclick="document.getElementById('newPromptArea').style.display='none'">İptal</button>
+                                </div>
+                            </div>
+
+                            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">Supabase tablosundan gelen şablonlar:</p>
+                            <div id="etsyPromptPool" style="background:#fff; border:1px solid #ddd; border-radius:6px; padding:10px; flex:1; min-height:150px; overflow-y:auto; font-size:12px; color:#555;">
+                                <em>Yükleniyor...</em>
+                            </div>
+                            <button class="small-btn" style="margin-top:10px; width:100%;" onclick="loadPromptPool()">🔄 Havuzu Yenile</button>
+                        </div>
                     </div>
 
                 </div>
@@ -582,7 +629,8 @@
                 }
 
                 async function generateEtsyDraft() {
-                    const category = document.getElementById('etsyDraftCategory').value;
+                    const product_type = document.getElementById('etsyDraftProductType').value;
+                    const concept = document.getElementById('etsyDraftConcept').value;
                     const keyword = document.getElementById('etsyDraftKeyword').value;
                     
                     const btn = document.getElementById('btnEtsyGenerate');
@@ -597,7 +645,7 @@
                         const response = await fetch('/api/etsy-draft', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ category, keyword })
+                            body: JSON.stringify({ product_type, concept, keyword })
                         });
                         
                         const data = await response.json();
@@ -607,12 +655,10 @@
                         } else {
                             document.getElementById('etsyResTitle').value = data.title || "Bulunamadı";
                             
-                            // Render Tags as Badges
                             const tagsContainer = document.getElementById('etsyResTags');
                             tagsContainer.innerHTML = '';
                             const tagsArray = Array.isArray(data.tags) ? data.tags : (data.tags ? data.tags.split(',') : []);
                             
-                            // Hidden input for easy copying of all tags
                             const hiddenTags = document.createElement('span');
                             hiddenTags.id = 'etsyHiddenTagsContent';
                             hiddenTags.style.display = 'none';
@@ -689,23 +735,149 @@
                     reader.readAsDataURL(file);
                 }
 
-                function loadPromptPool() {
-                    const prompts = [
-                        "A hyper-realistic 8k product photography of a [CATEGORY], placed on a luxurious ivory satin cloth, soft morning sunlight, cinematic lighting, sharp focus, high-end editorial style.",
-                        "Minimalist Scandinavian style mockup for [CATEGORY], placed on a rustic wooden table with dried eucalyptus, soft diffused natural light, cozy and warm aesthetic, photorealistic.",
-                        "Elegant lifestyle shot of [CATEGORY] resting on a dark marble surface, dramatic chiaroscuro lighting, subtle gold accents in the background, extremely detailed, 8k resolution."
-                    ];
+                async function uploadErankCsv() {
+                    const fileInput = document.getElementById('erankCsvFile');
+                    const concept = document.getElementById('erankCsvConcept').value;
                     
-                    let htmlContent = "";
-                    prompts.forEach((p, index) => {
-                        htmlContent += `
-                        <div style='padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;'>
-                            <div id='mockPrompt${index}' style='flex:1;'>${p}</div>
-                            <button class='small-btn' style='background:#f39c12; flex-shrink:0;' onclick='copyToClipboard("mockPrompt${index}")'>Kopyala</button>
-                        </div>`;
-                    });
+                    if(!fileInput.files || fileInput.files.length === 0) {
+                        showEtsyToast("Lütfen bir CSV dosyası seçin!");
+                        return;
+                    }
                     
-                    document.getElementById('etsyPromptPool').innerHTML = htmlContent;
+                    const btn = document.querySelector('button[onclick="uploadErankCsv()"]');
+                    btn.disabled = true;
+                    btn.innerHTML = "Yükleniyor... ⏳";
+                    
+                    const file = fileInput.files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onloadend = async () => {
+                        const csvContent = reader.result;
+                        
+                        try {
+                            const response = await fetch('/api/upload-erank', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ concept: concept, csv_content: csvContent })
+                            });
+                            
+                            const data = await response.json();
+                            
+                            if(data.error) {
+                                showEtsyToast("Hata: " + data.error);
+                            } else {
+                                showEtsyToast(data.message || "CSV başarıyla yüklendi ve skorlandı!", false);
+                                fileInput.value = ""; // clear input
+                            }
+                        } catch (error) {
+                            showEtsyToast("Bağlantı hatası: API'ye ulaşılamadı.");
+                        } finally {
+                            btn.disabled = false;
+                            btn.innerHTML = "📤 CSV Yükle ve Skorla";
+                        }
+                    };
+                    
+                    reader.readAsText(file);
+                }
+
+                async function loadPromptPool() {
+                    document.getElementById('etsyPromptPool').innerHTML = "<em>Yükleniyor...</em>";
+                    try {
+                        const response = await fetch('/api/prompts');
+                        const data = await response.json();
+                        
+                        if(data.error) {
+                            document.getElementById('etsyPromptPool').innerHTML = "<span style='color:red;'>Hata: " + data.error + "</span>";
+                            return;
+                        }
+                        
+                        let htmlContent = "";
+                        if(data.length === 0) {
+                            htmlContent = "<em>Havuzda henüz prompt yok.</em>";
+                        } else {
+                            data.forEach((p) => {
+                                htmlContent += `
+                                <div style='padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;'>
+                                    <div id='dbPrompt${p.id}' style='flex:1; word-break:break-word;'>${p.content}</div>
+                                    <div style='display:flex; gap:5px; flex-shrink:0;'>
+                                        <button class='small-btn' style='background:#f39c12; padding:2px 5px; font-size:10px;' onclick='copyToClipboard("dbPrompt${p.id}")'>Kopyala</button>
+                                        <button class='small-btn' style='background:#3498db; padding:2px 5px; font-size:10px;' onclick='editPrompt(${p.id})'>Düzenle</button>
+                                        <button class='small-btn' style='background:#e74c3c; padding:2px 5px; font-size:10px;' onclick='deletePrompt(${p.id})'>Sil</button>
+                                    </div>
+                                </div>`;
+                            });
+                        }
+                        document.getElementById('etsyPromptPool').innerHTML = htmlContent;
+                    } catch(e) {
+                        document.getElementById('etsyPromptPool').innerHTML = "<span style='color:red;'>Bağlantı hatası.</span>";
+                    }
+                }
+
+                async function addPrompt() {
+                    const content = document.getElementById('newPromptText').value.trim();
+                    if(!content) {
+                        showEtsyToast("Lütfen bir prompt metni girin!");
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/prompts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content })
+                        });
+                        const data = await response.json();
+                        if(data.error) {
+                            showEtsyToast("Hata: " + data.error);
+                        } else {
+                            showEtsyToast("Prompt başarıyla eklendi!", false);
+                            document.getElementById('newPromptText').value = "";
+                            document.getElementById('newPromptArea').style.display = 'none';
+                            loadPromptPool();
+                        }
+                    } catch(e) {
+                        showEtsyToast("Bağlantı hatası.");
+                    }
+                }
+
+                async function deletePrompt(id) {
+                    if(!confirm("Bu promptu silmek istediğinize emin misiniz?")) return;
+                    try {
+                        const response = await fetch('/api/prompts', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id })
+                        });
+                        const data = await response.json();
+                        if(data.error) showEtsyToast("Hata: " + data.error);
+                        else {
+                            showEtsyToast("Silindi!", false);
+                            loadPromptPool();
+                        }
+                    } catch(e) {
+                        showEtsyToast("Bağlantı hatası.");
+                    }
+                }
+
+                async function editPrompt(id) {
+                    const currentContent = document.getElementById('dbPrompt' + id).innerText;
+                    const newContent = prompt("Promptu düzenle:", currentContent);
+                    if(newContent === null || newContent.trim() === "") return;
+                    
+                    try {
+                        const response = await fetch('/api/prompts', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id, content: newContent.trim() })
+                        });
+                        const data = await response.json();
+                        if(data.error) showEtsyToast("Hata: " + data.error);
+                        else {
+                            showEtsyToast("Güncellendi!", false);
+                            loadPromptPool();
+                        }
+                    } catch(e) {
+                        showEtsyToast("Bağlantı hatası.");
+                    }
                 }
 
                 function copyToClipboard(elementId) {
@@ -725,7 +897,7 @@
                     });
                 }
                 
-                // Sayfa yüklendiğinde havuzu çek (mock data)
+                // Sayfa yüklendiğinde havuzu çek (Supabase'den)
                 setTimeout(loadPromptPool, 1000);
             </script>
         </div>
