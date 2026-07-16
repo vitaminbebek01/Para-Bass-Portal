@@ -487,34 +487,144 @@
 
         <!-- ETSY HİBRİT MODÜLÜ -->
         <div id="module-etsy" class="module">
-            <h2>🛍️ Sıfır Maliyetli Hibrit Etsy Modülü</h2>
-            <p style="color:#666; font-size:13px;">Bu modül arka planda çalışan Python scriptleri (Supabase, Gemini 2.5 RAG, OpenCV) ile senkronize çalışmak üzere UI arayüzüdür.</p>
+            <h2>🛍️ Etsy Taslak Hazırlayıcı <span style="font-size:12px; color:#95a5a6; font-weight:normal;">(Sıfır Maliyetli Hibrit Modül)</span></h2>
+            <p style="color:#666; font-size:13px;">Bu alan Vercel API üzerinden arka plandaki Python motoruna (Gemini 2.5 RAG & OpenCV) bağlanır.</p>
             
             <div style="display:flex; gap:20px; flex-wrap:wrap;">
+                
                 <!-- SEO OPTİMİZASYON ALANI -->
-                <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
-                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">1. Gemini RAG SEO Üretici</h3>
-                    <div class="form-group">
-                        <label>Etsy Kategori ID / Anahtar Kelime</label>
-                        <input type="text" id="etsyCategory" placeholder="Örn: wooden_decor">
-                    </div>
-                    <button class="action-btn" onclick="alert('Python Backend (gemini_rag_engine.py) bağlantısı bekleniyor...')">✨ SEO Başlık ve Tag Üret</button>
+                <div style="flex:1; min-width:350px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
+                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">1. Ürün Verisi ve RAG SEO</h3>
                     
-                    <div style="margin-top:15px; background:#fff; border:1px solid #eee; padding:10px; border-radius:6px; min-height:80px; font-size:13px; color:#777;">
-                        Sonuçlar (Başlık, 13 Tag, Açıklama) buraya gelecek...
+                    <div class="form-group">
+                        <label>Kategori Seçimi</label>
+                        <select id="etsyDraftCategory">
+                            <option value="wooden_decor">Ahşap Dekor (Wooden Decor)</option>
+                            <option value="epoxy_resin">Epoksi Reçine (Epoxy Resin)</option>
+                            <option value="candle">Mum (Candle)</option>
+                            <option value="jewelry">Takı / Mücevher (Jewelry)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Özel Anahtar Kelime (eRank'ı tetikler)</label>
+                        <input type="text" id="etsyDraftKeyword" placeholder="Örn: rustic wall art">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Gerçek Ürün Fotoğrafı</label>
+                        <input type="file" id="etsyDraftImage" accept="image/*" style="background:white; border:1px solid #ccc; padding:8px; border-radius:4px; width:100%;">
+                    </div>
+
+                    <button class="action-btn" id="btnEtsyGenerate" onclick="generateEtsyDraft()">✨ İçerik Üret</button>
+                    <div id="etsyDraftLoader" style="display:none; text-align:center; padding:10px; color:#3498db; font-weight:bold;">Üretiliyor, lütfen bekleyin... ⏳</div>
+                    
+                    <!-- SONUÇ KUTULARI -->
+                    <div id="etsyDraftResults" style="display:none; margin-top:20px;">
+                        <div class="result-box">
+                            <button class="copy-btn" onclick="copyToClipboard('etsyResTitle')">Kopyala</button>
+                            <label>Optimize Edilmiş Başlık (Title)</label>
+                            <div id="etsyResTitle" style="font-weight:bold; font-size:14px; margin-top:5px; color:#2c3e50;"></div>
+                        </div>
+                        
+                        <div class="result-box">
+                            <button class="copy-btn" onclick="copyToClipboard('etsyResTags')">Kopyala</button>
+                            <label>13 Adet Tag (Virgülle Ayrılmış)</label>
+                            <div id="etsyResTags" style="font-family:monospace; font-size:13px; margin-top:5px; color:#e67e22; background:#fdf2e9; padding:8px; border-radius:4px;"></div>
+                        </div>
+
+                        <div class="result-box">
+                            <button class="copy-btn" onclick="copyToClipboard('etsyResDesc')">Kopyala</button>
+                            <label>Lüks Açıklama (Description)</label>
+                            <div id="etsyResDesc" style="font-size:13px; margin-top:5px; color:#555; white-space:pre-wrap; max-height:150px; overflow-y:auto; border:1px solid #eee; padding:10px; background:white;"></div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- FİLİGRAN SİLİCİ ALANI -->
-                <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
-                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. OpenCV AI Filigran Silici</h3>
-                    <div class="file-drop-area" onclick="alert('Python Backend (watermark_remover.py) bağlantısı bekleniyor...')">
-                        <span style="font-size:24px;">💧</span><br>
-                        <span style="font-size:13px; color:#555;">Filigranlı görseli seçin veya sürükleyin</span>
+                <!-- FİLİGRAN SİLİCİ & PROMPT ALANI -->
+                <div style="flex:1; min-width:300px; display:flex; flex-direction:column; gap:20px;">
+                    
+                    <div style="background:#fdfdfd; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
+                        <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. OpenCV AI Filigran Silici</h3>
+                        <div class="file-drop-area" onclick="document.getElementById('etsyWatermarkImage').click()">
+                            <span style="font-size:24px;">💧</span><br>
+                            <span style="font-size:13px; color:#555;">Filigranlı görseli buraya tıklayıp seçin</span>
+                            <input type="file" id="etsyWatermarkImage" style="display:none;" accept="image/*">
+                        </div>
+                        <button class="action-btn" style="background:#9b59b6;" onclick="removeEtsyWatermark()">🪄 Sağ Alt Filigranı Temizle</button>
                     </div>
-                    <button class="action-btn" style="background:#9b59b6;" onclick="alert('Python Backend entegrasyonu başlatılıyor...')">🪄 Sağ Alt Filigranı Temizle</button>
+
+                    <div style="background:#fdfdfd; padding:20px; border-radius:8px; border:1px solid #e1e8ed; flex:1;">
+                        <h3 style="margin-top:0; font-size:16px; color:#34495e;">3. Prompt Havuzu (Veritabanı)</h3>
+                        <p style="font-size:12px; color:#7f8c8d;">Manuel görsel üretimi için Supabase `prompt_pool` tablosundan gelen şablonlar:</p>
+                        <div id="etsyPromptPool" style="background:#fff; border:1px solid #ddd; border-radius:6px; padding:10px; height:150px; overflow-y:auto; font-size:12px; color:#555;">
+                            <em>Yükleniyor...</em>
+                        </div>
+                        <button class="small-btn" style="margin-top:10px; width:100%;" onclick="loadPromptPool()">🔄 Havuzu Yenile</button>
+                    </div>
+
                 </div>
             </div>
+
+            <script>
+                async function generateEtsyDraft() {
+                    const category = document.getElementById('etsyDraftCategory').value;
+                    const keyword = document.getElementById('etsyDraftKeyword').value;
+                    const imageFile = document.getElementById('etsyDraftImage').files[0];
+                    
+                    const btn = document.getElementById('btnEtsyGenerate');
+                    const loader = document.getElementById('etsyDraftLoader');
+                    const results = document.getElementById('etsyDraftResults');
+                    
+                    btn.style.display = 'none';
+                    loader.style.display = 'block';
+                    results.style.display = 'none';
+
+                    try {
+                        const response = await fetch('/api/etsy-draft', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ category, keyword })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if(data.error) {
+                            alert("Hata: " + data.error);
+                        } else {
+                            document.getElementById('etsyResTitle').innerText = data.title || "Bulunamadı";
+                            document.getElementById('etsyResTags').innerText = Array.isArray(data.tags) ? data.tags.join(', ') : data.tags;
+                            document.getElementById('etsyResDesc').innerText = data.description || "Bulunamadı";
+                            results.style.display = 'block';
+                        }
+                    } catch (error) {
+                        alert("API bağlantı hatası. Vercel çalışıyor mu? (Lokalde test ediyorsanız python -m http.server api klasörünü otomatik API gibi çalıştırmaz, Vercel dev ortamı gerekir)");
+                    } finally {
+                        btn.style.display = 'block';
+                        loader.style.display = 'none';
+                    }
+                }
+
+                function removeEtsyWatermark() {
+                    alert("Bu işlem için OpenCV destekli backend api endpointi yapılandırılmalıdır. Sistem hazır olduğunda eklenecektir.");
+                }
+
+                function loadPromptPool() {
+                    document.getElementById('etsyPromptPool').innerHTML = "<div style='padding:5px; border-bottom:1px solid #eee;'>1. A hyper-realistic 8k product photography of a [CATEGORY], luxury aesthetic, cinematic lighting...</div><div style='padding:5px; border-bottom:1px solid #eee;'>2. Minimalist Scandinavian style mockup for [CATEGORY], soft morning sunlight...</div>";
+                }
+
+                function copyToClipboard(elementId) {
+                    const text = document.getElementById(elementId).innerText;
+                    navigator.clipboard.writeText(text).then(() => {
+                        alert("Kopyalandı!");
+                    }).catch(err => {
+                        console.error('Kopyalama hatası:', err);
+                    });
+                }
+                
+                // Sayfa yüklendiğinde havuzu çek (mock data)
+                setTimeout(loadPromptPool, 1000);
+            </script>
         </div>
 
     </div>

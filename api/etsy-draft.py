@@ -1,0 +1,84 @@
+from http.server import BaseHTTPRequestHandler
+import json
+import os
+import sys
+
+# Ensure the parent directory is in sys.path to import etsy_hybrid_module
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+from etsy_hybrid_module.db_handler import get_erank_keywords, check_cached_seo
+from etsy_hybrid_module.gemini_rag_engine import generate_optimized_listing
+
+class handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_error_json(400, "Boş istek.")
+                return
+
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data)
+
+            category = data.get('category', '')
+            keyword = data.get('keyword', '')
+            
+            # Use keyword if provided, otherwise fallback to category
+            search_term = keyword if keyword else category
+            if not search_term:
+                self.send_error_json(400, "Kategori veya anahtar kelime gerekli.")
+                return
+            
+            # 1. Check cache first (saves LLM tokens & time)
+            cached = check_cached_seo(search_term)
+            if cached:
+                self.send_success_json(cached)
+                return
+
+            # 2. Fetch high volume keywords from eRank DB
+            erank_data = get_erank_keywords(search_term)
+            keywords_list = [item.get('keyword') for item in erank_data] if erank_data else [search_term]
+
+            # 3. Generate listing using Gemini RAG Engine
+            pdf_path = os.path.join(parent_dir, "Etsy_2026_Algoritma_Rehberi.pdf")
+            result = generate_optimized_listing(keywords_list, pdf_path)
+
+            if "error" in result:
+                self.send_error_json(500, result["error"])
+                return
+
+            self.send_success_json(result)
+
+        except Exception as e:
+            self.send_error_json(500, str(e))
+
+    def send_error_json(self, status, message):
+        self.send_response(status)
+        self.send_header('Content-type', 'application/json')
+        # Handle CORS
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+        self.wfile.write(json.dumps({"error": message}).encode('utf-8'))
+
+    def send_success_json(self, data):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        # Handle CORS
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode('utf-8'))
+
+    def do_OPTIONS(self):
+        # Handle CORS preflight request
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
