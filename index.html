@@ -521,22 +521,22 @@
                     
                     <!-- SONUÇ KUTULARI -->
                     <div id="etsyDraftResults" style="display:none; margin-top:20px;">
-                        <div class="result-box">
-                            <button class="copy-btn" onclick="copyToClipboard('etsyResTitle')">Kopyala</button>
+                        <div class="result-box" style="position:relative;">
+                            <button class="copy-btn" onclick="copyToClipboard('etsyResTitle')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
                             <label>Optimize Edilmiş Başlık (Title)</label>
-                            <div id="etsyResTitle" style="font-weight:bold; font-size:14px; margin-top:5px; color:#2c3e50;"></div>
+                            <input type="text" id="etsyResTitle" style="width:100%; font-weight:bold; font-size:14px; margin-top:5px; padding:10px; border:1px solid #ccc; border-radius:4px; color:#2c3e50; box-sizing:border-box;" readonly>
                         </div>
                         
-                        <div class="result-box">
-                            <button class="copy-btn" onclick="copyToClipboard('etsyResTags')">Kopyala</button>
+                        <div class="result-box" style="position:relative; margin-top:15px;">
+                            <button class="copy-btn" onclick="copyToClipboard('etsyResTags')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
                             <label>13 Adet Tag (Virgülle Ayrılmış)</label>
-                            <div id="etsyResTags" style="margin-top:5px; padding:8px; border-radius:4px; border:1px solid #eee; background:white;"></div>
+                            <div id="etsyResTags" style="margin-top:5px; padding:10px 80px 10px 10px; border-radius:4px; border:1px solid #eee; background:white; min-height:40px;"></div>
                         </div>
 
-                        <div class="result-box">
-                            <button class="copy-btn" onclick="copyToClipboard('etsyResDesc')">Kopyala</button>
+                        <div class="result-box" style="position:relative; margin-top:15px;">
+                            <button class="copy-btn" onclick="copyToClipboard('etsyResDesc')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
                             <label>Lüks Açıklama (Description)</label>
-                            <div id="etsyResDesc" style="font-size:13px; margin-top:5px; color:#555; white-space:pre-wrap; max-height:150px; overflow-y:auto; border:1px solid #eee; padding:10px; background:white;"></div>
+                            <textarea id="etsyResDesc" style="width:100%; font-size:13px; margin-top:5px; padding:10px; border:1px solid #ccc; border-radius:4px; color:#555; white-space:pre-wrap; min-height:150px; resize:vertical; box-sizing:border-box;" readonly></textarea>
                         </div>
                     </div>
                 </div>
@@ -605,7 +605,7 @@
                         if(data.error) {
                             showEtsyToast("Hata: " + data.error);
                         } else {
-                            document.getElementById('etsyResTitle').innerText = data.title || "Bulunamadı";
+                            document.getElementById('etsyResTitle').value = data.title || "Bulunamadı";
                             
                             // Render Tags as Badges
                             const tagsContainer = document.getElementById('etsyResTags');
@@ -626,7 +626,7 @@
                                 tagsContainer.appendChild(badge);
                             });
 
-                            document.getElementById('etsyResDesc').innerText = data.description || "Bulunamadı";
+                            document.getElementById('etsyResDesc').value = data.description || "Bulunamadı";
                             results.style.display = 'block';
                             showEtsyToast("İçerik başarıyla üretildi!", false);
                         }
@@ -710,10 +710,13 @@
 
                 function copyToClipboard(elementId) {
                     let text = "";
+                    const element = document.getElementById(elementId);
                     if(elementId === 'etsyResTags') {
                         text = document.getElementById('etsyHiddenTagsContent').innerText;
+                    } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                        text = element.value;
                     } else {
-                        text = document.getElementById(elementId).innerText;
+                        text = element.innerText;
                     }
                     navigator.clipboard.writeText(text).then(() => {
                         showEtsyToast("Kopyalandı!", false);
