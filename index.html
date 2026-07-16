@@ -141,6 +141,7 @@
         <div class="menu-item" onclick="switchTab('module-history', this)" id="menuHistory">⏳ Geçmiş Ürün Listelerim</div>
         <div class="menu-item" onclick="switchTab('module-finance', this)" id="menuFinance">📊 Sipariş & Finans</div>
         <div class="menu-item" onclick="switchTab('module-studio', this)" id="menuStudio">🎨 AI Görsel Stüdyosu</div>
+        <div class="menu-item" onclick="switchTab('module-etsy', this)" id="menuEtsy">🛍️ Sıfır Maliyetli Hibrit Etsy Modülü</div>
         
         <div style="margin-top: auto;">
             <div class="logout-btn" onclick="logout()">Çıkış Yap 🚪</div>
@@ -480,6 +481,38 @@
                 <p style="color:#666; font-size:13px;">Sistemde kaydedilmiş tüm geçmiş AI çıktılarınız burada listelenir.</p>
                 <div id="aiHistoryGallery" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; min-height:200px; background:#fff; border:1px dashed #ccc; border-radius:8px; padding:20px;">
                     <p style="grid-column:1/-1; text-align:center; color:#999; margin-top:20px;">Henüz geçmişte kaydedilmiş bir görsel yok.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ETSY HİBRİT MODÜLÜ -->
+        <div id="module-etsy" class="module">
+            <h2>🛍️ Sıfır Maliyetli Hibrit Etsy Modülü</h2>
+            <p style="color:#666; font-size:13px;">Bu modül arka planda çalışan Python scriptleri (Supabase, Gemini 2.5 RAG, OpenCV) ile senkronize çalışmak üzere UI arayüzüdür.</p>
+            
+            <div style="display:flex; gap:20px; flex-wrap:wrap;">
+                <!-- SEO OPTİMİZASYON ALANI -->
+                <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
+                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">1. Gemini RAG SEO Üretici</h3>
+                    <div class="form-group">
+                        <label>Etsy Kategori ID / Anahtar Kelime</label>
+                        <input type="text" id="etsyCategory" placeholder="Örn: wooden_decor">
+                    </div>
+                    <button class="action-btn" onclick="alert('Python Backend (gemini_rag_engine.py) bağlantısı bekleniyor...')">✨ SEO Başlık ve Tag Üret</button>
+                    
+                    <div style="margin-top:15px; background:#fff; border:1px solid #eee; padding:10px; border-radius:6px; min-height:80px; font-size:13px; color:#777;">
+                        Sonuçlar (Başlık, 13 Tag, Açıklama) buraya gelecek...
+                    </div>
+                </div>
+
+                <!-- FİLİGRAN SİLİCİ ALANI -->
+                <div style="flex:1; min-width:300px; background:#f9fbfc; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
+                    <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. OpenCV AI Filigran Silici</h3>
+                    <div class="file-drop-area" onclick="alert('Python Backend (watermark_remover.py) bağlantısı bekleniyor...')">
+                        <span style="font-size:24px;">💧</span><br>
+                        <span style="font-size:13px; color:#555;">Filigranlı görseli seçin veya sürükleyin</span>
+                    </div>
+                    <button class="action-btn" style="background:#9b59b6;" onclick="alert('Python Backend entegrasyonu başlatılıyor...')">🪄 Sağ Alt Filigranı Temizle</button>
                 </div>
             </div>
         </div>
