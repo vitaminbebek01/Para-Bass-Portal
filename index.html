@@ -605,12 +605,65 @@
                     }
                 }
 
-                function removeEtsyWatermark() {
-                    alert("Bu işlem için OpenCV destekli backend api endpointi yapılandırılmalıdır. Sistem hazır olduğunda eklenecektir.");
+                async function removeEtsyWatermark() {
+                    const imageInput = document.getElementById('etsyWatermarkImage');
+                    if(!imageInput.files || imageInput.files.length === 0) {
+                        alert("Lütfen önce bir görsel seçin!");
+                        return;
+                    }
+
+                    const file = imageInput.files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onloadend = async () => {
+                        const base64String = reader.result;
+                        
+                        try {
+                            const response = await fetch('/api/remove-watermark', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ image: base64String })
+                            });
+                            
+                            const data = await response.json();
+                            
+                            if(data.error) {
+                                alert("Hata: " + data.error);
+                            } else if (data.image) {
+                                // Trigger download
+                                const link = document.createElement('a');
+                                link.href = data.image;
+                                link.download = 'watermark_temizlenmis.jpg';
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                alert("Görsel başarıyla temizlendi ve indirildi!");
+                            }
+                        } catch (error) {
+                            alert("Bağlantı hatası: API'ye ulaşılamadı.");
+                        }
+                    };
+                    
+                    reader.readAsDataURL(file);
                 }
 
                 function loadPromptPool() {
-                    document.getElementById('etsyPromptPool').innerHTML = "<div style='padding:5px; border-bottom:1px solid #eee;'>1. A hyper-realistic 8k product photography of a [CATEGORY], luxury aesthetic, cinematic lighting...</div><div style='padding:5px; border-bottom:1px solid #eee;'>2. Minimalist Scandinavian style mockup for [CATEGORY], soft morning sunlight...</div>";
+                    const prompts = [
+                        "A hyper-realistic 8k product photography of a [CATEGORY], placed on a luxurious ivory satin cloth, soft morning sunlight, cinematic lighting, sharp focus, high-end editorial style.",
+                        "Minimalist Scandinavian style mockup for [CATEGORY], placed on a rustic wooden table with dried eucalyptus, soft diffused natural light, cozy and warm aesthetic, photorealistic.",
+                        "Elegant lifestyle shot of [CATEGORY] resting on a dark marble surface, dramatic chiaroscuro lighting, subtle gold accents in the background, extremely detailed, 8k resolution."
+                    ];
+                    
+                    let htmlContent = "";
+                    prompts.forEach((p, index) => {
+                        htmlContent += `
+                        <div style='padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;'>
+                            <div id='mockPrompt${index}' style='flex:1;'>${p}</div>
+                            <button class='small-btn' style='background:#f39c12; flex-shrink:0;' onclick='copyToClipboard("mockPrompt${index}")'>Kopyala</button>
+                        </div>`;
+                    });
+                    
+                    document.getElementById('etsyPromptPool').innerHTML = htmlContent;
                 }
 
                 function copyToClipboard(elementId) {
