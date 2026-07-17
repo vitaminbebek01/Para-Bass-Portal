@@ -523,6 +523,17 @@
                         <input type="text" id="etsyDraftKeyword" placeholder="Örn: rustic wall art">
                     </div>
 
+                    <div class="form-group" style="display:flex; gap:10px;">
+                        <div style="flex:1;">
+                            <label>Ürün Boyutu (Opsiyonel)</label>
+                            <input type="text" id="etsyDraftProductSize" placeholder="Örn: 7x7 cm">
+                        </div>
+                        <div style="flex:1;">
+                            <label>Kutu Boyutu (Opsiyonel)</label>
+                            <input type="text" id="etsyDraftBoxSize" placeholder="Örn: 8x8x8 cm">
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Gerçek Ürün Fotoğrafı</label>
                         <input type="file" id="etsyDraftImage" accept="image/*" style="background:white; border:1px solid #ccc; padding:8px; border-radius:4px; width:100%;">
@@ -632,6 +643,8 @@
                     const product_type = document.getElementById('etsyDraftProductType').value;
                     const concept = document.getElementById('etsyDraftConcept').value;
                     const keyword = document.getElementById('etsyDraftKeyword').value;
+                    const product_size = document.getElementById('etsyDraftProductSize').value;
+                    const box_size = document.getElementById('etsyDraftBoxSize').value;
                     
                     const btn = document.getElementById('btnEtsyGenerate');
                     const results = document.getElementById('etsyDraftResults');
@@ -645,7 +658,7 @@
                         const response = await fetch('/api/etsy-draft', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ product_type, concept, keyword })
+                            body: JSON.stringify({ product_type, concept, keyword, product_size, box_size })
                         });
                         
                         const data = await response.json();
