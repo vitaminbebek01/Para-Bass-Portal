@@ -38,6 +38,8 @@ class handler(BaseHTTPRequestHandler):
                 print(f"DEBUG: Okunan CSV sütunları: {headers}")
                 
                 records = []
+                stats = {"total_scanned": 0, "total_filtered": 0, "total_golden": 0, "total_added": 0}
+
                 for row in reader:
                     # Find the correct column names by checking lower case
                     row_lower = {str(k).strip().lower() if k else '': str(v).strip() for k, v in row.items()}
@@ -51,7 +53,9 @@ class handler(BaseHTTPRequestHandler):
                     
                     if not keyword:
                         continue
-                        
+                    
+                    stats["total_scanned"] += 1
+
                     try:
                         sv = int(sv_str) if sv_str.isdigit() else 0
                     except ValueError:
@@ -62,18 +66,32 @@ class handler(BaseHTTPRequestHandler):
                     except ValueError:
                         comp = 0
                         
-                    score = sv / comp if comp > 0 else sv
+                    # 1. Trash Filter: sv == 0 or comp > 100000
+                    if sv == 0 or comp > 100000:
+                        stats["total_filtered"] += 1
+                        continue
+                        
+                    # 2. Score Calculation and Golden Tag Boost
+                    base_score = sv / comp if comp > 0 else sv
                     
+                    if comp < 10000 and sv > 250:
+                        score = base_score + 10000  # Golden Boost
+                        stats["total_golden"] += 1
+                    else:
+                        score = base_score
+                        
                     records.append({
                         "concept": concept,
                         "keyword": keyword,
-                        "score": float(score)
+                        "score": float(score),
+                        "searches": sv,
+                        "competition": comp
                     })
 
                 if not records:
                     error_msg = f"Okunan sütunlar: {headers}"
                     print(f"ERROR: CSV parse edilemedi veya geçerli veri bulunamadı. {error_msg}")
-                    self.send_error_json(400, "CSV parse edilemedi veya geçerli veri bulunamadı.", error_msg)
+                    self.send_error_json(400, "CSV başarıyla tarandı ancak eklenecek geçerli/kaliteli veri bulunamadı.", error_msg)
                     return
 
             except Exception as e:
@@ -81,8 +99,13 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_json(400, "CSV okuma hatası", str(e))
                 return
 
+            stats["total_added"] = len(records)
             result = insert_erank_keywords(records)
-            self.send_success_json({"message": f"{len(records)} kayıt başarıyla eklendi.", "data": result})
+            self.send_success_json({
+                "message": f"{len(records)} kayıt başarıyla eklendi.", 
+                "data": result,
+                "stats": stats
+            })
 
         except Exception as e:
             err_str = str(e)

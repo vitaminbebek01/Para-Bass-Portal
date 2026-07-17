@@ -24,13 +24,15 @@ class handler(BaseHTTPRequestHandler):
             data = json.loads(post_data)
 
             product_type = data.get('product_type', '')
-            concept = data.get('concept', '')
+            concept = data.get('concept', [])
+            if isinstance(concept, str):
+                concept = [concept] if concept else []
             keyword = data.get('keyword', '')
             product_size = data.get('product_size', '')
             box_size = data.get('box_size', '')
             
             # Form search term for caching/fallback
-            base_category = f"{product_type} {concept}".strip()
+            base_category = f"{product_type} {' '.join(concept)}".strip()
             search_term = keyword if keyword else base_category
 
             if not base_category:
@@ -44,8 +46,8 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             # 2. Fetch high volume keywords from eRank DB using the concept as category tag
-            erank_data = get_erank_keywords(concept if concept else product_type)
-            keywords_list = [item.get('keyword') for item in erank_data] if erank_data else [search_term]
+            erank_data = get_erank_keywords(concept if concept else [product_type])
+            keywords_list = [{"keyword": item.get('keyword'), "searches": item.get('searches', 0), "competition": item.get('competition', 0)} for item in erank_data] if erank_data else [{"keyword": search_term, "searches": 0, "competition": 0}]
 
             # 3. Generate listing using Gemini RAG Engine
             pdf_path = os.path.join(os.getcwd(), "Etsy_2026_Algoritma_Rehberi.pdf")

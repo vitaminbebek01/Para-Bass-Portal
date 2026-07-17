@@ -13,16 +13,36 @@ if SUPABASE_URL and SUPABASE_KEY:
     except Exception as e:
         print(f"Error initializing Supabase client: {e}")
 
-def get_erank_keywords(concept: str):
+def get_erank_keywords(concept):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("erank_keywords") \
-            .select("*") \
-            .eq("concept", concept) \
-            .order("score", desc=True) \
-            .limit(15) \
-            .execute()
+        query = supabase.table("erank_keywords").select("*")
+        
+        if isinstance(concept, list):
+            query = query.in_("concept", concept)
+        else:
+            query = query.eq("concept", concept)
+            
+        response = query.order("score", desc=True).limit(50).execute()
+        return response.data
+    except Exception as e:
+        raise Exception(f"Supabase bağlantı hatası: {e}")
+
+def get_all_erank_keywords(limit=200):
+    if not supabase:
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+    try:
+        response = supabase.table("erank_keywords").select("*").order("score", desc=True).limit(limit).execute()
+        return response.data
+    except Exception as e:
+        raise Exception(f"Supabase bağlantı hatası: {e}")
+
+def delete_erank_keyword(keyword_id):
+    if not supabase:
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+    try:
+        response = supabase.table("erank_keywords").delete().eq("id", keyword_id).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")

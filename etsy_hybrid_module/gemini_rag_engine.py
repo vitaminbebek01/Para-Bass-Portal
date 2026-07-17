@@ -33,7 +33,7 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         print(f"Error reading PDF {pdf_path}: {e}")
         return ""
 
-def generate_optimized_listing(category_keywords: list, pdf_path: str, product_type: str = "", product_size: str = "", box_size: str = "") -> dict:
+def generate_optimized_listing(category_keywords_objs: list, pdf_path: str, product_type: str = "", product_size: str = "", box_size: str = "") -> dict:
     """
     Generates an optimized Etsy listing based on eRank keywords and rules from a PDF.
     Output is strictly in JSON format.
@@ -49,9 +49,8 @@ def generate_optimized_listing(category_keywords: list, pdf_path: str, product_t
             
         system_instruction = (
             "Bu PDF dosyasındaki kurallar senin Etsy algoritma anayasan'dır. "
-            "Verilen eRank kelimelerini kullanarak, SADECE bu PDF'teki kurallara "
-            "(özellikle 13 tag ve ilk 160 karakter kuralına) uygun bir SEO başlığı, "
-            "13 tag ve açıklama yaz."
+            "Verilen eRank kelimelerinden ÜRÜN TİPİ İLE SEMANTİK OLARAK EN UYUMLU OLANLARI SEÇEREK (alakasız kelimeleri eleyerek), "
+            "SADECE bu PDF'teki kurallara uygun bir SEO başlığı, 13 ana tag, 10 yedek tag ve açıklama yaz."
         )
         
         # Enforce the new strict prompt rules
@@ -61,7 +60,7 @@ def generate_optimized_listing(category_keywords: list, pdf_path: str, product_t
         )
         
         if product_type.strip().lower() in ["candle", "mum"]:
-            strict_rules += "2. MATERIAL: Since this is a Candle, DO NOT write any material information anywhere in the description.\n"
+            strict_rules += "2. MATERIAL & SCENT: Since this is a Candle, DO NOT write any material information anywhere in the description. Furthermore, these candles are UNSCENTED. Do NOT use words like scent, fragrance, or aroma. You may write 'unscented'.\n"
         else:
             strict_rules += "2. MATERIAL: You may include material information if applicable.\n"
             
@@ -86,15 +85,19 @@ def generate_optimized_listing(category_keywords: list, pdf_path: str, product_t
             "I'll always be adding new pieces to my shop, so be sure to heart my shop.\n"
             "If you have any questions , please write me :)\n"
             "Thank you :)\n"
+            "8. DESCRIPTION STYLE: Use a luxurious, aesthetic, and elegant tone that will impress guests. You MUST include a 'Perfect for:' list, and naturally emphasize the selected concepts in it. Also, SYNERGIZE the SEO tags naturally within the description sentences, don't just list them.\n"
         )
+        
+        category_keywords = [obj["keyword"] for obj in category_keywords_objs] if category_keywords_objs else []
         
         prompt = (
             f"PDF KURALLARI (ANAYASA):\n{pdf_content}\n\n"
-            f"ERANK KELİMELERİ:\n{category_keywords}\n\n"
+            f"ERANK KELİMELERİ (BUNLARDAN SADECE ANLAMLI OLANLARI SEÇ):\n{category_keywords}\n\n"
             f"{strict_rules}\n\n"
             "Lütfen aşağıdaki alanları içeren katı bir JSON formatı döndür:\n"
             "- 'title' (string)\n"
             "- 'tags' (array of exactly 13 strings)\n"
+            "- 'backup_tags' (array of exactly 10 strings)\n"
             "- 'description' (string)"
         )
         
@@ -110,34 +113,40 @@ def generate_optimized_listing(category_keywords: list, pdf_path: str, product_t
         # Gemini will return valid JSON string
         result = json.loads(response.text)
         
-        # Post-processing: 20 Character Tag Filter
+        # Post-processing: 20 Character Tag Filter & Mapping
         generated_tags = result.get("tags", [])
-        if not isinstance(generated_tags, list):
-            generated_tags = []
-            
-        valid_tags = []
+        generated_backup = result.get("backup_tags", [])
         
+        if not isinstance(generated_tags, list): generated_tags = []
+        if not isinstance(generated_backup, list): generated_backup = []
+            
         # Create a pool of unused valid keywords from eRank (<= 20 chars)
-        unused_keywords = [kw for kw in category_keywords if kw not in generated_tags and len(kw) <= 20]
+        used_set = set([str(t).strip() for t in generated_tags + generated_backup])
+        unused_keywords = [obj for obj in category_keywords_objs if obj["keyword"] not in used_set and len(obj["keyword"]) <= 20]
         
-        for tag in generated_tags:
-            tag_str = str(tag).strip()
-            if len(tag_str) <= 20:
-                valid_tags.append(tag_str)
-            else:
-                if unused_keywords:
-                    # Replace with a valid keyword from the eRank list
-                    replacement = unused_keywords.pop(0)
-                    valid_tags.append(replacement)
+        def process_tags(target_list, required_len):
+            valid_objs = []
+            for tag in target_list:
+                tag_str = str(tag).strip()
+                tag_obj = next((o for o in category_keywords_objs if o["keyword"] == tag_str), {"keyword": tag_str, "searches": 0, "competition": 0})
+                
+                if len(tag_str) <= 20:
+                    valid_objs.append(tag_obj)
                 else:
-                    # Truncate to 20 chars safely
-                    valid_tags.append(tag_str[:20].strip())
-                    
-        # Ensure exactly 13 tags
-        while len(valid_tags) < 13 and unused_keywords:
-            valid_tags.append(unused_keywords.pop(0))
+                    if unused_keywords:
+                        valid_objs.append(unused_keywords.pop(0))
+                    else:
+                        t = dict(tag_obj)
+                        t["keyword"] = tag_str[:20].strip()
+                        valid_objs.append(t)
+                        
+            while len(valid_objs) < required_len and unused_keywords:
+                valid_objs.append(unused_keywords.pop(0))
+                
+            return valid_objs[:required_len]
             
-        result["tags"] = valid_tags[:13]
+        result["tags"] = process_tags(generated_tags, 13)
+        result["backup_tags"] = process_tags(generated_backup, 10)
         
         return result
         

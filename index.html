@@ -506,8 +506,8 @@
                             </select>
                         </div>
                         <div style="flex:1;">
-                            <label>Konsept</label>
-                            <select id="etsyDraftConcept">
+                            <label>Konsept (Çoklu Seçim)</label>
+                            <select id="etsyDraftConcept" multiple size="4" style="height:auto;">
                                 <option value="Wedding">Wedding</option>
                                 <option value="Baptism">Baptism</option>
                                 <option value="Birthday">Birthday</option>
@@ -515,6 +515,7 @@
                                 <option value="Halloween">Halloween</option>
                                 <option value="Christmas">Christmas</option>
                             </select>
+                            <div style="font-size:10px; color:#888;">* Birden fazla seçmek için Ctrl/Cmd tuşuna basılı tutun.</div>
                         </div>
                     </div>
 
@@ -552,8 +553,14 @@
                         
                         <div class="result-box" style="position:relative; margin-top:15px;">
                             <button class="copy-btn" onclick="copyToClipboard('etsyResTags')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
-                            <label>13 Adet Tag (Virgülle Ayrılmış)</label>
+                            <label>13 Ana Tag (Virgülle Ayrılmış)</label>
                             <div id="etsyResTags" style="margin-top:5px; padding:10px 80px 10px 10px; border-radius:4px; border:1px solid #eee; background:white; min-height:40px;"></div>
+                        </div>
+                        
+                        <div class="result-box" style="position:relative; margin-top:15px;">
+                            <button class="copy-btn" onclick="copyToClipboard('etsyResBackupTags')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
+                            <label>10 Yedek Tag (Virgülle Ayrılmış)</label>
+                            <div id="etsyResBackupTags" style="margin-top:5px; padding:10px 80px 10px 10px; border-radius:4px; border:1px solid #eee; background:white; min-height:40px;"></div>
                         </div>
 
                         <div class="result-box" style="position:relative; margin-top:15px;">
@@ -579,7 +586,6 @@
 
                     <div style="background:#fdfdfd; padding:20px; border-radius:8px; border:1px solid #e1e8ed; flex:1; display:flex; flex-direction:column; gap:15px;">
                         
-                        <!-- CSV UPLOAD BÖLÜMÜ -->
                         <div>
                             <h3 style="margin-top:0; font-size:16px; color:#34495e;">3. eRank CSV Yükle</h3>
                             <div style="display:flex; gap:10px; margin-bottom:10px;">
@@ -594,6 +600,37 @@
                                 <input type="file" id="erankCsvFile" accept=".csv" style="flex:2; font-size:12px;">
                             </div>
                             <button class="small-btn" style="width:100%; background:#27ae60;" onclick="uploadErankCsv()">📤 CSV Yükle ve Skorla</button>
+                            
+                            <div id="csvStatsDisplay" style="display:none; margin-top:10px; padding:10px; background:#f0f4f8; border-radius:4px; font-size:12px; color:#333;">
+                                <strong>Yükleme İstatistikleri:</strong><br>
+                                Taranan: <span id="statScanned">0</span> | Elenen (Çöp): <span id="statFiltered">0</span><br>
+                                Altın Tag: <span id="statGolden">0</span> | Veritabanına Eklenen: <span id="statAdded">0</span>
+                            </div>
+                        </div>
+
+                        <hr style="border:0; border-top:1px solid #eee;">
+                        
+                        <!-- DATA POOL DASHBOARD -->
+                        <div>
+                            <h3 style="margin-top:0; font-size:16px; color:#34495e;">📊 Veri Havuzu Dashboard</h3>
+                            <button class="small-btn" style="width:100%; margin-bottom:10px; background:#34495e;" onclick="loadErankDashboard()">🔄 Havuzu Görüntüle / Yenile</button>
+                            
+                            <div id="dashboardContainer" style="display:none; max-height:250px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; background:white; font-size:12px;">
+                                <input type="text" id="dashboardSearch" placeholder="Kelime ara..." style="width:100%; margin-bottom:10px; padding:5px; box-sizing:border-box;" onkeyup="filterDashboard()">
+                                <table style="width:100%; border-collapse:collapse; text-align:left;">
+                                    <thead>
+                                        <tr style="background:#eee;">
+                                            <th style="padding:5px;">Keyword</th>
+                                            <th style="padding:5px;">Vol</th>
+                                            <th style="padding:5px;">Comp</th>
+                                            <th style="padding:5px;">İşlem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dashboardTableBody">
+                                        <!-- JS -->
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         <hr style="border:0; border-top:1px solid #eee;">
@@ -639,9 +676,39 @@
                     }, 3000);
                 }
 
+                function renderTags(tagsArray, containerId) {
+                    const container = document.getElementById(containerId);
+                    container.innerHTML = '';
+                    if(!tagsArray || tagsArray.length === 0) return;
+                    
+                    const textList = tagsArray.map(t => typeof t === 'string' ? t : t.keyword).join(', ');
+                    const hidden = document.createElement('span');
+                    hidden.id = containerId + 'Hidden';
+                    hidden.style.display = 'none';
+                    hidden.innerText = textList;
+                    container.appendChild(hidden);
+                    
+                    tagsArray.forEach(tagObj => {
+                        const isStr = typeof tagObj === 'string';
+                        const keyword = isStr ? tagObj : tagObj.keyword;
+                        const searches = isStr ? 'Bilinmiyor' : tagObj.searches;
+                        const comp = isStr ? 'Bilinmiyor' : tagObj.competition;
+                        
+                        const badge = document.createElement('span');
+                        badge.innerText = keyword.trim();
+                        badge.title = `Searches: ${searches} | Comp: ${comp}`;
+                        badge.style.cssText = "display:inline-block; background:#ffe0b2; color:#d35400; padding:4px 10px; border-radius:12px; margin:3px; font-weight:bold; font-size:12px; cursor:pointer;";
+                        badge.onclick = () => {
+                            navigator.clipboard.writeText(keyword.trim()).then(() => showEtsyToast("Tag kopyalandı!", false));
+                        };
+                        container.appendChild(badge);
+                    });
+                }
+
                 async function generateEtsyDraft() {
                     const product_type = document.getElementById('etsyDraftProductType').value;
-                    const concept = document.getElementById('etsyDraftConcept').value;
+                    const conceptOptions = document.getElementById('etsyDraftConcept').selectedOptions;
+                    const concept = Array.from(conceptOptions).map(opt => opt.value);
                     const keyword = document.getElementById('etsyDraftKeyword').value;
                     const product_size = document.getElementById('etsyDraftProductSize').value;
                     const box_size = document.getElementById('etsyDraftBoxSize').value;
@@ -668,22 +735,8 @@
                         } else {
                             document.getElementById('etsyResTitle').value = data.title || "Bulunamadı";
                             
-                            const tagsContainer = document.getElementById('etsyResTags');
-                            tagsContainer.innerHTML = '';
-                            const tagsArray = Array.isArray(data.tags) ? data.tags : (data.tags ? data.tags.split(',') : []);
-                            
-                            const hiddenTags = document.createElement('span');
-                            hiddenTags.id = 'etsyHiddenTagsContent';
-                            hiddenTags.style.display = 'none';
-                            hiddenTags.innerText = tagsArray.join(', ');
-                            tagsContainer.appendChild(hiddenTags);
-
-                            tagsArray.forEach(tag => {
-                                const badge = document.createElement('span');
-                                badge.innerText = tag.trim();
-                                badge.style.cssText = "display:inline-block; background:#ffe0b2; color:#d35400; padding:4px 10px; border-radius:12px; margin:3px; font-weight:bold; font-size:12px;";
-                                tagsContainer.appendChild(badge);
-                            });
+                            renderTags(data.tags || [], 'etsyResTags');
+                            renderTags(data.backup_tags || [], 'etsyResBackupTags');
 
                             document.getElementById('etsyResDesc').value = data.description || "Bulunamadı";
                             results.style.display = 'block';
@@ -779,8 +832,16 @@
                             if(data.error) {
                                 showEtsyToast("Hata: " + data.error);
                             } else {
-                                showEtsyToast(data.message || "CSV başarıyla yüklendi ve skorlandı!", false);
+                                showEtsyToast(data.message || "CSV başarıyla yüklendi!", false);
+                                if(data.stats) {
+                                    document.getElementById('statScanned').innerText = data.stats.total_scanned;
+                                    document.getElementById('statFiltered').innerText = data.stats.total_filtered;
+                                    document.getElementById('statGolden').innerText = data.stats.total_golden;
+                                    document.getElementById('statAdded').innerText = data.stats.total_added;
+                                    document.getElementById('csvStatsDisplay').style.display = 'block';
+                                }
                                 fileInput.value = ""; // clear input
+                                loadErankDashboard(); // refresh
                             }
                         } catch (error) {
                             showEtsyToast("Bağlantı hatası: API'ye ulaşılamadı.");
@@ -791,6 +852,78 @@
                     };
                     
                     reader.readAsText(file);
+                }
+
+                async function loadErankDashboard() {
+                    const container = document.getElementById('dashboardContainer');
+                    const tbody = document.getElementById('dashboardTableBody');
+                    container.style.display = 'block';
+                    tbody.innerHTML = "<tr><td colspan='4'><em>Yükleniyor...</em></td></tr>";
+                    
+                    try {
+                        const response = await fetch('/api/erank-dashboard');
+                        const data = await response.json();
+                        if(data.error) {
+                            tbody.innerHTML = `<tr><td colspan='4' style='color:red;'>Hata: ${data.error}</td></tr>`;
+                            return;
+                        }
+                        
+                        window.erankPoolData = data; 
+                        renderDashboardTable(data);
+                    } catch(e) {
+                        tbody.innerHTML = "<tr><td colspan='4' style='color:red;'>Bağlantı hatası.</td></tr>";
+                    }
+                }
+                
+                function renderDashboardTable(data) {
+                    const tbody = document.getElementById('dashboardTableBody');
+                    if(data.length === 0) {
+                        tbody.innerHTML = "<tr><td colspan='4'><em>Veri bulunamadı.</em></td></tr>";
+                        return;
+                    }
+                    
+                    let html = "";
+                    data.forEach(item => {
+                        html += `
+                        <tr class="dashboard-row">
+                            <td style="padding:5px;" class="kw-text">${item.keyword}</td>
+                            <td style="padding:5px;">${item.searches}</td>
+                            <td style="padding:5px;">${item.competition}</td>
+                            <td style="padding:5px;">
+                                <button class="small-btn" style="background:#e74c3c; padding:2px 5px;" onclick="deleteErankKeyword(${item.id})">Sil</button>
+                            </td>
+                        </tr>
+                        `;
+                    });
+                    tbody.innerHTML = html;
+                }
+                
+                function filterDashboard() {
+                    const search = document.getElementById('dashboardSearch').value.toLowerCase();
+                    const rows = document.querySelectorAll('.dashboard-row');
+                    rows.forEach(row => {
+                        const text = row.querySelector('.kw-text').innerText.toLowerCase();
+                        row.style.display = text.includes(search) ? '' : 'none';
+                    });
+                }
+                
+                async function deleteErankKeyword(id) {
+                    if(!confirm("Bu kelimeyi veritabanından silmek istediğinize emin misiniz?")) return;
+                    try {
+                        const response = await fetch('/api/erank-dashboard', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id })
+                        });
+                        const data = await response.json();
+                        if(data.error) showEtsyToast("Hata: " + data.error);
+                        else {
+                            showEtsyToast("Silindi!", false);
+                            loadErankDashboard();
+                        }
+                    } catch(e) {
+                        showEtsyToast("Bağlantı hatası.");
+                    }
                 }
 
                 async function loadPromptPool() {
@@ -896,8 +1029,8 @@
                 function copyToClipboard(elementId) {
                     let text = "";
                     const element = document.getElementById(elementId);
-                    if(elementId === 'etsyResTags') {
-                        text = document.getElementById('etsyHiddenTagsContent').innerText;
+                    if(elementId === 'etsyResTags' || elementId === 'etsyResBackupTags') {
+                        text = document.getElementById(elementId + 'Hidden').innerText;
                     } else if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
                         text = element.value;
                     } else {
