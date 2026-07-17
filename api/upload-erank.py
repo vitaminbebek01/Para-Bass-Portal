@@ -28,44 +28,57 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             # Parse CSV
-            f = io.StringIO(csv_content)
-            reader = csv.DictReader(f)
-            
-            records = []
-            for row in reader:
-                # Find the correct column names by checking lower case
-                row_lower = {k.strip().lower() if k else '': v for k, v in row.items()}
+            try:
+                # Clean BOM if exists
+                csv_content = csv_content.encode('utf-8').decode('utf-8-sig')
                 
-                keyword = row_lower.get('keyword', '')
+                f = io.StringIO(csv_content)
+                reader = csv.DictReader(f)
+                headers = reader.fieldnames
+                print(f"DEBUG: Okunan CSV sütunları: {headers}")
                 
-                # Search Volume could be 'search volume', 'avg searches', etc.
-                sv_str = row_lower.get('search volume', '0').replace(',', '')
-                # Competition could be 'competition'
-                comp_str = row_lower.get('competition', '0').replace(',', '')
-                
-                if not keyword:
-                    continue
+                records = []
+                for row in reader:
+                    # Find the correct column names by checking lower case
+                    row_lower = {str(k).strip().lower() if k else '': str(v).strip() for k, v in row.items()}
                     
-                try:
-                    sv = int(sv_str) if sv_str.isdigit() else 0
-                except ValueError:
-                    sv = 0
+                    keyword = row_lower.get('keywords', row_lower.get('keyword', ''))
                     
-                try:
-                    comp = int(comp_str) if comp_str.isdigit() else 0
-                except ValueError:
-                    comp = 0
+                    # Search Volume could be 'average searches', 'search volume', etc.
+                    sv_str = row_lower.get('average searches', row_lower.get('search volume', '0')).replace(',', '')
+                    # Competition could be 'competition'
+                    comp_str = row_lower.get('competition', '0').replace(',', '')
                     
-                score = sv / comp if comp > 0 else sv
-                
-                records.append({
-                    "concept": concept,
-                    "keyword": keyword,
-                    "score": float(score)
-                })
+                    if not keyword:
+                        continue
+                        
+                    try:
+                        sv = int(sv_str) if sv_str.isdigit() else 0
+                    except ValueError:
+                        sv = 0
+                        
+                    try:
+                        comp = int(comp_str) if comp_str.isdigit() else 0
+                    except ValueError:
+                        comp = 0
+                        
+                    score = sv / comp if comp > 0 else sv
+                    
+                    records.append({
+                        "concept": concept,
+                        "keyword": keyword,
+                        "score": float(score)
+                    })
 
-            if not records:
-                self.send_error_json(400, "CSV parse edilemedi veya geçerli veri bulunamadı.")
+                if not records:
+                    error_msg = f"Okunan sütunlar: {headers}"
+                    print(f"ERROR: CSV parse edilemedi veya geçerli veri bulunamadı. {error_msg}")
+                    self.send_error_json(400, "CSV parse edilemedi veya geçerli veri bulunamadı.", error_msg)
+                    return
+
+            except Exception as e:
+                print(f"ERROR while parsing CSV: {e}")
+                self.send_error_json(400, "CSV okuma hatası", str(e))
                 return
 
             result = insert_erank_keywords(records)
