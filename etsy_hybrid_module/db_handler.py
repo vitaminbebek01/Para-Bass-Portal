@@ -13,73 +13,68 @@ if SUPABASE_URL and SUPABASE_KEY:
     except Exception as e:
         print(f"Error initializing Supabase client: {e}")
 
-def get_erank_keywords(category: str):
+def get_erank_keywords(concept: str):
     if not supabase:
-        print("Warning: Supabase client is not initialized.")
-        return []
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("erank_data") \
+        response = supabase.table("erank_keywords") \
             .select("*") \
-            .eq("category", category) \
-            .order("search_volume", desc=True) \
+            .eq("concept", concept) \
+            .order("score", desc=True) \
             .limit(15) \
             .execute()
         return response.data
     except Exception as e:
-        print(f"Error fetching erank keywords for category '{category}': {e}")
-        return []
+        raise Exception(f"Supabase bağlantı hatası: {e}")
 
 def insert_erank_keywords(records: list):
     """
-    Inserts a list of dicts into erank_data.
-    Example record: {"category": "Wedding", "keyword": "wedding gift", "search_volume": 1000}
+    Inserts a list of dicts into erank_keywords.
+    Example record: {"concept": "Wedding", "keyword": "wedding gift", "score": 1000}
     """
     if not supabase:
-        return {"error": "Supabase client is not initialized"}
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("erank_data").insert(records).execute()
+        response = supabase.table("erank_keywords").insert(records).execute()
         return response.data
     except Exception as e:
-        return {"error": str(e)}
+        raise Exception(f"Supabase bağlantı hatası: {e}")
 
 def get_prompt_pool():
     if not supabase:
-        print("Warning: Supabase client is not initialized.")
-        return []
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        # Assuming table has 'id' and 'content' columns.
         response = supabase.table("prompt_pool").select("*").order("id").execute()
         return response.data
     except Exception as e:
-        print(f"Error fetching prompt pool: {e}")
-        return []
+        raise Exception(f"Supabase bağlantı hatası: {e}")
 
 def add_prompt(content: str):
     if not supabase:
-        return {"error": "Supabase is missing"}
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
         response = supabase.table("prompt_pool").insert({"content": content}).execute()
         return response.data
     except Exception as e:
-        return {"error": str(e)}
+        raise Exception(f"Supabase bağlantı hatası: {e}")
 
 def update_prompt(prompt_id: int, content: str):
     if not supabase:
-        return {"error": "Supabase is missing"}
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
         response = supabase.table("prompt_pool").update({"content": content}).eq("id", prompt_id).execute()
         return response.data
     except Exception as e:
-        return {"error": str(e)}
+        raise Exception(f"Supabase bağlantı hatası: {e}")
 
 def delete_prompt(prompt_id: int):
     if not supabase:
-        return {"error": "Supabase is missing"}
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
         response = supabase.table("prompt_pool").delete().eq("id", prompt_id).execute()
         return response.data
     except Exception as e:
-        return {"error": str(e)}
+        raise Exception(f"Supabase bağlantı hatası: {e}")
 
 def check_cached_seo(category_id: str):
     if not supabase:

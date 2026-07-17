@@ -59,9 +59,8 @@ class handler(BaseHTTPRequestHandler):
                 score = sv / comp if comp > 0 else sv
                 
                 records.append({
-                    "category": concept,
+                    "concept": concept,
                     "keyword": keyword,
-                    "search_volume": sv,
                     "score": float(score)
                 })
 
@@ -69,31 +68,27 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_json(400, "CSV parse edilemedi veya geçerli veri bulunamadı.")
                 return
 
-            # Try to insert with score column first
             result = insert_erank_keywords(records)
-            if isinstance(result, dict) and "error" in result:
-                # If 'score' column doesn't exist in Supabase, fallback to mapping score to search_volume
-                safe_records = [{"category": r["category"], "keyword": r["keyword"], "search_volume": int(r["score"])} for r in records]
-                result_fallback = insert_erank_keywords(safe_records)
-                
-                if isinstance(result_fallback, dict) and "error" in result_fallback:
-                    self.send_error_json(500, result_fallback["error"])
-                else:
-                    self.send_success_json({"message": f"{len(safe_records)} kayıt başarıyla skorlanarak eklendi.", "data": result_fallback})
-            else:
-                self.send_success_json({"message": f"{len(records)} kayıt başarıyla eklendi.", "data": result})
+            self.send_success_json({"message": f"{len(records)} kayıt başarıyla eklendi.", "data": result})
 
         except Exception as e:
-            self.send_error_json(500, str(e))
+            err_str = str(e)
+            if "Supabase" in err_str:
+                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+            else:
+                self.send_error_json(500, "Sunucu hatası", err_str)
 
-    def send_error_json(self, status, message):
+    def send_error_json(self, status, message, details=None):
         self.send_response(status)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        self.wfile.write(json.dumps({"error": message}).encode('utf-8'))
+        response_dict = {"error": message}
+        if details:
+            response_dict["details"] = details
+        self.wfile.write(json.dumps(response_dict).encode('utf-8'))
 
     def send_success_json(self, data):
         self.send_response(200)

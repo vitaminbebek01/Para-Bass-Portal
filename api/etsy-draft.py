@@ -46,7 +46,7 @@ class handler(BaseHTTPRequestHandler):
             keywords_list = [item.get('keyword') for item in erank_data] if erank_data else [search_term]
 
             # 3. Generate listing using Gemini RAG Engine
-            pdf_path = os.path.join(parent_dir, "Etsy_2026_Algoritma_Rehberi.pdf")
+            pdf_path = os.path.join(os.getcwd(), "Etsy_2026_Algoritma_Rehberi.pdf")
             result = generate_optimized_listing(keywords_list, pdf_path)
 
             if "error" in result:
@@ -56,9 +56,13 @@ class handler(BaseHTTPRequestHandler):
             self.send_success_json(result)
 
         except Exception as e:
-            self.send_error_json(500, str(e))
+            err_str = str(e)
+            if "Supabase" in err_str:
+                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+            else:
+                self.send_error_json(500, "Sunucu hatası", err_str)
 
-    def send_error_json(self, status, message):
+    def send_error_json(self, status, message, details=None):
         self.send_response(status)
         self.send_header('Content-type', 'application/json')
         # Handle CORS
@@ -66,7 +70,10 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        self.wfile.write(json.dumps({"error": message}).encode('utf-8'))
+        response_dict = {"error": message}
+        if details:
+            response_dict["details"] = details
+        self.wfile.write(json.dumps(response_dict).encode('utf-8'))
 
     def send_success_json(self, data):
         self.send_response(200)

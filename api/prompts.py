@@ -17,7 +17,11 @@ class handler(BaseHTTPRequestHandler):
             data = get_prompt_pool()
             self.send_success_json(data)
         except Exception as e:
-            self.send_error_json(500, str(e))
+            err_str = str(e)
+            if "Supabase" in err_str:
+                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+            else:
+                self.send_error_json(500, "Sunucu hatası", err_str)
 
     def do_POST(self):
         try:
@@ -36,7 +40,11 @@ class handler(BaseHTTPRequestHandler):
             else:
                 self.send_success_json(result)
         except Exception as e:
-            self.send_error_json(500, str(e))
+            err_str = str(e)
+            if "Supabase" in err_str:
+                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+            else:
+                self.send_error_json(500, "Sunucu hatası", err_str)
 
     def do_PUT(self):
         try:
@@ -57,7 +65,11 @@ class handler(BaseHTTPRequestHandler):
             else:
                 self.send_success_json(result)
         except Exception as e:
-            self.send_error_json(500, str(e))
+            err_str = str(e)
+            if "Supabase" in err_str:
+                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+            else:
+                self.send_error_json(500, "Sunucu hatası", err_str)
 
     def do_DELETE(self):
         try:
@@ -77,16 +89,23 @@ class handler(BaseHTTPRequestHandler):
             else:
                 self.send_success_json(result)
         except Exception as e:
-            self.send_error_json(500, str(e))
+            err_str = str(e)
+            if "Supabase" in err_str:
+                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+            else:
+                self.send_error_json(500, "Sunucu hatası", err_str)
 
-    def send_error_json(self, status, message):
+    def send_error_json(self, status, message, details=None):
         self.send_response(status)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        self.wfile.write(json.dumps({"error": message}).encode('utf-8'))
+        response_dict = {"error": message}
+        if details:
+            response_dict["details"] = details
+        self.wfile.write(json.dumps(response_dict).encode('utf-8'))
 
     def send_success_json(self, data):
         self.send_response(200)
