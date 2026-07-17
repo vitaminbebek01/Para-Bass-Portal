@@ -1,9 +1,9 @@
 import sys
 from supabase import create_client, Client
 try:
-    from .config import SUPABASE_URL, SUPABASE_KEY
+    from etsy_hybrid_module.config import SUPABASE_URL, SUPABASE_KEY
 except ImportError:
-    from config import SUPABASE_URL, SUPABASE_KEY
+    from .config import SUPABASE_URL, SUPABASE_KEY
 
 # Initialize Supabase client
 supabase: Client = None

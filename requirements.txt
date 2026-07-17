@@ -2,3 +2,4 @@ supabase
 google-generativeai
 PyPDF2
 opencv-python-headless
+python-dotenv

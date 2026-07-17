@@ -63,16 +63,23 @@ class handler(BaseHTTPRequestHandler):
             self.send_success_json({"image": f"data:image/jpeg;base64,{processed_base64}"})
 
         except Exception as e:
-            self.send_error_json(500, str(e))
+            err_str = str(e)
+            if "OpenCV" in err_str or "cv2" in err_str:
+                self.send_error_json(500, "Filigran silme işlemi başarısız oldu", err_str)
+            else:
+                self.send_error_json(500, "Sunucu hatası", err_str)
 
-    def send_error_json(self, status, message):
+    def send_error_json(self, status, message, details=None):
         self.send_response(status)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        self.wfile.write(json.dumps({"error": message}).encode('utf-8'))
+        response_dict = {"error": message}
+        if details:
+            response_dict["details"] = details
+        self.wfile.write(json.dumps(response_dict).encode('utf-8'))
 
     def send_success_json(self, data):
         self.send_response(200)

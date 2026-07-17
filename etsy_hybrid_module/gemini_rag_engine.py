@@ -3,9 +3,9 @@ import json
 import google.generativeai as genai
 import PyPDF2
 try:
-    from .config import GEMINI_API_KEY
+    from etsy_hybrid_module.config import GEMINI_API_KEY
 except ImportError:
-    from config import GEMINI_API_KEY
+    from .config import GEMINI_API_KEY
 
 # Configure Gemini
 if GEMINI_API_KEY:
