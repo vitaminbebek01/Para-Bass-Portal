@@ -506,16 +506,18 @@
                             </select>
                         </div>
                         <div style="flex:1;">
-                            <label>Konsept (Çoklu Seçim)</label>
-                            <select id="etsyDraftConcept" multiple size="4" style="height:auto;">
-                                <option value="Wedding">Wedding</option>
-                                <option value="Baptism">Baptism</option>
-                                <option value="Birthday">Birthday</option>
-                                <option value="Baby Shower">Baby Shower</option>
-                                <option value="Halloween">Halloween</option>
-                                <option value="Christmas">Christmas</option>
-                            </select>
-                            <div style="font-size:10px; color:#888;">* Birden fazla seçmek için Ctrl/Cmd tuşuna basılı tutun.</div>
+                            <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                                Konsept (Çoklu Seçim)
+                                <button class="small-btn" style="background:#bdc3c7; color:#333; padding:2px 6px; font-size:10px; border:none; border-radius:3px; cursor:pointer;" onclick="toggleAllConcepts()">Tümünü Seç / Temizle</button>
+                            </label>
+                            <div id="etsyDraftConceptGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:5px; background:white; border:1px solid #ccc; border-radius:4px; padding:10px; max-height:120px; overflow-y:auto;">
+                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Wedding" class="concept-cb"> Wedding</label>
+                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Baptism" class="concept-cb"> Baptism</label>
+                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Birthday" class="concept-cb"> Birthday</label>
+                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Baby Shower" class="concept-cb"> Baby Shower</label>
+                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Halloween" class="concept-cb"> Halloween</label>
+                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Christmas" class="concept-cb"> Christmas</label>
+                            </div>
                         </div>
                     </div>
 
@@ -527,11 +529,11 @@
                     <div class="form-group" style="display:flex; gap:10px;">
                         <div style="flex:1;">
                             <label>Ürün Boyutu (Opsiyonel)</label>
-                            <input type="text" id="etsyDraftProductSize" placeholder="Örn: 7x7 cm">
+                            <input type="text" id="etsyDraftProductSize" placeholder="Örn: 7x7 cm" value="7x7 cm">
                         </div>
                         <div style="flex:1;">
                             <label>Kutu Boyutu (Opsiyonel)</label>
-                            <input type="text" id="etsyDraftBoxSize" placeholder="Örn: 8x8x8 cm">
+                            <input type="text" id="etsyDraftBoxSize" placeholder="Örn: 8x8x8 cm" value="7x7x3 cm">
                         </div>
                     </div>
 
@@ -676,6 +678,31 @@
                     }, 3000);
                 }
 
+                async function fetchWithRetry(url, options = {}, retries = 3, backoff = 1000) {
+                    for (let i = 0; i < retries; i++) {
+                        try {
+                            const response = await fetch(url, options);
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            return response;
+                        } catch (err) {
+                            console.warn(`Fetch failed (Attempt ${i + 1}/${retries}): ${err.message}`);
+                            if (i < retries - 1) {
+                                await new Promise(resolve => setTimeout(resolve, backoff * (i + 1)));
+                            } else {
+                                throw err;
+                            }
+                        }
+                    }
+                }
+
+                function toggleAllConcepts() {
+                    const checkboxes = document.querySelectorAll('.concept-cb');
+                    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                    checkboxes.forEach(cb => cb.checked = !allChecked);
+                }
+
                 function renderTags(tagsArray, containerId) {
                     const container = document.getElementById(containerId);
                     container.innerHTML = '';
@@ -707,8 +734,8 @@
 
                 async function generateEtsyDraft() {
                     const product_type = document.getElementById('etsyDraftProductType').value;
-                    const conceptOptions = document.getElementById('etsyDraftConcept').selectedOptions;
-                    const concept = Array.from(conceptOptions).map(opt => opt.value);
+                    const checkboxes = document.querySelectorAll('.concept-cb:checked');
+                    const concept = Array.from(checkboxes).map(cb => cb.value);
                     const keyword = document.getElementById('etsyDraftKeyword').value;
                     const product_size = document.getElementById('etsyDraftProductSize').value;
                     const box_size = document.getElementById('etsyDraftBoxSize').value;
@@ -716,13 +743,18 @@
                     const btn = document.getElementById('btnEtsyGenerate');
                     const results = document.getElementById('etsyDraftResults');
                     
+                    if (concept.length === 0) {
+                        showEtsyToast("Lütfen en az bir konsept seçin!");
+                        return;
+                    }
+                    
                     btn.disabled = true;
                     btn.innerHTML = "Üretiliyor... ⏳";
                     btn.style.opacity = "0.7";
                     results.style.display = 'none';
 
                     try {
-                        const response = await fetch('/api/etsy-draft', {
+                        const response = await fetchWithRetry('/api/etsy-draft', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ product_type, concept, keyword, product_size, box_size })
@@ -770,7 +802,7 @@
                         const base64String = reader.result;
                         
                         try {
-                            const response = await fetch('/api/remove-watermark', {
+                            const response = await fetchWithRetry('/api/remove-watermark', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ image: base64String })
@@ -821,7 +853,7 @@
                         const csvContent = reader.result;
                         
                         try {
-                            const response = await fetch('/api/upload-erank', {
+                            const response = await fetchWithRetry('/api/upload-erank', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ concept: concept, csv_content: csvContent })
@@ -861,7 +893,7 @@
                     tbody.innerHTML = "<tr><td colspan='4'><em>Yükleniyor...</em></td></tr>";
                     
                     try {
-                        const response = await fetch('/api/erank-dashboard');
+                        const response = await fetchWithRetry('/api/erank-dashboard');
                         const data = await response.json();
                         if(data.error) {
                             tbody.innerHTML = `<tr><td colspan='4' style='color:red;'>Hata: ${data.error}</td></tr>`;
@@ -910,7 +942,7 @@
                 async function deleteErankKeyword(id) {
                     if(!confirm("Bu kelimeyi veritabanından silmek istediğinize emin misiniz?")) return;
                     try {
-                        const response = await fetch('/api/erank-dashboard', {
+                        const response = await fetchWithRetry('/api/erank-dashboard', {
                             method: 'DELETE',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ id })
@@ -929,7 +961,7 @@
                 async function loadPromptPool() {
                     document.getElementById('etsyPromptPool').innerHTML = "<em>Yükleniyor...</em>";
                     try {
-                        const response = await fetch('/api/prompts');
+                        const response = await fetchWithRetry('/api/prompts');
                         const data = await response.json();
                         
                         if(data.error) {
@@ -966,7 +998,7 @@
                         return;
                     }
                     try {
-                        const response = await fetch('/api/prompts', {
+                        const response = await fetchWithRetry('/api/prompts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ content })
@@ -988,7 +1020,7 @@
                 async function deletePrompt(id) {
                     if(!confirm("Bu promptu silmek istediğinize emin misiniz?")) return;
                     try {
-                        const response = await fetch('/api/prompts', {
+                        const response = await fetchWithRetry('/api/prompts', {
                             method: 'DELETE',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ id })
@@ -1010,7 +1042,7 @@
                     if(newContent === null || newContent.trim() === "") return;
                     
                     try {
-                        const response = await fetch('/api/prompts', {
+                        const response = await fetchWithRetry('/api/prompts', {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ id, content: newContent.trim() })
