@@ -48,11 +48,12 @@ def delete_erank_keyword(keyword_id_or_ids):
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
         if isinstance(keyword_id_or_ids, list):
+            # UUIDs are strings, don't cast to int
             for i in keyword_id_or_ids:
-                supabase.table("erank_keywords").delete().eq("id", int(i)).execute()
+                supabase.table("erank_keywords").delete().eq("id", str(i)).execute()
             return True
         else:
-            response = supabase.table("erank_keywords").delete().eq("id", int(keyword_id_or_ids)).execute()
+            response = supabase.table("erank_keywords").delete().eq("id", str(keyword_id_or_ids)).execute()
             return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası (delete_erank_keyword): {e}")
@@ -79,29 +80,29 @@ def get_prompt_pool():
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
-def add_prompt(title: str, content: str):
+def add_prompt(title: str, content: str, new_id: str):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("prompt_pool").insert({"title": title, "content": content}).execute()
+        response = supabase.table("prompt_pool").insert({"id": new_id, "title": title, "content": content}).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
-def update_prompt(prompt_id: int, title: str, content: str):
+def update_prompt(prompt_id: str, title: str, content: str):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("prompt_pool").update({"title": title, "content": content}).eq("id", int(prompt_id)).execute()
+        response = supabase.table("prompt_pool").update({"title": title, "content": content}).eq("id", str(prompt_id)).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası (update_prompt): {e}")
 
-def delete_prompt(prompt_id: int):
+def delete_prompt(prompt_id: str):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("prompt_pool").delete().eq("id", int(prompt_id)).execute()
+        response = supabase.table("prompt_pool").delete().eq("id", str(prompt_id)).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası (delete_prompt): {e}")

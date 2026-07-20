@@ -19,6 +19,45 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_error_json(500, "Sunucu hatası", str(e))
 
+    def do_POST(self):
+        import traceback
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_error_json(400, "Boş veri gönderildi (Content-Length 0).")
+                return
+
+            post_data = self.rfile.read(content_length)
+            
+            try:
+                data = json.loads(post_data.decode('utf-8')) if post_data else {}
+            except Exception as json_err:
+                traceback.print_exc()
+                self.send_error_json(400, "Geçersiz JSON formatı.", str(json_err))
+                return
+            
+            action = data.get('action')
+            if action == 'delete':
+                keyword_id = data.get('id')
+                keyword_ids = data.get('ids')
+                
+                if keyword_ids and isinstance(keyword_ids, list):
+                    # Validate strings
+                    valid_ids = [str(i) for i in keyword_ids if i]
+                    delete_erank_keyword(valid_ids)
+                elif keyword_id:
+                    delete_erank_keyword(str(keyword_id))
+                else:
+                    self.send_error_json(400, "Silinecek ID veya IDS eksik.")
+                    return
+                    
+                self.send_success_json({"success": True, "message": "Başarıyla silindi."})
+            else:
+                self.send_error_json(400, "Geçersiz aksiyon.")
+        except Exception as e:
+            traceback.print_exc()
+            self.send_error_json(400, "Sunucu hatası (POST/Delete): " + str(e))
+
     def do_DELETE(self):
         import traceback
         try:
@@ -40,9 +79,10 @@ class handler(BaseHTTPRequestHandler):
             keyword_ids = data.get('ids')
             
             if keyword_ids and isinstance(keyword_ids, list):
-                delete_erank_keyword(keyword_ids)
+                valid_ids = [str(i) for i in keyword_ids if i]
+                delete_erank_keyword(valid_ids)
             elif keyword_id:
-                delete_erank_keyword(keyword_id)
+                delete_erank_keyword(str(keyword_id))
             else:
                 self.send_error_json(400, "Silinecek ID veya IDS eksik.")
                 return
@@ -50,7 +90,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_success_json({"success": True, "message": "Başarıyla silindi."})
         except Exception as e:
             traceback.print_exc()
-            self.send_error_json(500, "Sunucu hatası (DELETE)", str(e))
+            self.send_error_json(400, "Sunucu hatası (DELETE): " + str(e))
 
     def send_error_json(self, status, message, details=None):
         self.send_response(status)

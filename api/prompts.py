@@ -25,6 +25,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         import traceback
+        import uuid
         try:
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length == 0:
@@ -45,7 +46,8 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_json(400, "Content is required.")
                 return
 
-            result = add_prompt(title, content)
+            new_id = str(uuid.uuid4())
+            result = add_prompt(title, content, new_id)
             if isinstance(result, dict) and "error" in result:
                 self.send_error_json(500, result["error"])
             else:

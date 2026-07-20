@@ -1059,7 +1059,8 @@
                 }
                 
                 async function deleteSelectedErankKeywords() {
-                    const selected = Array.from(document.querySelectorAll('.erank-row-cb:checked')).map(cb => parseInt(cb.value));
+                    // Extract exact string values (UUIDs)
+                    const selected = Array.from(document.querySelectorAll('.erank-row-cb:checked')).map(cb => cb.value);
                     if(selected.length === 0) {
                         alert("Lütfen silinecek kelimeleri seçin.");
                         return;
@@ -1068,20 +1069,20 @@
                     
                     try {
                         const response = await fetchWithRetry('/api/erank-dashboard', {
-                            method: 'DELETE',
+                            method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ids: selected })
+                            body: JSON.stringify({ action: 'delete', ids: selected })
                         });
                         const data = await response.json();
-                        if(data.error) {
-                            alert("Hata: " + data.error);
+                        if(data.error || data.success === false) {
+                            alert("Hata: " + (data.error || "Bilinmeyen hata"));
                         } else {
                             showEtsyToast(data.message || "Başarıyla silindi.", false);
                             document.getElementById('erankSelectAll').checked = false;
                             loadErankDashboard();
                         }
                     } catch(e) {
-                        alert("Bağlantı hatası.");
+                        alert("Bağlantı hatası: " + e.message);
                     }
                 }
                 
@@ -1089,12 +1090,12 @@
                     if(!confirm("Bu kelimeyi veritabanından silmek istediğinize emin misiniz?")) return;
                     try {
                         const response = await fetchWithRetry('/api/erank-dashboard', {
-                            method: 'DELETE',
+                            method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id })
+                            body: JSON.stringify({ action: 'delete', id: String(id) })
                         });
                         const data = await response.json();
-                        if(data.error) showEtsyToast("Hata: " + data.error);
+                        if(data.error || data.success === false) showEtsyToast("Hata: " + data.error);
                         else {
                             showEtsyToast("Silindi!", false);
                             loadErankDashboard();
@@ -1129,8 +1130,8 @@
                                         </div>
                                         <div style='display:flex; gap:5px; flex-shrink:0;'>
                                             <button class='small-btn' style='background:#f39c12; padding:2px 5px; font-size:10px;' onclick='copyToClipboard("dbPrompt${p.id}")'>Kopyala</button>
-                                            <button class='small-btn' style='background:#3498db; padding:2px 5px; font-size:10px;' onclick='editPrompt(${p.id}, "${(p.title || "").replace(/"/g, "&quot;")}")'>Düzenle</button>
-                                            <button class='small-btn' style='background:#e74c3c; padding:2px 5px; font-size:10px;' onclick='deletePrompt(${p.id})'>Sil</button>
+                                            <button class='small-btn' style='background:#3498db; padding:2px 5px; font-size:10px;' onclick='editPrompt("${p.id}", "${(p.title || "").replace(/"/g, "&quot;")}")'>Düzenle</button>
+                                            <button class='small-btn' style='background:#e74c3c; padding:2px 5px; font-size:10px;' onclick='deletePrompt("${p.id}")'>Sil</button>
                                         </div>
                                     </div>`;
                                 });
