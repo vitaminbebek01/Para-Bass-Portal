@@ -24,10 +24,20 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_json(500, "Sunucu hatası", err_str)
 
     def do_POST(self):
+        import traceback
         try:
             content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_error_json(400, "Boş veri gönderildi.")
+                return
+
             post_data = self.rfile.read(content_length)
-            data = json.loads(post_data)
+            try:
+                data = json.loads(post_data.decode('utf-8')) if post_data else {}
+            except Exception as json_err:
+                traceback.print_exc()
+                self.send_error_json(400, "Geçersiz JSON formatı.", str(json_err))
+                return
             
             title = data.get('title', 'Başlıksız Prompt')
             content = data.get('content')
@@ -41,17 +51,28 @@ class handler(BaseHTTPRequestHandler):
             else:
                 self.send_success_json(result)
         except Exception as e:
+            traceback.print_exc()
             err_str = str(e)
             if "Supabase" in err_str:
-                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+                self.send_error_json(500, "Supabase bağlantı hatası (POST)", err_str)
             else:
-                self.send_error_json(500, "Sunucu hatası", err_str)
+                self.send_error_json(500, "Sunucu hatası (POST)", err_str)
 
     def do_PUT(self):
+        import traceback
         try:
             content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_error_json(400, "Boş veri gönderildi.")
+                return
+
             post_data = self.rfile.read(content_length)
-            data = json.loads(post_data)
+            try:
+                data = json.loads(post_data.decode('utf-8')) if post_data else {}
+            except Exception as json_err:
+                traceback.print_exc()
+                self.send_error_json(400, "Geçersiz JSON formatı.", str(json_err))
+                return
             
             prompt_id = data.get('id')
             title = data.get('title', 'Başlıksız Prompt')
@@ -67,17 +88,28 @@ class handler(BaseHTTPRequestHandler):
             else:
                 self.send_success_json(result)
         except Exception as e:
+            traceback.print_exc()
             err_str = str(e)
             if "Supabase" in err_str:
-                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+                self.send_error_json(500, "Supabase bağlantı hatası (PUT)", err_str)
             else:
-                self.send_error_json(500, "Sunucu hatası", err_str)
+                self.send_error_json(500, "Sunucu hatası (PUT)", err_str)
 
     def do_DELETE(self):
+        import traceback
         try:
             content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_error_json(400, "Boş veri gönderildi.")
+                return
+                
             post_data = self.rfile.read(content_length)
-            data = json.loads(post_data)
+            try:
+                data = json.loads(post_data.decode('utf-8')) if post_data else {}
+            except Exception as json_err:
+                traceback.print_exc()
+                self.send_error_json(400, "Geçersiz JSON formatı.", str(json_err))
+                return
             
             prompt_id = data.get('id')
             
@@ -91,11 +123,12 @@ class handler(BaseHTTPRequestHandler):
             else:
                 self.send_success_json(result)
         except Exception as e:
+            traceback.print_exc()
             err_str = str(e)
             if "Supabase" in err_str:
-                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+                self.send_error_json(500, "Supabase bağlantı hatası (DELETE)", err_str)
             else:
-                self.send_error_json(500, "Sunucu hatası", err_str)
+                self.send_error_json(500, "Sunucu hatası (DELETE)", err_str)
 
     def send_error_json(self, status, message, details=None):
         self.send_response(status)
@@ -104,7 +137,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        response_dict = {"error": message}
+        response_dict = {"success": False, "error": message}
         if details:
             response_dict["details"] = details
         self.wfile.write(json.dumps(response_dict).encode('utf-8'))

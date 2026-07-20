@@ -20,14 +20,21 @@ class handler(BaseHTTPRequestHandler):
             self.send_error_json(500, "Sunucu hatası", str(e))
 
     def do_DELETE(self):
+        import traceback
         try:
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length == 0:
-                self.send_error_json(400, "ID belirtilmedi.")
+                self.send_error_json(400, "Boş veri gönderildi (Content-Length 0).")
                 return
 
             post_data = self.rfile.read(content_length)
-            data = json.loads(post_data)
+            
+            try:
+                data = json.loads(post_data.decode('utf-8')) if post_data else {}
+            except Exception as json_err:
+                traceback.print_exc()
+                self.send_error_json(400, "Geçersiz JSON formatı.", str(json_err))
+                return
             
             keyword_id = data.get('id')
             keyword_ids = data.get('ids')
@@ -37,11 +44,13 @@ class handler(BaseHTTPRequestHandler):
             elif keyword_id:
                 delete_erank_keyword(keyword_id)
             else:
-                self.send_error_json(400, "Silinecek ID eksik.")
+                self.send_error_json(400, "Silinecek ID veya IDS eksik.")
                 return
-            self.send_success_json({"message": "Başarıyla silindi."})
+                
+            self.send_success_json({"success": True, "message": "Başarıyla silindi."})
         except Exception as e:
-            self.send_error_json(500, "Sunucu hatası", str(e))
+            traceback.print_exc()
+            self.send_error_json(500, "Sunucu hatası (DELETE)", str(e))
 
     def send_error_json(self, status, message, details=None):
         self.send_response(status)
@@ -50,7 +59,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        response_dict = {"error": message}
+        response_dict = {"success": False, "error": message}
         if details:
             response_dict["details"] = details
         self.wfile.write(json.dumps(response_dict).encode('utf-8'))

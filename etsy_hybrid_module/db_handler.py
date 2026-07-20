@@ -49,13 +49,13 @@ def delete_erank_keyword(keyword_id_or_ids):
     try:
         if isinstance(keyword_id_or_ids, list):
             for i in keyword_id_or_ids:
-                supabase.table("erank_keywords").delete().eq("id", i).execute()
+                supabase.table("erank_keywords").delete().eq("id", int(i)).execute()
             return True
         else:
-            response = supabase.table("erank_keywords").delete().eq("id", keyword_id_or_ids).execute()
+            response = supabase.table("erank_keywords").delete().eq("id", int(keyword_id_or_ids)).execute()
             return response.data
     except Exception as e:
-        raise Exception(f"Supabase bağlantı hatası: {e}")
+        raise Exception(f"Supabase bağlantı hatası (delete_erank_keyword): {e}")
 
 def insert_erank_keywords(records: list):
     """
@@ -92,19 +92,19 @@ def update_prompt(prompt_id: int, title: str, content: str):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("prompt_pool").update({"title": title, "content": content}).eq("id", prompt_id).execute()
+        response = supabase.table("prompt_pool").update({"title": title, "content": content}).eq("id", int(prompt_id)).execute()
         return response.data
     except Exception as e:
-        raise Exception(f"Supabase bağlantı hatası: {e}")
+        raise Exception(f"Supabase bağlantı hatası (update_prompt): {e}")
 
 def delete_prompt(prompt_id: int):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("prompt_pool").delete().eq("id", prompt_id).execute()
+        response = supabase.table("prompt_pool").delete().eq("id", int(prompt_id)).execute()
         return response.data
     except Exception as e:
-        raise Exception(f"Supabase bağlantı hatası: {e}")
+        raise Exception(f"Supabase bağlantı hatası (delete_prompt): {e}")
 
 def check_cached_seo(category_id: str):
     if not supabase:
