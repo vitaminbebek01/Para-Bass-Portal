@@ -34,22 +34,30 @@ class handler(BaseHTTPRequestHandler):
                 
                 f = io.StringIO(csv_content)
                 reader = csv.DictReader(f)
+                
+                # Sütun isimlerini küçük harfe çevir ve boşlukları temizle (Bulletproof)
+                if reader.fieldnames:
+                    reader.fieldnames = [str(x).strip().lower() for x in reader.fieldnames if x]
+                
                 headers = reader.fieldnames
-                print(f"DEBUG: Okunan CSV sütunları: {headers}")
+                print(f"DEBUG: Normalize edilmiş CSV sütunları: {headers}")
                 
                 records = []
                 stats = {"added": 0, "rejected_single_word": 0, "rejected_low_search": 0, "rejected_high_comp": 0, "total_golden": 0}
 
                 for row in reader:
-                    # Find the correct column names by checking lower case
-                    row_lower = {str(k).strip().lower() if k else '': str(v).strip() for k, v in row.items()}
+                    # DictReader artık küçük harfli temiz anahtarlar dönecek.
+                    # None olan hücre değerlerini boş stringe çevir
+                    safe_row = {k: str(v).strip() if v is not None else "" for k, v in row.items()}
                     
-                    keyword = row_lower.get('keywords', row_lower.get('keyword', ''))
+                    keyword = safe_row.get('keywords', safe_row.get('keyword', safe_row.get('tag', '')))
                     
-                    # Search Volume could be 'average searches', 'search volume', etc.
-                    sv_str = row_lower.get('average searches', row_lower.get('search volume', '0')).replace(',', '')
-                    # Competition could be 'competition'
-                    comp_str = row_lower.get('competition', '0').replace(',', '')
+                    # Search Volume ve Competition
+                    sv_str = safe_row.get('average searches', safe_row.get('search volume', safe_row.get('searches', '0')))
+                    sv_str = sv_str.replace(',', '').replace('<', '').replace('>', '').replace(' ', '')
+                    
+                    comp_str = safe_row.get('competition', '0')
+                    comp_str = comp_str.replace(',', '').replace('<', '').replace('>', '').replace(' ', '')
                     
                     if not keyword:
                         continue

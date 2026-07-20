@@ -769,7 +769,9 @@
                     for (let i = 0; i < retries; i++) {
                         try {
                             const response = await fetch(url, options);
-                            if (!response.ok) {
+                            // If Vercel timeouts (504) or hard crashes (500), throw to retry.
+                            // If it's a 4xx error, return it so the caller can read the JSON error message.
+                            if (!response.ok && response.status >= 500) {
                                 throw new Error(`HTTP error! status: ${response.status}`);
                             }
                             return response;
@@ -966,7 +968,7 @@
                                 loadErankDashboard(); // refresh
                             }
                         } catch (error) {
-                            showEtsyToast("Bağlantı hatası: API'ye ulaşılamadı.");
+                            showEtsyToast("Bağlantı hatası: " + error.message);
                         } finally {
                             btn.disabled = false;
                             btn.innerHTML = "📤 CSV Yükle ve Skorla";
