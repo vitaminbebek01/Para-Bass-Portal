@@ -614,9 +614,16 @@
                             
                             <div id="dashboardContainer" style="display:none; max-height:250px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; background:white; font-size:12px;">
                                 <input type="text" id="dashboardSearch" placeholder="Kelime ara..." style="width:100%; margin-bottom:10px; padding:5px; box-sizing:border-box;" onkeyup="filterDashboard()">
+                                
+                                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                                    <button class="small-btn" style="background:#e74c3c;" onclick="deleteSelectedErankKeywords()">🗑️ Seçilenleri Sil</button>
+                                    <button class="small-btn" style="background:#f39c12;" onclick="openAddToFavoritesModal()">⭐ Favori Listesine Ekle</button>
+                                </div>
+                                
                                 <table style="width:100%; border-collapse:collapse; text-align:left;">
                                     <thead>
                                         <tr style="background:#eee;">
+                                            <th style="padding:5px; width:30px;"><input type="checkbox" id="erankSelectAll" onclick="toggleErankSelectAll()"></th>
                                             <th style="padding:5px;">Keyword</th>
                                             <th style="padding:5px;">Vol</th>
                                             <th style="padding:5px;">Comp</th>
@@ -653,8 +660,72 @@
                             </div>
                             <button class="small-btn" style="margin-top:10px; width:100%;" onclick="loadPromptPool()">🔄 Havuzu Yenile</button>
                         </div>
+                        
+                        <hr style="border:0; border-top:1px solid #eee;">
+                        
+                        <!-- FAVORI ETIKET LISTELERİ -->
+                        <div style="flex:1; display:flex; flex-direction:column;">
+                            <h3 style="margin-top:0; font-size:16px; color:#34495e; display:flex; justify-content:space-between; align-items:center;">
+                                5. Favori Etiket Listeleri
+                                <button class="small-btn" style="background:#8e44ad;" onclick="document.getElementById('newFavListArea').style.display='block'">+ Yeni Liste</button>
+                            </h3>
+                            
+                            <div id="newFavListArea" style="display:none; margin-bottom:10px;">
+                                <input type="text" id="newFavListName" placeholder="Liste adını girin (Örn: Düğün Özel)..." class="fin-input" style="width:100%; margin-bottom:5px;">
+                                <div style="display:flex; gap:5px;">
+                                    <button class="small-btn" style="background:#27ae60; flex:1;" onclick="createFavoriteList()">Oluştur</button>
+                                    <button class="small-btn" style="background:#e74c3c; flex:1;" onclick="document.getElementById('newFavListArea').style.display='none'">İptal</button>
+                                </div>
+                            </div>
+                            
+                            <div id="favoriteListsContainer" style="background:#fff; border:1px solid #ddd; border-radius:6px; padding:10px; flex:1; min-height:150px; overflow-y:auto; font-size:12px; color:#555;">
+                                <!-- Lists will be injected here -->
+                            </div>
+                        </div>
+
                     </div>
 
+                </div>
+            </div>
+
+            <!-- MODALS FOR FAVORITES -->
+            <div id="addToFavoritesModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:9999;">
+                <div style="background:white; padding:20px; border-radius:8px; width:400px; max-width:90%;">
+                    <h3 style="margin-top:0;">Favori Listesine Ekle</h3>
+                    <p style="font-size:12px; color:#666;">Seçili <span id="favAddCount" style="font-weight:bold;">0</span> etiketi aşağıdaki listelerden birine ekleyin:</p>
+                    <div id="favModalList" style="max-height:200px; overflow-y:auto; margin-bottom:15px; border:1px solid #eee; padding:5px;">
+                        <!-- Lists will be populated here -->
+                    </div>
+                    <div style="text-align:right;">
+                        <button class="small-btn" style="background:#e74c3c;" onclick="document.getElementById('addToFavoritesModal').style.display='none'">İptal</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="viewFavoriteListModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:9999;">
+                <div style="background:white; padding:20px; border-radius:8px; width:600px; max-width:90%;">
+                    <h3 style="margin-top:0; display:flex; justify-content:space-between; align-items:center;">
+                        <span id="viewFavListTitle">Liste Detayı</span>
+                        <button class="small-btn" style="background:#e74c3c;" onclick="document.getElementById('viewFavoriteListModal').style.display='none'">Kapat</button>
+                    </h3>
+                    <div style="display:flex; gap:10px; margin-bottom:10px;">
+                        <input type="text" id="renameFavListInput" class="fin-input" style="flex:1; margin:0;" placeholder="Yeni Liste Adı">
+                        <button class="small-btn" style="background:#2980b9;" onclick="renameCurrentFavList()">Yeniden Adlandır</button>
+                    </div>
+                    <button class="small-btn" style="background:#e74c3c; margin-bottom:10px;" onclick="deleteSelectedTagsFromList()">🗑️ Seçili Etiketleri Sil</button>
+                    <div id="viewFavListTagsContainer" style="max-height:300px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px;">
+                        <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
+                            <thead>
+                                <tr style="background:#eee;">
+                                    <th style="padding:5px; width:30px;"><input type="checkbox" id="favListSelectAll" onclick="toggleFavListSelectAll()"></th>
+                                    <th style="padding:5px;">Etiket (Keyword)</th>
+                                    <th style="padding:5px; width:50px;">İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody id="viewFavListTagsBody">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -908,7 +979,7 @@
                 function renderDashboardTable(data) {
                     const tbody = document.getElementById('dashboardTableBody');
                     if(data.length === 0) {
-                        tbody.innerHTML = "<tr><td colspan='4'><em>Veri bulunamadı.</em></td></tr>";
+                        tbody.innerHTML = "<tr><td colspan='5'><em>Veri bulunamadı.</em></td></tr>";
                         return;
                     }
                     
@@ -919,6 +990,7 @@
                         const cmp = item.competition || item.Competition || item.COMPETITION || 0;
                         html += `
                         <tr class="dashboard-row">
+                            <td style="padding:5px;"><input type="checkbox" class="erank-row-cb" value="${item.id}" data-keyword="${kw.replace(/"/g, '&quot;')}"></td>
                             <td style="padding:5px;" class="kw-text">${kw}</td>
                             <td style="padding:5px;">${src}</td>
                             <td style="padding:5px;">${cmp}</td>
@@ -938,6 +1010,44 @@
                         const text = row.querySelector('.kw-text').innerText.toLowerCase();
                         row.style.display = text.includes(search) ? '' : 'none';
                     });
+                }
+                
+                function toggleErankSelectAll() {
+                    const selectAll = document.getElementById('erankSelectAll').checked;
+                    const cbs = document.querySelectorAll('.erank-row-cb');
+                    cbs.forEach(cb => {
+                        // Only select if the row is visible (not filtered out)
+                        if(cb.closest('tr').style.display !== 'none') {
+                            cb.checked = selectAll;
+                        }
+                    });
+                }
+                
+                async function deleteSelectedErankKeywords() {
+                    const selected = Array.from(document.querySelectorAll('.erank-row-cb:checked')).map(cb => parseInt(cb.value));
+                    if(selected.length === 0) {
+                        alert("Lütfen silinecek kelimeleri seçin.");
+                        return;
+                    }
+                    if(!confirm(`${selected.length} kelimeyi silmek istediğinize emin misiniz?`)) return;
+                    
+                    try {
+                        const response = await fetchWithRetry('/api/erank-dashboard', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ids: selected })
+                        });
+                        const data = await response.json();
+                        if(data.error) {
+                            alert("Hata: " + data.error);
+                        } else {
+                            showEtsyToast(data.message || "Başarıyla silindi.", false);
+                            document.getElementById('erankSelectAll').checked = false;
+                            loadErankDashboard();
+                        }
+                    } catch(e) {
+                        alert("Bağlantı hatası.");
+                    }
                 }
                 
                 async function deleteErankKeyword(id) {
@@ -1118,6 +1228,7 @@
         let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
         let orderCategories = JSON.parse(localStorage.getItem('paraBassCategories')) || ["Epoksi Magnet", "Silah Kılıfı", "Mum", "Anahtarlık"];
         let etsyConcepts = JSON.parse(localStorage.getItem('etsyConcepts')) || ["Wedding", "Baptism", "Birthday", "Baby Shower", "Halloween", "Christmas"];
+        let favoriteTagLists = JSON.parse(localStorage.getItem('favoriteTagLists')) || [];
         
         let openAccordions = new Set(); 
 
@@ -1926,6 +2037,202 @@
         }
 
 
+
+        // ==========================================
+        // FAVORI ETIKET LISTELERİ YÖNETİMİ
+        // ==========================================
+        function renderFavoriteLists() {
+            const container = document.getElementById('favoriteListsContainer');
+            if(!container) return;
+            container.innerHTML = "";
+            if(favoriteTagLists.length === 0) {
+                container.innerHTML = "<em>Henüz favori listeniz yok.</em>";
+                return;
+            }
+            favoriteTagLists.forEach((list, idx) => {
+                container.innerHTML += `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:1px solid #eee;">
+                        <div>
+                            <strong>${list.name}</strong> <span style="color:#888;">(${list.tags ? list.tags.length : 0} etiket)</span>
+                        </div>
+                        <div style="display:flex; gap:5px;">
+                            <button class="small-btn" style="background:#2980b9;" onclick="viewFavoriteList(${list.id})">Görüntüle / Düzenle</button>
+                            <button class="small-btn" style="background:#e74c3c;" onclick="deleteFavoriteList(${list.id})">Sil</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function createFavoriteList() {
+            const nameInput = document.getElementById('newFavListName');
+            const name = nameInput.value.trim();
+            if(!name) { alert("Liste adı boş olamaz."); return; }
+            
+            const newList = {
+                id: Date.now(),
+                name: name,
+                tags: []
+            };
+            favoriteTagLists.push(newList);
+            localStorage.setItem('favoriteTagLists', JSON.stringify(favoriteTagLists));
+            nameInput.value = "";
+            document.getElementById('newFavListArea').style.display = 'none';
+            renderFavoriteLists();
+            showEtsyToast("Liste başarıyla oluşturuldu.", false);
+        }
+
+        function deleteFavoriteList(id) {
+            if(!confirm("Bu favori listesini ve içindeki tüm etiketleri silmek istediğinize emin misiniz?")) return;
+            favoriteTagLists = favoriteTagLists.filter(l => l.id !== id);
+            localStorage.setItem('favoriteTagLists', JSON.stringify(favoriteTagLists));
+            renderFavoriteLists();
+            showEtsyToast("Liste silindi.", false);
+        }
+        
+        let currentViewedFavListId = null;
+
+        function viewFavoriteList(id) {
+            const list = favoriteTagLists.find(l => l.id === id);
+            if(!list) return;
+            currentViewedFavListId = id;
+            document.getElementById('viewFavListTitle').innerText = "Liste: " + list.name;
+            document.getElementById('renameFavListInput').value = list.name;
+            document.getElementById('viewFavoriteListModal').style.display = 'flex';
+            renderViewFavListTags();
+        }
+        
+        function renameCurrentFavList() {
+            if(!currentViewedFavListId) return;
+            const newName = document.getElementById('renameFavListInput').value.trim();
+            if(!newName) { alert("Liste adı boş olamaz."); return; }
+            
+            const list = favoriteTagLists.find(l => l.id === currentViewedFavListId);
+            if(list) {
+                list.name = newName;
+                localStorage.setItem('favoriteTagLists', JSON.stringify(favoriteTagLists));
+                document.getElementById('viewFavListTitle').innerText = "Liste: " + list.name;
+                renderFavoriteLists();
+                showEtsyToast("Liste adı güncellendi.", false);
+            }
+        }
+
+        function renderViewFavListTags() {
+            const tbody = document.getElementById('viewFavListTagsBody');
+            tbody.innerHTML = "";
+            document.getElementById('favListSelectAll').checked = false;
+            
+            const list = favoriteTagLists.find(l => l.id === currentViewedFavListId);
+            if(!list || !list.tags || list.tags.length === 0) {
+                tbody.innerHTML = "<tr><td colspan='3'><em>Bu listede henüz etiket yok.</em></td></tr>";
+                return;
+            }
+            
+            list.tags.forEach((tag, idx) => {
+                const safeTag = tag.replace(/"/g, '&quot;');
+                tbody.innerHTML += `
+                    <tr>
+                        <td style="padding:5px;"><input type="checkbox" class="fav-tag-cb" value="${idx}"></td>
+                        <td style="padding:5px;">${tag}</td>
+                        <td style="padding:5px;"><button class="small-btn" style="background:#e74c3c; padding:2px 5px;" onclick="deleteTagFromList(${idx})">Sil</button></td>
+                    </tr>
+                `;
+            });
+        }
+        
+        function toggleFavListSelectAll() {
+            const selectAll = document.getElementById('favListSelectAll').checked;
+            document.querySelectorAll('.fav-tag-cb').forEach(cb => cb.checked = selectAll);
+        }
+
+        function deleteSelectedTagsFromList() {
+            if(!currentViewedFavListId) return;
+            const selectedIdx = Array.from(document.querySelectorAll('.fav-tag-cb:checked')).map(cb => parseInt(cb.value));
+            if(selectedIdx.length === 0) { alert("Lütfen silinecek etiketleri seçin."); return; }
+            if(!confirm(`${selectedIdx.length} etiketi silmek istediğinize emin misiniz?`)) return;
+            
+            const list = favoriteTagLists.find(l => l.id === currentViewedFavListId);
+            if(list) {
+                // Remove elements from end to start to avoid index shifting
+                selectedIdx.sort((a,b) => b-a).forEach(idx => {
+                    list.tags.splice(idx, 1);
+                });
+                localStorage.setItem('favoriteTagLists', JSON.stringify(favoriteTagLists));
+                renderViewFavListTags();
+                renderFavoriteLists(); // Update count
+                showEtsyToast("Seçili etiketler silindi.", false);
+            }
+        }
+        
+        function deleteTagFromList(tagIndex) {
+            if(!currentViewedFavListId) return;
+            if(!confirm("Bu etiketi silmek istediğinize emin misiniz?")) return;
+            const list = favoriteTagLists.find(l => l.id === currentViewedFavListId);
+            if(list) {
+                list.tags.splice(tagIndex, 1);
+                localStorage.setItem('favoriteTagLists', JSON.stringify(favoriteTagLists));
+                renderViewFavListTags();
+                renderFavoriteLists();
+                showEtsyToast("Etiket silindi.", false);
+            }
+        }
+
+        // ==========================================
+        // DATA POOL'DAN FAVORİLERE EKLEME
+        // ==========================================
+        let pendingFavTags = [];
+        
+        function openAddToFavoritesModal() {
+            const selected = Array.from(document.querySelectorAll('.erank-row-cb:checked'));
+            if(selected.length === 0) {
+                alert("Lütfen favorilere eklenecek kelimeleri seçin.");
+                return;
+            }
+            
+            pendingFavTags = selected.map(cb => cb.getAttribute('data-keyword'));
+            document.getElementById('favAddCount').innerText = pendingFavTags.length;
+            
+            const listContainer = document.getElementById('favModalList');
+            listContainer.innerHTML = "";
+            
+            if(favoriteTagLists.length === 0) {
+                listContainer.innerHTML = "<em>Önce 'Favori Etiket Listeleri' bölümünden yeni bir liste oluşturun.</em>";
+            } else {
+                favoriteTagLists.forEach(list => {
+                    listContainer.innerHTML += `
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:5px; border-bottom:1px solid #eee;">
+                            <span>${list.name}</span>
+                            <button class="small-btn" style="background:#27ae60;" onclick="addSelectedToFavoriteList(${list.id})">Bu Listeye Ekle</button>
+                        </div>
+                    `;
+                });
+            }
+            
+            document.getElementById('addToFavoritesModal').style.display = 'flex';
+        }
+
+        function addSelectedToFavoriteList(listId) {
+            const list = favoriteTagLists.find(l => l.id === listId);
+            if(list) {
+                let addedCount = 0;
+                pendingFavTags.forEach(tag => {
+                    if(!list.tags.includes(tag)) {
+                        list.tags.push(tag);
+                        addedCount++;
+                    }
+                });
+                localStorage.setItem('favoriteTagLists', JSON.stringify(favoriteTagLists));
+                document.getElementById('addToFavoritesModal').style.display = 'none';
+                renderFavoriteLists();
+                
+                // Clear checkboxes in pool
+                document.querySelectorAll('.erank-row-cb').forEach(cb => cb.checked = false);
+                document.getElementById('erankSelectAll').checked = false;
+                
+                showEtsyToast(`${addedCount} etiket '${list.name}' listesine başarıyla eklendi!`, false);
+            }
+        }
+
         function populateCategoryFilters() {
             const catFilter = document.getElementById('catFilter');
             if(catFilter) {
@@ -2353,6 +2660,7 @@
             try { renderAiPrompts(); } catch(e){ console.error("aiPrompts err:", e); }
             try { renderOrders(); } catch(e){ console.error("renderOrders err:", e); }
             try { renderEtsyConceptsUI(); } catch(e){ console.error("etsyConcepts err:", e); }
+            try { renderFavoriteLists(); } catch(e){ console.error("favList err:", e); }
         };
     </script>
 </body>

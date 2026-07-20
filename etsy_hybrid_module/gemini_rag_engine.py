@@ -57,11 +57,11 @@ def generate_optimized_listing(category_keywords_objs: list, pdf_path: str, prod
         strict_rules = (
             "CRITICAL RULES YOU MUST FOLLOW EXACTLY (DO NOT DEVIATE):\n"
             "1. LANGUAGE: Every generated word (Title, Tags, Description) MUST BE 100% in English. Absolutely no Turkish.\n"
-            "2. ORGANIC SEO WIRING: You MUST organically weave the selected concepts and EXACTLY the 13 chosen long-tail tags into the Title and the FIRST PARAGRAPHS of the Description. Do not just list them; use them in natural, highly engaging, premium-sounding sentences.\n"
+            "2. ORGANIC SEO WIRING: You MUST organically weave the selected concepts and EXACTLY the 13 chosen long-tail tags into the Title and the FIRST PARAGRAPHS of the Description. Do not just list them; use them in natural, highly engaging, premium-sounding sentences like a human luxury copywriter.\n"
         )
         
         if product_type.strip().lower() in ["candle", "mum"]:
-            strict_rules += "3. KOKUSUZ MUM KURALI (CANDLE): The product is a Candle. ALL CANDLES ARE UNSCENTED. DO NOT use the words 'scent', 'fragrance', or 'aroma'. DO NOT mention any materials (like soy wax, beeswax). You MUST emphasize that it is unscented and perfect for guests sensitive to smells.\n"
+            strict_rules += "3. KOKUSUZ MUM KURALI (CANDLE): KOKU KELİMESİ KESİNLİKLE YASAKTIR. DO NOT use the words 'Unscented', 'scented', 'smell', 'fragrance', or 'aroma' ANYWHERE in the title, tags, or description. IGNORE the concept of scent entirely. DO NOT mention any materials (like soy wax, beeswax).\n"
         else:
             strict_rules += "3. MATERIAL: You may naturally include material information if it enhances the premium feel.\n"
             

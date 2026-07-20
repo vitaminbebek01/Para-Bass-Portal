@@ -30,11 +30,15 @@ class handler(BaseHTTPRequestHandler):
             data = json.loads(post_data)
             
             keyword_id = data.get('id')
-            if not keyword_id:
+            keyword_ids = data.get('ids')
+            
+            if keyword_ids and isinstance(keyword_ids, list):
+                delete_erank_keyword(keyword_ids)
+            elif keyword_id:
+                delete_erank_keyword(keyword_id)
+            else:
                 self.send_error_json(400, "Silinecek ID eksik.")
                 return
-
-            delete_erank_keyword(keyword_id)
             self.send_success_json({"message": "Başarıyla silindi."})
         except Exception as e:
             self.send_error_json(500, "Sunucu hatası", str(e))

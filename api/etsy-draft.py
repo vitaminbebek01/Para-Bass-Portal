@@ -47,7 +47,43 @@ class handler(BaseHTTPRequestHandler):
 
             # 2. Fetch high volume keywords from eRank DB using the concept as category tag
             erank_data = get_erank_keywords(concept if concept else [product_type])
-            keywords_list = [{"keyword": item.get('keyword'), "searches": item.get('searches', 0), "competition": item.get('competition', 0)} for item in erank_data] if erank_data else [{"keyword": search_term, "searches": 0, "competition": 0}]
+            
+            # --- GARBAGE AND MATH FILTER ---
+            import re
+            garbage_words = ["simpsons", "skateboard", "poker", "tack shop", "chip", "casino", "game", "toy", "deck", "cards", "dice"]
+            filtered_erank = []
+            if erank_data:
+                for item in erank_data:
+                    kw = str(item.get('keyword', '')).lower()
+                    sv = int(item.get('searches', 0) or 0)
+                    comp = int(item.get('competition', 0) or 0)
+                    
+                    if comp > 100000:
+                        continue
+                        
+                    # Quick regex check for whole words to prevent accidental matching like 'gaming' if not intended, but simple 'in' is what user asked.
+                    # Using simple 'in' check as requested:
+                    if any(garbage in kw for garbage in garbage_words):
+                        continue
+                        
+                    math_score = sv / comp if comp > 0 else sv
+                    filtered_erank.append({
+                        "keyword": kw,
+                        "searches": sv,
+                        "competition": comp,
+                        "math_score": math_score
+                    })
+                
+                # Sort by math_score descending
+                filtered_erank.sort(key=lambda x: x["math_score"], reverse=True)
+                
+                # Take top results to avoid context limits (e.g. 50)
+                keywords_list = [{"keyword": item["keyword"], "searches": item["searches"], "competition": item["competition"]} for item in filtered_erank[:50]]
+                if not keywords_list:
+                    keywords_list = [{"keyword": search_term, "searches": 0, "competition": 0}]
+            else:
+                keywords_list = [{"keyword": search_term, "searches": 0, "competition": 0}]
+            # -------------------------------
 
             # 3. Generate listing using Gemini RAG Engine
             pdf_path = os.path.join(os.getcwd(), "Etsy_2026_Algoritma_Rehberi.pdf")

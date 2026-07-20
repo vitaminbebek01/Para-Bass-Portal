@@ -38,11 +38,14 @@ def get_all_erank_keywords(limit=200):
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
-def delete_erank_keyword(keyword_id):
+def delete_erank_keyword(keyword_id_or_ids):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("erank_keywords").delete().eq("id", keyword_id).execute()
+        if isinstance(keyword_id_or_ids, list):
+            response = supabase.table("erank_keywords").delete().in_("id", keyword_id_or_ids).execute()
+        else:
+            response = supabase.table("erank_keywords").delete().eq("id", keyword_id_or_ids).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
