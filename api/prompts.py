@@ -41,15 +41,15 @@ class handler(BaseHTTPRequestHandler):
                 return
             
             title = data.get('title', 'Başlıksız Prompt')
-            content = data.get('content')
-            if not content:
-                self.send_error_json(400, "Content is required.")
+            prompt_text = data.get('prompt_text')
+            if not prompt_text:
+                self.send_error_json(400, "prompt_text is required.")
                 return
 
             new_id = str(uuid.uuid4())
-            result = add_prompt(title, content, new_id)
+            result = add_prompt(title, prompt_text, new_id)
             if isinstance(result, dict) and "error" in result:
-                self.send_error_json(500, result["error"])
+                self.send_error_json(400, result["error"])
             else:
                 self.send_success_json(result)
         except Exception as e:
@@ -78,15 +78,15 @@ class handler(BaseHTTPRequestHandler):
             
             prompt_id = data.get('id')
             title = data.get('title', 'Başlıksız Prompt')
-            content = data.get('content')
+            prompt_text = data.get('prompt_text')
             
-            if not prompt_id or not content:
-                self.send_error_json(400, "ID and Content are required.")
+            if not prompt_id or not prompt_text:
+                self.send_error_json(400, "ID and prompt_text are required.")
                 return
 
-            result = update_prompt(prompt_id, title, content)
+            result = update_prompt(prompt_id, title, prompt_text)
             if isinstance(result, dict) and "error" in result:
-                self.send_error_json(500, result["error"])
+                self.send_error_json(400, result["error"])
             else:
                 self.send_success_json(result)
         except Exception as e:

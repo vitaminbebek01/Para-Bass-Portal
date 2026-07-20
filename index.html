@@ -1067,6 +1067,10 @@
                     }
                     if(!confirm(`${selected.length} kelimeyi silmek istediğinize emin misiniz?`)) return;
                     
+                    const btn = document.getElementById('btnDeleteSelected');
+                    const origText = btn ? btn.innerHTML : "Seçilenleri Sil";
+                    if(btn) btn.innerHTML = "⏳ Siliniyor... Lütfen bekleyin";
+                    
                     try {
                         const response = await fetchWithRetry('/api/erank-dashboard', {
                             method: 'POST',
@@ -1083,6 +1087,8 @@
                         }
                     } catch(e) {
                         alert("Bağlantı hatası: " + e.message);
+                    } finally {
+                        if(btn) btn.innerHTML = origText;
                     }
                 }
                 
@@ -1126,7 +1132,7 @@
                                     <div style='padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;'>
                                         <div style='flex:1; word-break:break-word;'>
                                             ${titleStr}
-                                            <div id='dbPrompt${p.id}' style='color:#555;'>${p.content}</div>
+                                            <div id='dbPrompt${p.id}' style='color:#555;'>${p.prompt_text}</div>
                                         </div>
                                         <div style='display:flex; gap:5px; flex-shrink:0;'>
                                             <button class='small-btn' style='background:#f39c12; padding:2px 5px; font-size:10px;' onclick='copyToClipboard("dbPrompt${p.id}")'>Kopyala</button>
@@ -1153,7 +1159,7 @@
                         const response = await fetchWithRetry('/api/prompts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ title, content })
+                            body: JSON.stringify({ title, prompt_text: content })
                         });
                         const data = await response.json();
                         if(data.error) {
@@ -1200,7 +1206,7 @@
                         const response = await fetchWithRetry('/api/prompts', {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id, title: newTitle.trim(), content: newContent.trim() })
+                            body: JSON.stringify({ id, title: newTitle.trim(), prompt_text: newContent.trim() })
                         });
                         const data = await response.json();
                         if(data.error) showEtsyToast("Hata: " + data.error);

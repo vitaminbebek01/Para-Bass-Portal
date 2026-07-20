@@ -59,12 +59,12 @@ class handler(BaseHTTPRequestHandler):
                         continue
 
                     try:
-                        sv = int(sv_str) if sv_str.isdigit() else 0
+                        sv = int(sv_str) if sv_str and sv_str.isdigit() else 0
                     except ValueError:
                         sv = 0
                         
                     try:
-                        comp = int(comp_str) if comp_str.isdigit() else 0
+                        comp = int(comp_str) if comp_str and comp_str.isdigit() else 0
                     except ValueError:
                         comp = 0
                         
@@ -100,8 +100,10 @@ class handler(BaseHTTPRequestHandler):
                     return
 
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 print(f"ERROR while parsing CSV: {e}")
-                self.send_error_json(400, "CSV okuma hatası", str(e))
+                self.send_error_json(400, "CSV okuma hatası: " + str(e))
                 return
 
             stats["added"] = len(records)
@@ -113,11 +115,13 @@ class handler(BaseHTTPRequestHandler):
             })
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             err_str = str(e)
             if "Supabase" in err_str:
-                self.send_error_json(500, "Supabase bağlantı hatası", err_str)
+                self.send_error_json(400, "Supabase bağlantı hatası: " + err_str)
             else:
-                self.send_error_json(500, "Sunucu hatası", err_str)
+                self.send_error_json(400, "Sunucu hatası: " + err_str)
 
     def send_error_json(self, status, message, details=None):
         self.send_response(status)
@@ -126,7 +130,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
-        response_dict = {"error": message}
+        response_dict = {"success": False, "error": message}
         if details:
             response_dict["details"] = details
         self.wfile.write(json.dumps(response_dict).encode('utf-8'))
