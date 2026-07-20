@@ -542,7 +542,7 @@
                     </div>
                     
                     <div class="form-group" style="margin-top:10px;">
-                        <label>Kilitli Tagler (<span id="lockedTagsCount">0</span>/13)</label>
+                        <label>Kilitli Tagler (<span id="lockedTagsCount">0</span>/13) <span id="seoPowerBadge" style="margin-left:10px; padding:2px 8px; border-radius:12px; font-size:12px; font-weight:bold; display:none;"></span></label>
                         <div id="lockedTagsContainer" style="display:flex; flex-wrap:wrap; gap:5px; background:white; border:1px solid #ccc; border-radius:4px; padding:10px; min-height:40px;">
                             <em style="color:#888; font-size:12px;">Henüz kilitli tag eklenmedi. Havuzdan veya favorilerden 'Üretime Gönder' butonunu kullanın.</em>
                         </div>
@@ -645,8 +645,8 @@
                                         <tr style="background:#eee;">
                                             <th style="padding:5px; width:30px;"><input type="checkbox" id="erankSelectAll" onclick="toggleErankSelectAll()"></th>
                                             <th style="padding:5px;">Keyword</th>
-                                            <th style="padding:5px;">Vol</th>
-                                            <th style="padding:5px;">Comp</th>
+                                            <th style="padding:5px; cursor:pointer;" onclick="sortErankData('searches')" title="Sırala">Vol ⇅</th>
+                                            <th style="padding:5px; cursor:pointer;" onclick="sortErankData('competition')" title="Sırala">Comp ⇅</th>
                                             <th style="padding:5px;">İşlem</th>
                                         </tr>
                                     </thead>
@@ -737,10 +737,12 @@
                     <div id="viewFavListTagsContainer" style="max-height:300px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px;">
                         <table style="width:100%; border-collapse:collapse; text-align:left; font-size:12px;">
                             <thead>
-                                <tr style="background:#eee;">
+                                <tr style="background:#f4f6f8; font-size:12px;">
                                     <th style="padding:5px; width:30px;"><input type="checkbox" id="favListSelectAll" onclick="toggleFavListSelectAll()"></th>
-                                    <th style="padding:5px;">Etiket (Keyword)</th>
-                                    <th style="padding:5px; width:50px;">İşlem</th>
+                                    <th style="padding:5px;">Etiket</th>
+                                    <th style="padding:5px; cursor:pointer;" onclick="sortFavData('searches')" title="Sırala">Hacim ⇅</th>
+                                    <th style="padding:5px; cursor:pointer;" onclick="sortFavData('competition')" title="Sırala">Rekabet ⇅</th>
+                                    <th style="padding:5px;">İşlem</th>
                                 </tr>
                             </thead>
                             <tbody id="viewFavListTagsBody">
@@ -1020,8 +1022,8 @@
                                 <span style="cursor:pointer;" onclick="addSingleToActiveFavList('${safeKwForFunc}', ${src}, ${cmp})" title="Aktif favori listesine ekle">⭐</span> 
                                 ${kw}
                             </td>
-                            <td style="padding:5px;">${src}</td>
-                            <td style="padding:5px;">${cmp}</td>
+                            <td style="padding:5px; ${getHeatmapStyle(src, 'searches')}">${src}</td>
+                            <td style="padding:5px; ${getHeatmapStyle(cmp, 'competition')}">${cmp}</td>
                             <td style="padding:5px;">
                                 <button class="small-btn" style="background:#e74c3c; padding:2px 5px;" onclick="deleteErankKeyword(${item.id})">Sil</button>
                             </td>
@@ -2196,8 +2198,8 @@
                     <tr>
                         <td style="padding:5px;"><input type="checkbox" class="fav-tag-cb" value="${idx}"></td>
                         <td style="padding:5px;">${kw}</td>
-                        <td style="padding:5px;">${src}</td>
-                        <td style="padding:5px;">${cmp}</td>
+                        <td style="padding:5px; ${getHeatmapStyle(src, 'searches')}">${src}</td>
+                        <td style="padding:5px; ${getHeatmapStyle(cmp, 'competition')}">${cmp}</td>
                         <td style="padding:5px;">
                             <button class="small-btn" style="background:#27ae60; padding:2px 5px;" onclick="sendToLockedTagsFromFav('${safeTag}')">Üretime Gönder</button>
                             <button class="small-btn" style="background:#e74c3c; padding:2px 5px;" onclick="deleteTagFromList(${idx})">Sil</button>
@@ -2804,6 +2806,7 @@
             
             if(lockedTags.length === 0) {
                 container.innerHTML = "<em style='color:#888; font-size:12px;'>Henüz kilitli tag eklenmedi. Havuzdan veya favorilerden 'Üretime Gönder' butonunu kullanın.</em>";
+                if(typeof calculateLockedTagsSEO === 'function') calculateLockedTagsSEO();
                 return;
             }
             
@@ -2816,6 +2819,7 @@
                     </div>
                 `;
             });
+            if(typeof calculateLockedTagsSEO === 'function') calculateLockedTagsSEO();
         }
 
         // ==========================================
@@ -2845,6 +2849,97 @@
             try { renderEtsyConceptsUI(); } catch(e){ console.error("etsyConcepts err:", e); }
             try { renderFavoriteLists(); } catch(e){ console.error("favList err:", e); }
         };
+
+        // ==========================================
+        // UI GÖRSEL GÜNCELLEMELER (SORT, HEATMAP, SEO)
+        // ==========================================
+        
+        let erankSortCol = '';
+        let erankSortAsc = false;
+        function sortErankData(col) {
+            if(!window.erankPoolData) return;
+            if(erankSortCol === col) erankSortAsc = !erankSortAsc;
+            else { erankSortCol = col; erankSortAsc = false; }
+            
+            window.erankPoolData.sort((a,b) => {
+                let valA = a[col] || 0;
+                let valB = b[col] || 0;
+                return erankSortAsc ? valA - valB : valB - valA;
+            });
+            renderDashboardTable(window.erankPoolData);
+        }
+
+        let favSortCol = '';
+        let favSortAsc = false;
+        function sortFavData(col) {
+            if(!currentViewedFavListId) return;
+            const list = favoriteTagLists.find(l => l.id === currentViewedFavListId);
+            if(!list || !list.tags) return;
+            
+            if(favSortCol === col) favSortAsc = !favSortAsc;
+            else { favSortCol = col; favSortAsc = false; }
+            
+            list.tags.sort((a,b) => {
+                let valA = a[col] || 0;
+                let valB = b[col] || 0;
+                return favSortAsc ? valA - valB : valB - valA;
+            });
+            renderViewFavListTags();
+        }
+
+        function getHeatmapStyle(value, type) {
+            let ratio = 0;
+            if(type === 'searches') {
+                ratio = Math.min(value / 3000, 1); 
+            } else if(type === 'competition') {
+                ratio = Math.max(1 - (value / 30000), 0);
+            }
+            const hue = Math.round(ratio * 120);
+            return `background: hsla(${hue}, 80%, 50%, 0.15); color: hsl(${hue}, 80%, 30%); font-weight:bold; border-radius:4px; text-align:center;`;
+        }
+
+        function calculateLockedTagsSEO() {
+            let totalSearches = 0;
+            let totalComp = 0;
+            let validCount = 0;
+            
+            lockedTags.forEach(tag => {
+                let item = window.erankPoolData ? window.erankPoolData.find(i => (i.keyword||'').toLowerCase() === tag.toLowerCase()) : null;
+                if(!item) {
+                    for(let list of favoriteTagLists) {
+                        const favItem = list.tags.find(t => (t.keyword||t).toLowerCase() === tag.toLowerCase());
+                        if(favItem && typeof favItem !== 'string') {
+                            item = favItem; break;
+                        }
+                    }
+                }
+                if(item) {
+                    totalSearches += (item.searches || 0);
+                    totalComp += (item.competition || 0);
+                    validCount++;
+                }
+            });
+            
+            const badge = document.getElementById('seoPowerBadge');
+            if(!badge) return;
+            
+            if(validCount === 0) {
+                badge.style.display = 'none';
+                return;
+            }
+            
+            const avgSearches = totalSearches / validCount;
+            const avgComp = totalComp / validCount;
+            
+            let searchRatio = Math.min(avgSearches / 3000, 1);
+            let compRatio = Math.max(1 - (avgComp / 30000), 0);
+            let overallRatio = (searchRatio + compRatio) / 2;
+            
+            const hue = Math.round(overallRatio * 120);
+            badge.style.display = 'inline-block';
+            badge.style.background = `hsl(${hue}, 80%, 45%)`;
+            badge.innerText = `SEO Gücü: %${Math.round(overallRatio*100)}`;
+        }
     </script>
 </body>
 </html>
