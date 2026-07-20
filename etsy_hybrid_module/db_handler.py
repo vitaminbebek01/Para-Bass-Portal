@@ -48,14 +48,12 @@ def delete_erank_keyword(keyword_id_or_ids):
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
         if isinstance(keyword_id_or_ids, list):
-            # Supabase-py 'in_' filter expects a comma-separated string for some versions, or a list.
-            # To be safe against 500 errors, we can loop over them or format properly.
-            # Usually .in_("id", [1,2,3]) works, but if it fails, maybe it needs strings.
-            string_ids = [str(i) for i in keyword_id_or_ids]
-            response = supabase.table("erank_keywords").delete().in_("id", string_ids).execute()
+            for i in keyword_id_or_ids:
+                supabase.table("erank_keywords").delete().eq("id", i).execute()
+            return True
         else:
-            response = supabase.table("erank_keywords").delete().eq("id", str(keyword_id_or_ids)).execute()
-        return response.data
+            response = supabase.table("erank_keywords").delete().eq("id", keyword_id_or_ids).execute()
+            return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
