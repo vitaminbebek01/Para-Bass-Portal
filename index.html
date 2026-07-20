@@ -508,15 +508,13 @@
                         <div style="flex:1;">
                             <label style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
                                 Konsept (Çoklu Seçim)
-                                <button class="small-btn" style="background:#bdc3c7; color:#333; padding:2px 6px; font-size:10px; border:none; border-radius:3px; cursor:pointer;" onclick="toggleAllConcepts()">Tümünü Seç / Temizle</button>
+                                <div>
+                                    <button class="small-btn" style="background:#f39c12; color:white; padding:2px 6px; font-size:10px; border:none; border-radius:3px; cursor:pointer; margin-right:5px;" onclick="manageEtsyConcepts()">Yönet</button>
+                                    <button class="small-btn" style="background:#bdc3c7; color:#333; padding:2px 6px; font-size:10px; border:none; border-radius:3px; cursor:pointer;" onclick="toggleAllConcepts()">Tümünü Seç / Temizle</button>
+                                </div>
                             </label>
                             <div id="etsyDraftConceptGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:5px; background:white; border:1px solid #ccc; border-radius:4px; padding:10px; max-height:120px; overflow-y:auto;">
-                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Wedding" class="concept-cb"> Wedding</label>
-                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Baptism" class="concept-cb"> Baptism</label>
-                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Birthday" class="concept-cb"> Birthday</label>
-                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Baby Shower" class="concept-cb"> Baby Shower</label>
-                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Halloween" class="concept-cb"> Halloween</label>
-                                <label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="Christmas" class="concept-cb"> Christmas</label>
+                                <!-- Concepts injected by JS -->
                             </div>
                         </div>
                     </div>
@@ -592,12 +590,7 @@
                             <h3 style="margin-top:0; font-size:16px; color:#34495e;">3. eRank CSV Yükle</h3>
                             <div style="display:flex; gap:10px; margin-bottom:10px;">
                                 <select id="erankCsvConcept" style="flex:1; padding:5px;">
-                                    <option value="Wedding">Wedding</option>
-                                    <option value="Baptism">Baptism</option>
-                                    <option value="Birthday">Birthday</option>
-                                    <option value="Baby Shower">Baby Shower</option>
-                                    <option value="Halloween">Halloween</option>
-                                    <option value="Christmas">Christmas</option>
+                                    <!-- Concepts injected by JS -->
                                 </select>
                                 <input type="file" id="erankCsvFile" accept=".csv" style="flex:2; font-size:12px;">
                             </div>
@@ -605,8 +598,10 @@
                             
                             <div id="csvStatsDisplay" style="display:none; margin-top:10px; padding:10px; background:#f0f4f8; border-radius:4px; font-size:12px; color:#333;">
                                 <strong>Yükleme İstatistikleri:</strong><br>
-                                Taranan: <span id="statScanned">0</span> | Elenen (Çöp): <span id="statFiltered">0</span><br>
-                                Altın Tag: <span id="statGolden">0</span> | Veritabanına Eklenen: <span id="statAdded">0</span>
+                                Eklenen: <span id="statAdded" style="color:green; font-weight:bold;">0</span> | 
+                                Tek Kelime (Reddedilen): <span id="statRejSingle" style="color:red;">0</span><br>
+                                Sıfır Aranma (Reddedilen): <span id="statRejSearch" style="color:red;">0</span> | 
+                                Yüksek Rekabet (Reddedilen): <span id="statRejComp" style="color:red;">0</span>
                             </div>
                         </div>
 
@@ -866,11 +861,14 @@
                             } else {
                                 showEtsyToast(data.message || "CSV başarıyla yüklendi!", false);
                                 if(data.stats) {
-                                    document.getElementById('statScanned').innerText = data.stats.total_scanned;
-                                    document.getElementById('statFiltered').innerText = data.stats.total_filtered;
-                                    document.getElementById('statGolden').innerText = data.stats.total_golden;
-                                    document.getElementById('statAdded').innerText = data.stats.total_added;
+                                    document.getElementById('statAdded').innerText = data.stats.added;
+                                    document.getElementById('statRejSingle').innerText = data.stats.rejected_single_word;
+                                    document.getElementById('statRejSearch').innerText = data.stats.rejected_low_search;
+                                    document.getElementById('statRejComp').innerText = data.stats.rejected_high_comp;
                                     document.getElementById('csvStatsDisplay').style.display = 'block';
+                                    
+                                    // Show toast summary
+                                    showEtsyToast(`Eklendi: ${data.stats.added} | Tek Kelime: ${data.stats.rejected_single_word} | Hacim: ${data.stats.rejected_low_search} | Rekabet: ${data.stats.rejected_high_comp}`, false);
                                 }
                                 fileInput.value = ""; // clear input
                                 loadErankDashboard(); // refresh
@@ -916,11 +914,14 @@
                     
                     let html = "";
                     data.forEach(item => {
+                        const kw = item.keyword || item.Keyword || item.KEYWORD || "-";
+                        const src = item.searches || item.Searches || item.SEARCHES || 0;
+                        const cmp = item.competition || item.Competition || item.COMPETITION || 0;
                         html += `
                         <tr class="dashboard-row">
-                            <td style="padding:5px;" class="kw-text">${item.keyword}</td>
-                            <td style="padding:5px;">${item.searches}</td>
-                            <td style="padding:5px;">${item.competition}</td>
+                            <td style="padding:5px;" class="kw-text">${kw}</td>
+                            <td style="padding:5px;">${src}</td>
+                            <td style="padding:5px;">${cmp}</td>
                             <td style="padding:5px;">
                                 <button class="small-btn" style="background:#e74c3c; padding:2px 5px;" onclick="deleteErankKeyword(${item.id})">Sil</button>
                             </td>
@@ -1116,6 +1117,7 @@
         let gtipList = JSON.parse(localStorage.getItem('paraBassGtipDb')) || [];
         let mailList = JSON.parse(localStorage.getItem('paraBassMailDb')) || [];
         let orderCategories = JSON.parse(localStorage.getItem('paraBassCategories')) || ["Epoksi Magnet", "Silah Kılıfı", "Mum", "Anahtarlık"];
+        let etsyConcepts = JSON.parse(localStorage.getItem('etsyConcepts')) || ["Wedding", "Baptism", "Birthday", "Baby Shower", "Halloween", "Christmas"];
         
         let openAccordions = new Set(); 
 
@@ -1848,6 +1850,82 @@
             });
         }
 
+        // ==========================================
+        // DİNAMİK KONSEPT YÖNETİMİ (ETSY MODÜLÜ)
+        // ==========================================
+        function renderEtsyConceptsUI() {
+            const grid = document.getElementById('etsyDraftConceptGrid');
+            const select = document.getElementById('erankCsvConcept');
+            if(grid) {
+                grid.innerHTML = "";
+                etsyConcepts.forEach(cat => {
+                    grid.innerHTML += `<label style="font-weight:normal; font-size:13px; display:flex; align-items:center; gap:5px; margin:0;"><input type="checkbox" value="${cat}" class="concept-cb"> ${cat}</label>`;
+                });
+            }
+            if(select) {
+                select.innerHTML = "";
+                etsyConcepts.forEach(cat => {
+                    select.innerHTML += `<option value="${cat}">${cat}</option>`;
+                });
+            }
+        }
+
+        function manageEtsyConcepts() {
+            let overlay = document.createElement('div');
+            overlay.id = "conceptModal";
+            overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:9999;";
+            
+            let box = document.createElement('div');
+            box.style.cssText = "background:white; padding:20px; border-radius:8px; width:400px; max-width:90%;";
+            box.innerHTML = `
+                <h3 style="margin-top:0;">Konsept Yönetimi</h3>
+                <div style="display:flex; gap:10px; margin-bottom:15px;">
+                    <input type="text" id="newConceptInput" class="fin-input" placeholder="Yeni konsept adı..." style="margin-bottom:0;">
+                    <button onclick="addEtsyConcept()" style="background:#27ae60; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Ekle</button>
+                </div>
+                <div id="conceptModalList" style="max-height:300px; overflow-y:auto;"></div>
+                <div style="text-align:right; margin-top:15px;">
+                    <button onclick="document.body.removeChild(document.getElementById('conceptModal')); renderEtsyConceptsUI();" style="background:#95a5a6; color:white; border:none; padding:8px 15px; border-radius:4px; cursor:pointer;">Kapat</button>
+                </div>
+            `;
+            
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+            renderConceptModalList();
+        }
+
+        function renderConceptModalList() {
+            let list = document.getElementById('conceptModalList');
+            if(!list) return;
+            list.innerHTML = "";
+            etsyConcepts.forEach((c, i) => {
+                list.innerHTML += `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee;">
+                    <span>${c}</span>
+                    <span onclick="deleteEtsyConcept(${i})" style="color:#e74c3c; cursor:pointer; font-weight:bold;">✖</span>
+                </div>`;
+            });
+        }
+
+        function addEtsyConcept() {
+            const val = document.getElementById('newConceptInput').value.trim();
+            if(!val) return;
+            if(!etsyConcepts.includes(val)) {
+                etsyConcepts.push(val);
+                localStorage.setItem('etsyConcepts', JSON.stringify(etsyConcepts));
+                renderConceptModalList();
+                document.getElementById('newConceptInput').value = "";
+            }
+        }
+
+        function deleteEtsyConcept(index) {
+            if(confirm("Bu konsepti silmek istediğinize emin misiniz?")) {
+                etsyConcepts.splice(index, 1);
+                localStorage.setItem('etsyConcepts', JSON.stringify(etsyConcepts));
+                renderConceptModalList();
+            }
+        }
+
+
         function populateCategoryFilters() {
             const catFilter = document.getElementById('catFilter');
             if(catFilter) {
@@ -2274,6 +2352,7 @@
             try { populateCategoryFilters(); } catch(e){ console.error("catFilter err:", e); }
             try { renderAiPrompts(); } catch(e){ console.error("aiPrompts err:", e); }
             try { renderOrders(); } catch(e){ console.error("renderOrders err:", e); }
+            try { renderEtsyConceptsUI(); } catch(e){ console.error("etsyConcepts err:", e); }
         };
     </script>
 </body>

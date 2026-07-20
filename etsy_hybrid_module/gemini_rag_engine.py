@@ -48,21 +48,22 @@ def generate_optimized_listing(category_keywords_objs: list, pdf_path: str, prod
             print("Warning: PDF content is empty or could not be read.")
             
         system_instruction = (
-            "Bu PDF dosyasındaki kurallar senin Etsy algoritma anayasan'dır. "
-            "Verilen eRank kelimelerinden ÜRÜN TİPİ İLE SEMANTİK OLARAK EN UYUMLU OLANLARI SEÇEREK (alakasız kelimeleri eleyerek), "
-            "SADECE bu PDF'teki kurallara uygun bir SEO başlığı, 13 ana tag, 10 yedek tag ve açıklama yaz."
+            "Sen dünya çapında en iyi Etsy Algoritma Uzmanı (SEO Master) yapay zekasın. Görevin, sana verilen konseptleri, "
+            "eRank anahtar kelimelerini ve ürün özelliklerini kullanarak, Etsy'nin en çok satan ürünleri arasına girecek, "
+            "Premium/Luxury hissiyatı veren %100 İngilizce bir SEO başlığı, tag listesi ve ürün açıklaması oluşturmaktır."
         )
         
         # Enforce the new strict prompt rules
         strict_rules = (
-            "CRITICAL RULES YOU MUST FOLLOW EXACTLY:\n"
-            "1. LANGUAGE: The generated 'title', 'description', and 'tags' MUST BE 100% in English. Do NOT use any Turkish words.\n"
+            "CRITICAL RULES YOU MUST FOLLOW EXACTLY (DO NOT DEVIATE):\n"
+            "1. LANGUAGE: Every generated word (Title, Tags, Description) MUST BE 100% in English. Absolutely no Turkish.\n"
+            "2. ORGANIC SEO WIRING: You MUST organically weave the selected concepts and EXACTLY the 13 chosen long-tail tags into the Title and the FIRST PARAGRAPHS of the Description. Do not just list them; use them in natural, highly engaging, premium-sounding sentences.\n"
         )
         
         if product_type.strip().lower() in ["candle", "mum"]:
-            strict_rules += "2. MATERIAL & SCENT: Since this is a Candle, DO NOT write any material information anywhere in the description. Furthermore, these candles are UNSCENTED. Do NOT use words like scent, fragrance, or aroma. You may write 'unscented'.\n"
+            strict_rules += "3. KOKUSUZ MUM KURALI (CANDLE): The product is a Candle. ALL CANDLES ARE UNSCENTED. DO NOT use the words 'scent', 'fragrance', or 'aroma'. DO NOT mention any materials (like soy wax, beeswax). You MUST emphasize that it is unscented and perfect for guests sensitive to smells.\n"
         else:
-            strict_rules += "2. MATERIAL: You may include material information if applicable.\n"
+            strict_rules += "3. MATERIAL: You may naturally include material information if it enhances the premium feel.\n"
             
         dim_rules = []
         if product_size:
@@ -71,21 +72,22 @@ def generate_optimized_listing(category_keywords_objs: list, pdf_path: str, prod
             dim_rules.append(f"Box Size: {box_size}")
             
         if dim_rules:
-            strict_rules += f"3. DIMENSIONS: Use EXACTLY these dimensions: {', '.join(dim_rules)}. DO NOT invent or guess any other dimensions.\n"
+            strict_rules += f"4. DIMENSIONS: Use EXACTLY these dimensions: {', '.join(dim_rules)}.\n"
         else:
-            strict_rules += "3. DIMENSIONS: DO NOT invent or write any product or box dimensions since none were provided.\n"
+            strict_rules += "4. DIMENSIONS: DO NOT invent any dimensions.\n"
             
         strict_rules += (
-            "4. PACKAGING: The packaging options MUST be written EXACTLY as: 'White Box, Kraft Box, and Clear Bag'. Do not mention any box colors.\n"
-            "5. CARE INSTRUCTIONS: DO NOT write any care instructions.\n"
-            "6. SHIPPING: The shipping section MUST contain EXACTLY this text and nothing else: 'Ready to ship in 1-5 business days. Standard and express shipping options are available at checkout.'\n"
-            "7. FOOTER: Every description MUST end with EXACTLY this text (do not invent your own sales pitch):\n\n"
+            "5. PACKAGING (STRICT): The packaging options MUST be written EXACTLY as: 'White Box, Kraft Box, Clear Bag'. DO NOT offer or mention any other packaging or colors.\n"
+            "6. CARE INSTRUCTIONS: DO NOT write any care instructions.\n"
+            "7. SHIPPING: The shipping section MUST contain EXACTLY this text, word for word:\n"
+            "'Ready to ship in 1-5 business days. Standard and express shipping options are available at checkout.'\n"
+            "8. FIXED SIGNATURE: Every description MUST end with EXACTLY this signature block:\n\n"
             "❤Please visit our shop for other party favors, you will love them ❤:\n"
             "➢ https://www.etsy.com/shop/EynisaPartyFavors\n\n"
             "I'll always be adding new pieces to my shop, so be sure to heart my shop.\n"
             "If you have any questions , please write me :)\n"
-            "Thank you :)\n"
-            "8. DESCRIPTION STYLE: Use a luxurious, aesthetic, and elegant tone that will impress guests. You MUST include a 'Perfect for:' list, and naturally emphasize the selected concepts in it. Also, SYNERGIZE the SEO tags naturally within the description sentences, don't just list them.\n"
+            "Thank you :)\n\n"
+            "9. PREMIUM TONE: The description MUST feel highly aesthetic, luxurious, and elegant, wowing the buyer at first glance. Include a 'Perfect for:' bulleted list to highlight the concepts."
         )
         
         category_keywords = [obj["keyword"] for obj in category_keywords_objs] if category_keywords_objs else []

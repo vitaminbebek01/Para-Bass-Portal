@@ -38,7 +38,7 @@ class handler(BaseHTTPRequestHandler):
                 print(f"DEBUG: Okunan CSV sütunları: {headers}")
                 
                 records = []
-                stats = {"total_scanned": 0, "total_filtered": 0, "total_golden": 0, "total_added": 0}
+                stats = {"added": 0, "rejected_single_word": 0, "rejected_low_search": 0, "rejected_high_comp": 0, "total_golden": 0}
 
                 for row in reader:
                     # Find the correct column names by checking lower case
@@ -54,7 +54,9 @@ class handler(BaseHTTPRequestHandler):
                     if not keyword:
                         continue
                     
-                    stats["total_scanned"] += 1
+                    if len(keyword.split()) < 2:
+                        stats["rejected_single_word"] += 1
+                        continue
 
                     try:
                         sv = int(sv_str) if sv_str.isdigit() else 0
@@ -67,8 +69,11 @@ class handler(BaseHTTPRequestHandler):
                         comp = 0
                         
                     # 1. Trash Filter: sv == 0 or comp > 100000
-                    if sv == 0 or comp > 100000:
-                        stats["total_filtered"] += 1
+                    if sv == 0:
+                        stats["rejected_low_search"] += 1
+                        continue
+                    if comp > 100000:
+                        stats["rejected_high_comp"] += 1
                         continue
                         
                     # 2. Score Calculation and Golden Tag Boost
@@ -99,7 +104,7 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_json(400, "CSV okuma hatası", str(e))
                 return
 
-            stats["total_added"] = len(records)
+            stats["added"] = len(records)
             result = insert_erank_keywords(records)
             self.send_success_json({
                 "message": f"{len(records)} kayıt başarıyla eklendi.", 
