@@ -30,6 +30,7 @@ class handler(BaseHTTPRequestHandler):
             keyword = data.get('keyword', '')
             product_size = data.get('product_size', '')
             box_size = data.get('box_size', '')
+            locked_tags = data.get('locked_tags', [])
             
             # Form search term for caching/fallback
             base_category = f"{product_type} {' '.join(concept)}".strip()
@@ -87,7 +88,7 @@ class handler(BaseHTTPRequestHandler):
 
             # 3. Generate listing using Gemini RAG Engine
             pdf_path = os.path.join(os.getcwd(), "Etsy_2026_Algoritma_Rehberi.pdf")
-            result = generate_optimized_listing(keywords_list, pdf_path, product_type, product_size, box_size)
+            result = generate_optimized_listing(keywords_list, pdf_path, product_type, product_size, box_size, locked_tags)
 
             if "error" in result:
                 self.send_error_json(500, result["error"])

@@ -14,7 +14,7 @@ from etsy_hybrid_module.db_handler import get_all_erank_keywords, delete_erank_k
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            data = get_all_erank_keywords(500)
+            data = get_all_erank_keywords(10000)
             self.send_success_json(data)
         except Exception as e:
             self.send_error_json(500, "Sunucu hatası", str(e))

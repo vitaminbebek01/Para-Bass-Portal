@@ -29,7 +29,7 @@ def get_erank_keywords(concept):
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
-def get_all_erank_keywords(limit=200):
+def get_all_erank_keywords(limit=10000):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
@@ -43,9 +43,13 @@ def delete_erank_keyword(keyword_id_or_ids):
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
         if isinstance(keyword_id_or_ids, list):
-            response = supabase.table("erank_keywords").delete().in_("id", keyword_id_or_ids).execute()
+            # Supabase-py 'in_' filter expects a comma-separated string for some versions, or a list.
+            # To be safe against 500 errors, we can loop over them or format properly.
+            # Usually .in_("id", [1,2,3]) works, but if it fails, maybe it needs strings.
+            string_ids = [str(i) for i in keyword_id_or_ids]
+            response = supabase.table("erank_keywords").delete().in_("id", string_ids).execute()
         else:
-            response = supabase.table("erank_keywords").delete().eq("id", keyword_id_or_ids).execute()
+            response = supabase.table("erank_keywords").delete().eq("id", str(keyword_id_or_ids)).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")

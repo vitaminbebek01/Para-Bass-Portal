@@ -540,8 +540,15 @@
                         <input type="file" id="etsyDraftImage" accept="image/*" style="background:white; border:1px solid #ccc; padding:8px; border-radius:4px; width:100%;">
                         <div style="font-size:11px; color:#7f8c8d; margin-top:4px;">* Maksimum 20 fotoğraf yüklenebilir.</div>
                     </div>
+                    
+                    <div class="form-group" style="margin-top:10px;">
+                        <label>Kilitli Tagler (<span id="lockedTagsCount">0</span>/13)</label>
+                        <div id="lockedTagsContainer" style="display:flex; flex-wrap:wrap; gap:5px; background:white; border:1px solid #ccc; border-radius:4px; padding:10px; min-height:40px;">
+                            <em style="color:#888; font-size:12px;">Henüz kilitli tag eklenmedi. Havuzdan veya favorilerden 'Üretime Gönder' butonunu kullanın.</em>
+                        </div>
+                    </div>
 
-                    <button class="action-btn" id="btnEtsyGenerate" onclick="generateEtsyDraft()">✨ İçerik Üret</button>
+                    <button id="btnEtsyGenerate" class="action-btn" style="width:100%; font-size:16px; margin-top:15px; margin-bottom:15px;" onclick="generateEtsyDraft()">🚀 İçerik Üret (SEO)</button>
                     
                     <!-- SONUÇ KUTULARI -->
                     <div id="etsyDraftResults" style="display:none; margin-top:20px;">
@@ -615,11 +622,18 @@
                             <div id="dashboardContainer" style="display:none; max-height:250px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; background:white; font-size:12px;">
                                 <input type="text" id="dashboardSearch" placeholder="Kelime ara..." style="width:100%; margin-bottom:10px; padding:5px; box-sizing:border-box;" onkeyup="filterDashboard()">
                                 
-                                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                                <div style="margin-bottom:10px; display:flex; gap:10px; align-items:center;">
+                                    <label style="font-weight:bold;">Aktif Favori Listesi:</label>
+                                    <select id="activeFavListSelect" class="fin-input" style="margin:0; flex:1;" onchange="updateActiveFavList()">
+                                        <option value="">-- Liste Seçiniz --</option>
+                                    </select>
+                                </div>
+
+                                <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
                                     <button class="small-btn" style="background:#e74c3c;" onclick="deleteSelectedErankKeywords()">🗑️ Seçilenleri Sil</button>
                                     <button class="small-btn" style="background:#f39c12;" onclick="openAddToFavoritesModal()">⭐ Favori Listesine Ekle</button>
+                                    <button class="small-btn" style="background:#27ae60;" onclick="sendSelectedToLockedTags()">🚀 Seçilenleri Üretime Gönder (Kilitli)</button>
                                 </div>
-                                
                                 <table style="width:100%; border-collapse:collapse; text-align:left;">
                                     <thead>
                                         <tr style="background:#eee;">
@@ -823,7 +837,7 @@
                         const response = await fetchWithRetry('/api/etsy-draft', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ product_type, concept, keyword, product_size, box_size })
+                            body: JSON.stringify({ product_type, concept, keyword, product_size, box_size, locked_tags: lockedTags })
                         });
                         
                         const data = await response.json();
@@ -990,8 +1004,11 @@
                         const cmp = item.competition || item.Competition || item.COMPETITION || 0;
                         html += `
                         <tr class="dashboard-row">
-                            <td style="padding:5px;"><input type="checkbox" class="erank-row-cb" value="${item.id}" data-keyword="${kw.replace(/"/g, '&quot;')}"></td>
-                            <td style="padding:5px;" class="kw-text">${kw}</td>
+                            <td style="padding:5px;"><input type="checkbox" class="erank-row-cb" value="${item.id}" data-keyword="${kw.replace(/"/g, '&quot;')}" data-searches="${src}" data-comp="${cmp}"></td>
+                            <td style="padding:5px;" class="kw-text">
+                                <span style="cursor:pointer;" onclick="addSingleToActiveFavList('${kw.replace(/"/g, '&quot;')}', ${src}, ${cmp})" title="Aktif favori listesine ekle">⭐</span> 
+                                ${kw}
+                            </td>
                             <td style="padding:5px;">${src}</td>
                             <td style="padding:5px;">${cmp}</td>
                             <td style="padding:5px;">
@@ -2124,20 +2141,36 @@
             
             const list = favoriteTagLists.find(l => l.id === currentViewedFavListId);
             if(!list || !list.tags || list.tags.length === 0) {
-                tbody.innerHTML = "<tr><td colspan='3'><em>Bu listede henüz etiket yok.</em></td></tr>";
+                tbody.innerHTML = "<tr><td colspan='5'><em>Bu listede henüz etiket yok.</em></td></tr>";
                 return;
             }
             
-            list.tags.forEach((tag, idx) => {
-                const safeTag = tag.replace(/"/g, '&quot;');
+            list.tags.forEach((tagItem, idx) => {
+                let kw, src, cmp;
+                if(typeof tagItem === 'string') {
+                    kw = tagItem; src = 0; cmp = 0;
+                    // upgrade string to object
+                    list.tags[idx] = {keyword: kw, searches: src, competition: cmp};
+                } else {
+                    kw = tagItem.keyword || "";
+                    src = tagItem.searches || 0;
+                    cmp = tagItem.competition || 0;
+                }
+                const safeTag = kw.replace(/"/g, '&quot;');
                 tbody.innerHTML += `
                     <tr>
                         <td style="padding:5px;"><input type="checkbox" class="fav-tag-cb" value="${idx}"></td>
-                        <td style="padding:5px;">${tag}</td>
-                        <td style="padding:5px;"><button class="small-btn" style="background:#e74c3c; padding:2px 5px;" onclick="deleteTagFromList(${idx})">Sil</button></td>
+                        <td style="padding:5px;">${kw}</td>
+                        <td style="padding:5px;">${src}</td>
+                        <td style="padding:5px;">${cmp}</td>
+                        <td style="padding:5px;">
+                            <button class="small-btn" style="background:#27ae60; padding:2px 5px;" onclick="sendToLockedTagsFromFav('${safeTag}')">Üretime Gönder</button>
+                            <button class="small-btn" style="background:#e74c3c; padding:2px 5px;" onclick="deleteTagFromList(${idx})">Sil</button>
+                        </td>
                     </tr>
                 `;
             });
+            localStorage.setItem('favoriteTagLists', JSON.stringify(favoriteTagLists)); // Save if upgraded
         }
         
         function toggleFavListSelectAll() {
@@ -2633,6 +2666,121 @@
         function sendInpaintRequest() {
             alert("Backend entegrasyonu tamamlandığında maske ve komut sisteme iletilecektir.");
             document.getElementById('inpaintModal').style.display = 'none';
+        }
+
+        // ==========================================
+        // YILDIZ VE KİLİTLİ TAG SİSTEMİ
+        // ==========================================
+        let activeFavListId = null;
+        let lockedTags = []; // Array of strings
+
+        function updateActiveFavList() {
+            const select = document.getElementById('activeFavListSelect');
+            activeFavListId = select.value ? parseInt(select.value) : null;
+        }
+
+        function populateActiveFavListDropdown() {
+            const select = document.getElementById('activeFavListSelect');
+            if(!select) return;
+            const currentVal = select.value;
+            select.innerHTML = '<option value="">-- Liste Seçiniz --</option>';
+            favoriteTagLists.forEach(list => {
+                select.innerHTML += `<option value="${list.id}">${list.name}</option>`;
+            });
+            if(currentVal) {
+                select.value = currentVal;
+                activeFavListId = parseInt(currentVal);
+            }
+        }
+
+        // Add call to populateActiveFavListDropdown inside renderFavoriteLists so it syncs
+        const originalRenderFavoriteLists = renderFavoriteLists;
+        renderFavoriteLists = function() {
+            originalRenderFavoriteLists();
+            populateActiveFavListDropdown();
+        };
+
+        function addSingleToActiveFavList(keyword, searches, comp) {
+            if(!activeFavListId) {
+                alert("Lütfen önce yukarıdaki 'Aktif Favori Listesi' alanından bir liste seçin!");
+                return;
+            }
+            const list = favoriteTagLists.find(l => l.id === activeFavListId);
+            if(list) {
+                // Check if already exists
+                const exists = list.tags.find(t => {
+                    const k = typeof t === 'string' ? t : t.keyword;
+                    return k === keyword;
+                });
+                if(exists) {
+                    showEtsyToast(`'${keyword}' zaten '${list.name}' listesinde mevcut.`, false);
+                    return;
+                }
+                list.tags.push({keyword: keyword, searches: searches, competition: comp});
+                localStorage.setItem('favoriteTagLists', JSON.stringify(favoriteTagLists));
+                renderFavoriteLists();
+                showEtsyToast(`'${keyword}' -> '${list.name}' listesine eklendi!`, false);
+            }
+        }
+
+        function sendSelectedToLockedTags() {
+            const selected = Array.from(document.querySelectorAll('.erank-row-cb:checked')).map(cb => cb.getAttribute('data-keyword'));
+            if(selected.length === 0) {
+                alert("Lütfen üretime gönderilecek kelimeleri seçin.");
+                return;
+            }
+            addLockedTags(selected);
+            // clear checkboxes
+            document.querySelectorAll('.erank-row-cb').forEach(cb => cb.checked = false);
+            document.getElementById('erankSelectAll').checked = false;
+        }
+
+        function sendToLockedTagsFromFav(keyword) {
+            addLockedTags([keyword]);
+        }
+
+        function addLockedTags(tagsArray) {
+            let added = 0;
+            tagsArray.forEach(tag => {
+                if(lockedTags.length >= 13) {
+                    showEtsyToast("Uyarı: En fazla 13 kilitli tag ekleyebilirsiniz!", false);
+                    return;
+                }
+                if(!lockedTags.includes(tag)) {
+                    lockedTags.push(tag);
+                    added++;
+                }
+            });
+            renderLockedTags();
+            if(added > 0) showEtsyToast(`${added} tag üretime (kilitli) eklendi!`, false);
+        }
+
+        function removeLockedTag(index) {
+            lockedTags.splice(index, 1);
+            renderLockedTags();
+        }
+
+        function renderLockedTags() {
+            const container = document.getElementById('lockedTagsContainer');
+            const countSpan = document.getElementById('lockedTagsCount');
+            if(!container) return;
+            
+            countSpan.innerText = lockedTags.length;
+            
+            if(lockedTags.length === 0) {
+                container.innerHTML = "<em style='color:#888; font-size:12px;'>Henüz kilitli tag eklenmedi. Havuzdan veya favorilerden 'Üretime Gönder' butonunu kullanın.</em>";
+                return;
+            }
+            
+            container.innerHTML = "";
+            lockedTags.forEach((tag, idx) => {
+                container.innerHTML += `
+                    <div style="background:#2980b9; color:white; padding:4px 8px; border-radius:15px; font-size:12px; display:flex; align-items:center; gap:5px;">
+                        ${tag}
+                        <span style="cursor:pointer; font-weight:bold; margin-left:3px;" onclick="removeLockedTag(${idx})">×</span>
+                    </div>
+                `;
+            });
         }
 
         // ==========================================

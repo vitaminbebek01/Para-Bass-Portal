@@ -33,7 +33,7 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         print(f"Error reading PDF {pdf_path}: {e}")
         return ""
 
-def generate_optimized_listing(category_keywords_objs: list, pdf_path: str, product_type: str = "", product_size: str = "", box_size: str = "") -> dict:
+def generate_optimized_listing(category_keywords_objs: list, pdf_path: str, product_type: str = "", product_size: str = "", box_size: str = "", locked_tags: list = None) -> dict:
     """
     Generates an optimized Etsy listing based on eRank keywords and rules from a PDF.
     Output is strictly in JSON format.
@@ -57,8 +57,12 @@ def generate_optimized_listing(category_keywords_objs: list, pdf_path: str, prod
         strict_rules = (
             "CRITICAL RULES YOU MUST FOLLOW EXACTLY (DO NOT DEVIATE):\n"
             "1. LANGUAGE: Every generated word (Title, Tags, Description) MUST BE 100% in English. Absolutely no Turkish.\n"
-            "2. ORGANIC SEO WIRING: You MUST organically weave the selected concepts and EXACTLY the 13 chosen long-tail tags into the Title and the FIRST PARAGRAPHS of the Description. Do not just list them; use them in natural, highly engaging, premium-sounding sentences like a human luxury copywriter.\n"
         )
+        
+        if locked_tags and len(locked_tags) > 0:
+            strict_rules += f"2. LOCKED TAGS (CRITICAL): Kullanıcı sana {len(locked_tags)} adet KESİN/KİLİTLİ etiket (Locked Tags) gönderdi: {json.dumps(locked_tags)}. Bu etiketleri HİÇ DEĞİŞTİRMEDEN doğrudan kullanacaksın. Kalan boşluklar için (13 - {len(locked_tags)}) adet yeni, yüksek hacimli tag seçeceksin. Üretilen toplam 13 tag'i (kullanıcının seçtikleri dahil) Etsy SEO algoritmasına uygun şekilde, lüks ve profesyonel bir dille SEO açıklamasına ve başlığa DOĞAL CÜMLELERLE yedireceksin.\n"
+        else:
+            strict_rules += "2. ORGANIC SEO WIRING: You MUST organically weave the selected concepts and EXACTLY the 13 chosen long-tail tags into the Title and the FIRST PARAGRAPHS of the Description. Do not just list them; use them in natural, highly engaging, premium-sounding sentences like a human luxury copywriter.\n"
         
         if product_type.strip().lower() in ["candle", "mum"]:
             strict_rules += "3. KOKUSUZ MUM KURALI (CANDLE): KOKU KELİMESİ KESİNLİKLE YASAKTIR. DO NOT use the words 'Unscented', 'scented', 'smell', 'fragrance', or 'aroma' ANYWHERE in the title, tags, or description. IGNORE the concept of scent entirely. DO NOT mention any materials (like soy wax, beeswax).\n"
