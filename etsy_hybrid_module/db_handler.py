@@ -74,25 +74,25 @@ def get_prompt_pool():
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("prompt_pool").select("*").order("id").execute()
+        response = supabase.table("prompt_pool").select("*").order("created_at", desc=True).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
-def add_prompt(content: str):
+def add_prompt(title: str, content: str):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("prompt_pool").insert({"content": content}).execute()
+        response = supabase.table("prompt_pool").insert({"title": title, "content": content}).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
-def update_prompt(prompt_id: int, content: str):
+def update_prompt(prompt_id: int, title: str, content: str):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("prompt_pool").update({"content": content}).eq("id", prompt_id).execute()
+        response = supabase.table("prompt_pool").update({"title": title, "content": content}).eq("id", prompt_id).execute()
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")

@@ -29,12 +29,13 @@ class handler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data)
             
+            title = data.get('title', 'Başlıksız Prompt')
             content = data.get('content')
             if not content:
                 self.send_error_json(400, "Content is required.")
                 return
 
-            result = add_prompt(content)
+            result = add_prompt(title, content)
             if isinstance(result, dict) and "error" in result:
                 self.send_error_json(500, result["error"])
             else:
@@ -53,13 +54,14 @@ class handler(BaseHTTPRequestHandler):
             data = json.loads(post_data)
             
             prompt_id = data.get('id')
+            title = data.get('title', 'Başlıksız Prompt')
             content = data.get('content')
             
             if not prompt_id or not content:
                 self.send_error_json(400, "ID and Content are required.")
                 return
 
-            result = update_prompt(prompt_id, content)
+            result = update_prompt(prompt_id, title, content)
             if isinstance(result, dict) and "error" in result:
                 self.send_error_json(500, result["error"])
             else:

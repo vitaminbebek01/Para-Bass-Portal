@@ -667,6 +667,7 @@
                             </h3>
                             
                             <div id="newPromptArea" style="display:none; margin-bottom:10px;">
+                                <input type="text" id="newPromptTitle" placeholder="Prompt Başlığı (Örn: Lüks Hediye)" style="width:100%; padding:5px; margin-bottom:5px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; font-size:12px; font-weight:bold;">
                                 <textarea id="newPromptText" placeholder="Yeni prompt metnini buraya girin..." style="width:100%; height:60px; resize:none; padding:5px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; font-size:12px;"></textarea>
                                 <div style="display:flex; gap:5px; margin-top:5px;">
                                     <button class="small-btn" style="background:#27ae60; flex:1;" onclick="addPrompt()">Kaydet</button>
@@ -1118,17 +1119,21 @@
                         if(data.length === 0) {
                             htmlContent = "<em>Havuzda henüz prompt yok.</em>";
                         } else {
-                            data.forEach((p) => {
-                                htmlContent += `
-                                <div style='padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;'>
-                                    <div id='dbPrompt${p.id}' style='flex:1; word-break:break-word;'>${p.content}</div>
-                                    <div style='display:flex; gap:5px; flex-shrink:0;'>
-                                        <button class='small-btn' style='background:#f39c12; padding:2px 5px; font-size:10px;' onclick='copyToClipboard("dbPrompt${p.id}")'>Kopyala</button>
-                                        <button class='small-btn' style='background:#3498db; padding:2px 5px; font-size:10px;' onclick='editPrompt(${p.id})'>Düzenle</button>
-                                        <button class='small-btn' style='background:#e74c3c; padding:2px 5px; font-size:10px;' onclick='deletePrompt(${p.id})'>Sil</button>
-                                    </div>
-                                </div>`;
-                            });
+                                data.forEach((p) => {
+                                    const titleStr = p.title ? `<strong style='display:block; margin-bottom:4px; color:#2980b9;'>${p.title}</strong>` : '';
+                                    htmlContent += `
+                                    <div style='padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;'>
+                                        <div style='flex:1; word-break:break-word;'>
+                                            ${titleStr}
+                                            <div id='dbPrompt${p.id}' style='color:#555;'>${p.content}</div>
+                                        </div>
+                                        <div style='display:flex; gap:5px; flex-shrink:0;'>
+                                            <button class='small-btn' style='background:#f39c12; padding:2px 5px; font-size:10px;' onclick='copyToClipboard("dbPrompt${p.id}")'>Kopyala</button>
+                                            <button class='small-btn' style='background:#3498db; padding:2px 5px; font-size:10px;' onclick='editPrompt(${p.id}, "${(p.title || "").replace(/"/g, "&quot;")}")'>Düzenle</button>
+                                            <button class='small-btn' style='background:#e74c3c; padding:2px 5px; font-size:10px;' onclick='deletePrompt(${p.id})'>Sil</button>
+                                        </div>
+                                    </div>`;
+                                });
                         }
                         document.getElementById('etsyPromptPool').innerHTML = htmlContent;
                     } catch(e) {
@@ -1137,22 +1142,24 @@
                 }
 
                 async function addPrompt() {
+                    const title = document.getElementById('newPromptTitle').value.trim();
                     const content = document.getElementById('newPromptText').value.trim();
-                    if(!content) {
-                        showEtsyToast("Lütfen bir prompt metni girin!");
+                    if(!title || !content) {
+                        showEtsyToast("Lütfen hem başlık hem de metin girin!");
                         return;
                     }
                     try {
                         const response = await fetchWithRetry('/api/prompts', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content })
+                            body: JSON.stringify({ title, content })
                         });
                         const data = await response.json();
                         if(data.error) {
                             showEtsyToast("Hata: " + data.error);
                         } else {
                             showEtsyToast("Prompt başarıyla eklendi!", false);
+                            document.getElementById('newPromptTitle').value = "";
                             document.getElementById('newPromptText').value = "";
                             document.getElementById('newPromptArea').style.display = 'none';
                             loadPromptPool();
@@ -1181,16 +1188,18 @@
                     }
                 }
 
-                async function editPrompt(id) {
+                async function editPrompt(id, currentTitle) {
                     const currentContent = document.getElementById('dbPrompt' + id).innerText;
-                    const newContent = prompt("Promptu düzenle:", currentContent);
+                    const newTitle = prompt("Prompt Başlığı:", currentTitle || "");
+                    if(newTitle === null) return;
+                    const newContent = prompt("Prompt İçeriği:", currentContent);
                     if(newContent === null || newContent.trim() === "") return;
                     
                     try {
                         const response = await fetchWithRetry('/api/prompts', {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id, content: newContent.trim() })
+                            body: JSON.stringify({ id, title: newTitle.trim(), content: newContent.trim() })
                         });
                         const data = await response.json();
                         if(data.error) showEtsyToast("Hata: " + data.error);
