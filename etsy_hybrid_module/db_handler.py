@@ -29,12 +29,17 @@ def get_erank_keywords(concept):
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
-def get_all_erank_keywords(limit=10000):
+def get_all_erank_keywords():
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        response = supabase.table("erank_keywords").select("*").order("score", desc=True).limit(limit).execute()
-        return response.data
+        # Fetching all without .limit() to get the maximum allowed by Supabase
+        response = supabase.table("erank_keywords").select("*").order("score", desc=True).execute()
+        data = response.data
+        if data:
+            # Filter out single words as per request
+            data = [item for item in data if " " in str(item.get("keyword", "")).strip()]
+        return data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 

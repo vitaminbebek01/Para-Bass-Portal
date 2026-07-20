@@ -620,7 +620,13 @@
                             <button class="small-btn" style="width:100%; margin-bottom:10px; background:#34495e;" onclick="loadErankDashboard()">🔄 Havuzu Görüntüle / Yenile</button>
                             
                             <div id="dashboardContainer" style="display:none; max-height:250px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; background:white; font-size:12px;">
-                                <input type="text" id="dashboardSearch" placeholder="Kelime ara..." style="width:100%; margin-bottom:10px; padding:5px; box-sizing:border-box;" onkeyup="filterDashboard()">
+                                <div style="display:flex; gap:10px; margin-bottom:10px; align-items:center;">
+                                    <input type="text" id="dashboardSearch" placeholder="Kelime ara..." style="flex:1; padding:5px; box-sizing:border-box;" onkeyup="filterDashboard()">
+                                    <label style="font-size:12px; display:flex; align-items:center; gap:5px; white-space:nowrap;">
+                                        <input type="checkbox" id="showHighComp" onchange="filterDashboard()">
+                                        100k Üstü Rekabeti Göster
+                                    </label>
+                                </div>
                                 
                                 <div style="margin-bottom:10px; display:flex; gap:10px; align-items:center;">
                                     <label style="font-weight:bold;">Aktif Favori Listesi:</label>
@@ -1002,11 +1008,13 @@
                         const kw = item.keyword || item.Keyword || item.KEYWORD || "-";
                         const src = item.searches || item.Searches || item.SEARCHES || 0;
                         const cmp = item.competition || item.Competition || item.COMPETITION || 0;
+                        const safeKwForAttr = kw.replace(/"/g, '&quot;');
+                        const safeKwForFunc = kw.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                         html += `
-                        <tr class="dashboard-row">
-                            <td style="padding:5px;"><input type="checkbox" class="erank-row-cb" value="${item.id}" data-keyword="${kw.replace(/"/g, '&quot;')}" data-searches="${src}" data-comp="${cmp}"></td>
+                        <tr class="dashboard-row" data-comp="${cmp}">
+                            <td style="padding:5px;"><input type="checkbox" class="erank-row-cb" value="${item.id}" data-keyword="${safeKwForAttr}" data-searches="${src}" data-comp="${cmp}"></td>
                             <td style="padding:5px;" class="kw-text">
-                                <span style="cursor:pointer;" onclick="addSingleToActiveFavList('${kw.replace(/"/g, '&quot;')}', ${src}, ${cmp})" title="Aktif favori listesine ekle">⭐</span> 
+                                <span style="cursor:pointer;" onclick="addSingleToActiveFavList('${safeKwForFunc}', ${src}, ${cmp})" title="Aktif favori listesine ekle">⭐</span> 
                                 ${kw}
                             </td>
                             <td style="padding:5px;">${src}</td>
@@ -1018,14 +1026,23 @@
                         `;
                     });
                     tbody.innerHTML = html;
+                    filterDashboard(); // Apply default filters on load
                 }
                 
                 function filterDashboard() {
                     const search = document.getElementById('dashboardSearch').value.toLowerCase();
+                    const showHighComp = document.getElementById('showHighComp').checked;
                     const rows = document.querySelectorAll('.dashboard-row');
                     rows.forEach(row => {
                         const text = row.querySelector('.kw-text').innerText.toLowerCase();
-                        row.style.display = text.includes(search) ? '' : 'none';
+                        const comp = parseInt(row.getAttribute('data-comp') || 0);
+                        
+                        let isVisible = text.includes(search);
+                        if (!showHighComp && comp > 100000) {
+                            isVisible = false;
+                        }
+                        
+                        row.style.display = isVisible ? '' : 'none';
                     });
                 }
                 
