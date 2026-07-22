@@ -553,8 +553,14 @@
                     <!-- SONUÇ KUTULARI -->
                     <div id="etsyDraftResults" style="display:none; margin-top:20px;">
                         <div class="result-box" style="position:relative;">
+                            <button class="copy-btn" onclick="copyToClipboard('etsyResShortTitle')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
+                            <label>Kısa Başlık (En Fazla 70 Karakter)</label>
+                            <input type="text" id="etsyResShortTitle" style="width:100%; font-weight:bold; font-size:14px; margin-top:5px; padding:10px; border:1px solid #ccc; border-radius:4px; color:#2c3e50; box-sizing:border-box;" readonly>
+                        </div>
+
+                        <div class="result-box" style="position:relative; margin-top:15px;">
                             <button class="copy-btn" onclick="copyToClipboard('etsyResTitle')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
-                            <label>Optimize Edilmiş Başlık (Title)</label>
+                            <label>Tam Başlık (En Fazla 140 Karakter)</label>
                             <input type="text" id="etsyResTitle" style="width:100%; font-weight:bold; font-size:14px; margin-top:5px; padding:10px; border:1px solid #ccc; border-radius:4px; color:#2c3e50; box-sizing:border-box;" readonly>
                         </div>
                         
@@ -856,6 +862,7 @@
                         if(data.error) {
                             showEtsyToast("Hata: " + data.error);
                         } else {
+                            document.getElementById('etsyResShortTitle').value = data.short_title || "Bulunamadı";
                             document.getElementById('etsyResTitle').value = data.title || "Bulunamadı";
                             
                             renderTags(data.tags || [], 'etsyResTags');

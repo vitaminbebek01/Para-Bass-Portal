@@ -27,7 +27,8 @@ class handler(BaseHTTPRequestHandler):
             concept = data.get('concept', [])
             if isinstance(concept, str):
                 concept = [concept] if concept else []
-            keyword = data.get('keyword', '')
+            concept = [str(item).strip() for item in concept if str(item).strip()]
+            keyword = str(data.get('keyword') or '').strip()
             product_size = data.get('product_size', '')
             box_size = data.get('box_size', '')
             locked_tags = data.get('locked_tags', [])
@@ -42,7 +43,8 @@ class handler(BaseHTTPRequestHandler):
             
             # 1. Check cache first (saves LLM tokens & time)
             cached = check_cached_seo(search_term)
-            if cached:
+            # Legacy cache entries do not contain the validated short title.
+            if cached and cached.get('short_title'):
                 self.send_success_json(cached)
                 return
 
@@ -50,7 +52,6 @@ class handler(BaseHTTPRequestHandler):
             erank_data = get_erank_keywords(concept if concept else [product_type])
             
             # --- GARBAGE AND MATH FILTER ---
-            import re
             garbage_words = ["simpsons", "skateboard", "poker", "tack shop", "chip", "casino", "game", "toy", "deck", "cards", "dice"]
             filtered_erank = []
             if erank_data:
@@ -86,9 +87,18 @@ class handler(BaseHTTPRequestHandler):
                 keywords_list = [{"keyword": search_term, "searches": 0, "competition": 0}]
             # -------------------------------
 
-            # 3. Generate listing using Gemini RAG Engine
-            pdf_path = os.path.join(os.getcwd(), "Etsy_2026_Algoritma_Rehberi.pdf")
-            result = generate_optimized_listing(keywords_list, pdf_path, product_type, product_size, box_size, locked_tags)
+            # 3. Generate listing using the compact, cached rules file.
+            rules_path = os.path.join(parent_dir, "etsy_hybrid_module", "etsy_rules_compact.md")
+            result = generate_optimized_listing(
+                keywords_list,
+                rules_path,
+                product_type,
+                product_size,
+                box_size,
+                locked_tags,
+                selected_concepts=concept,
+                custom_keyword=keyword,
+            )
 
             if "error" in result:
                 self.send_error_json(500, result["error"])
