@@ -611,10 +611,11 @@
                             
                             <div id="csvStatsDisplay" style="display:none; margin-top:10px; padding:10px; background:#f0f4f8; border-radius:4px; font-size:12px; color:#333;">
                                 <strong>Yükleme İstatistikleri:</strong><br>
-                                Eklenen: <span id="statAdded" style="color:green; font-weight:bold;">0</span> | 
+                                Güncel Kayıt: <span id="statAdded" style="color:green; font-weight:bold;">0</span> |
+                                Güncellenen: <span id="statUpdated" style="color:#2980b9; font-weight:bold;">0</span><br>
                                 Tek Kelime (Reddedilen): <span id="statRejSingle" style="color:red;">0</span><br>
-                                Sıfır Aranma (Reddedilen): <span id="statRejSearch" style="color:red;">0</span> | 
-                                Yüksek Rekabet (Reddedilen): <span id="statRejComp" style="color:red;">0</span>
+                                Hacim 20 ve Altı (Silinen): <span id="statRejSearch" style="color:red;">0</span> |
+                                100k Üstü (Ayrı Havuz): <span id="statHighComp" style="color:#d35400;">0</span>
                             </div>
                         </div>
 
@@ -623,6 +624,7 @@
                         <!-- DATA POOL DASHBOARD -->
                         <div>
                             <h3 style="margin-top:0; font-size:16px; color:#34495e;">📊 Veri Havuzu Dashboard</h3>
+                            <p style="margin:-5px 0 8px; font-size:11px; color:#7f8c8d;">Puan; hacim, rekabet ve CSV'de varsa tıklama, CTR ve trend verilerini birlikte değerlendirir.</p>
                             <button class="small-btn" style="width:100%; margin-bottom:10px; background:#34495e;" onclick="loadErankDashboard()">🔄 Havuzu Görüntüle / Yenile</button>
                             
                             <div id="dashboardContainer" style="display:none; max-height:250px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; background:white; font-size:12px;">
@@ -630,7 +632,7 @@
                                     <input type="text" id="dashboardSearch" placeholder="Kelime ara..." style="flex:1; padding:5px; box-sizing:border-box;" onkeyup="filterDashboard()">
                                     <label style="font-size:12px; display:flex; align-items:center; gap:5px; white-space:nowrap;">
                                         <input type="checkbox" id="showHighComp" onchange="filterDashboard()">
-                                        100k Üstü Rekabeti Göster
+                                        Sadece 100k Üstü (<span id="highCompCount">0</span>)
                                     </label>
                                 </div>
                                 
@@ -651,8 +653,10 @@
                                         <tr style="background:#eee;">
                                             <th style="padding:5px; width:30px;"><input type="checkbox" id="erankSelectAll" onclick="toggleErankSelectAll()"></th>
                                             <th style="padding:5px;">Keyword</th>
+                                            <th style="padding:5px;">Konsept</th>
                                             <th style="padding:5px; cursor:pointer;" onclick="sortErankData('searches')" title="Sırala">Vol ⇅</th>
                                             <th style="padding:5px; cursor:pointer;" onclick="sortErankData('competition')" title="Sırala">Comp ⇅</th>
+                                            <th style="padding:5px; cursor:pointer;" onclick="sortErankData('score')" title="Sırala">Puan ⇅</th>
                                             <th style="padding:5px;">İşlem</th>
                                         </tr>
                                     </thead>
@@ -965,13 +969,14 @@
                                 showEtsyToast(data.message || "CSV başarıyla yüklendi!", false);
                                 if(data.stats) {
                                     document.getElementById('statAdded').innerText = data.stats.added;
+                                    document.getElementById('statUpdated').innerText = data.stats.updated || 0;
                                     document.getElementById('statRejSingle').innerText = data.stats.rejected_single_word;
                                     document.getElementById('statRejSearch').innerText = data.stats.rejected_low_search;
-                                    document.getElementById('statRejComp').innerText = data.stats.rejected_high_comp;
+                                    document.getElementById('statHighComp').innerText = data.stats.high_competition || 0;
                                     document.getElementById('csvStatsDisplay').style.display = 'block';
-                                    
+
                                     // Show toast summary
-                                    showEtsyToast(`Eklendi: ${data.stats.added} | Tek Kelime: ${data.stats.rejected_single_word} | Hacim: ${data.stats.rejected_low_search} | Rekabet: ${data.stats.rejected_high_comp}`, false);
+                                    showEtsyToast(`Güncel: ${data.stats.added} | Güncellenen: ${data.stats.updated || 0} | Hacim ≤20: ${data.stats.rejected_low_search} | 100k Üstü: ${data.stats.high_competition || 0}`, false);
                                 }
                                 fileInput.value = ""; // clear input
                                 loadErankDashboard(); // refresh
@@ -991,27 +996,28 @@
                     const container = document.getElementById('dashboardContainer');
                     const tbody = document.getElementById('dashboardTableBody');
                     container.style.display = 'block';
-                    tbody.innerHTML = "<tr><td colspan='4'><em>Yükleniyor...</em></td></tr>";
+                    tbody.innerHTML = "<tr><td colspan='7'><em>Yükleniyor...</em></td></tr>";
                     
                     try {
                         const response = await fetchWithRetry('/api/erank-dashboard');
                         const data = await response.json();
                         if(data.error) {
-                            tbody.innerHTML = `<tr><td colspan='4' style='color:red;'>Hata: ${data.error}</td></tr>`;
+                            tbody.innerHTML = `<tr><td colspan='7' style='color:red;'>Hata: ${data.error}</td></tr>`;
                             return;
                         }
                         
-                        window.erankPoolData = data; 
+                        window.erankPoolData = data;
+                        document.getElementById('highCompCount').innerText = data.filter(item => Number(item.competition || 0) > 100000).length;
                         renderDashboardTable(data);
                     } catch(e) {
-                        tbody.innerHTML = "<tr><td colspan='4' style='color:red;'>Bağlantı hatası.</td></tr>";
+                        tbody.innerHTML = "<tr><td colspan='7' style='color:red;'>Bağlantı hatası.</td></tr>";
                     }
                 }
                 
                 function renderDashboardTable(data) {
                     const tbody = document.getElementById('dashboardTableBody');
                     if(data.length === 0) {
-                        tbody.innerHTML = "<tr><td colspan='5'><em>Veri bulunamadı.</em></td></tr>";
+                        tbody.innerHTML = "<tr><td colspan='7'><em>Veri bulunamadı.</em></td></tr>";
                         return;
                     }
                     
@@ -1020,6 +1026,9 @@
                         const kw = item.keyword || item.Keyword || item.KEYWORD || "-";
                         const src = item.searches || item.Searches || item.SEARCHES || 0;
                         const cmp = item.competition || item.Competition || item.COMPETITION || 0;
+                        const concept = item.concept || "-";
+                        const score = Number(item.score || 0);
+                        const scoreInfo = getErankScoreInfo(score);
                         const safeKwForAttr = kw.replace(/"/g, '&quot;');
                         const safeKwForFunc = kw.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                         html += `
@@ -1029,8 +1038,10 @@
                                 <span style="cursor:pointer;" onclick="addSingleToActiveFavList('${safeKwForFunc}', ${src}, ${cmp})" title="Aktif favori listesine ekle">⭐</span> 
                                 ${kw}
                             </td>
+                            <td style="padding:5px; color:#666;">${concept}</td>
                             <td style="padding:5px; ${getHeatmapStyle(src, 'searches')}">${src}</td>
                             <td style="padding:5px; ${getHeatmapStyle(cmp, 'competition')}">${cmp}</td>
+                            <td style="padding:5px; font-weight:bold; color:${scoreInfo.color};" title="${scoreInfo.label}">${score.toFixed(1)}<br><small>${scoreInfo.label}</small></td>
                             <td style="padding:5px;">
                                 <button class="small-btn" style="background:#e74c3c; padding:2px 5px;" onclick="deleteErankKeyword(${item.id})">Sil</button>
                             </td>
@@ -1050,9 +1061,8 @@
                         const comp = parseInt(row.getAttribute('data-comp') || 0);
                         
                         let isVisible = text.includes(search);
-                        if (!showHighComp && comp > 100000) {
-                            isVisible = false;
-                        }
+                        if (showHighComp && comp <= 100000) isVisible = false;
+                        if (!showHighComp && comp > 100000) isVisible = false;
                         
                         row.style.display = isVisible ? '' : 'none';
                     });
@@ -2903,6 +2913,13 @@
             }
             const hue = Math.round(ratio * 120);
             return `background: hsla(${hue}, 80%, 50%, 0.15); color: hsl(${hue}, 80%, 30%); font-weight:bold; border-radius:4px; text-align:center;`;
+        }
+
+        function getErankScoreInfo(score) {
+            if(score >= 75) return { label: 'Çok Güçlü', color: '#1e8449' };
+            if(score >= 60) return { label: 'Güçlü', color: '#27ae60' };
+            if(score >= 45) return { label: 'Orta', color: '#d68910' };
+            return { label: 'Zayıf', color: '#c0392b' };
         }
 
         function calculateLockedTagsSEO() {

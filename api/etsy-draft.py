@@ -68,16 +68,17 @@ class handler(BaseHTTPRequestHandler):
                     if any(garbage in kw for garbage in garbage_words):
                         continue
                         
-                    math_score = sv / comp if comp > 0 else sv
+                    opportunity_score = float(item.get('score', 0) or 0)
                     filtered_erank.append({
                         "keyword": kw,
                         "searches": sv,
                         "competition": comp,
-                        "math_score": math_score
+                        "score": opportunity_score
                     })
                 
-                # Sort by math_score descending
-                filtered_erank.sort(key=lambda x: x["math_score"], reverse=True)
+                # The stored 0-100 score already combines volume, competition and
+                # available eRank engagement/trend metrics.
+                filtered_erank.sort(key=lambda x: x["score"], reverse=True)
                 
                 # Take top results to avoid context limits (e.g. 50)
                 keywords_list = [{"keyword": item["keyword"], "searches": item["searches"], "competition": item["competition"]} for item in filtered_erank[:50]]

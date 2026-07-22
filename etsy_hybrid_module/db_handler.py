@@ -1,5 +1,10 @@
 import sys
-from supabase import create_client, Client
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = object
+from etsy_hybrid_module.erank_scoring import clean_erank_records, keyword_key
 try:
     from etsy_hybrid_module.config import SUPABASE_URL, SUPABASE_KEY
 except ImportError:
@@ -7,7 +12,7 @@ except ImportError:
 
 # Initialize Supabase client
 supabase: Client = None
-if SUPABASE_URL and SUPABASE_KEY:
+if SUPABASE_URL and SUPABASE_KEY and create_client:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
@@ -24,8 +29,11 @@ def get_erank_keywords(concept):
         else:
             query = query.eq("concept", concept)
             
-        response = query.order("score", desc=True).limit(50).execute()
-        return response.data
+        # Newest rows lead so duplicate concept+keyword records collapse to the latest CSV value.
+        response = query.order("id", desc=True).limit(1000).execute()
+        data = clean_erank_records(response.data)
+        data.sort(key=lambda item: float(item.get("score", 0) or 0), reverse=True)
+        return data[:50]
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
@@ -33,12 +41,9 @@ def get_all_erank_keywords():
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
     try:
-        # Fetching all without .limit() to get the maximum allowed by Supabase
-        response = supabase.table("erank_keywords").select("*").order("score", desc=True).execute()
-        data = response.data
-        if data:
-            # Filter out single words as per request
-            data = [item for item in data if " " in str(item.get("keyword", "")).strip()]
+        response = supabase.table("erank_keywords").select("*").order("id", desc=True).execute()
+        data = clean_erank_records(response.data)
+        data.sort(key=lambda item: float(item.get("score", 0) or 0), reverse=True)
         return data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
@@ -69,6 +74,40 @@ def insert_erank_keywords(records: list):
         return response.data
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
+
+def replace_erank_keywords_for_concept(concept: str, records: list):
+    """
+    Treat the uploaded CSV as the latest snapshot for one concept. New rows are
+    inserted first; only after a successful insert are the older rows removed.
+    This avoids losing the previous pool if insertion fails.
+    """
+    if not supabase:
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+    try:
+        existing_response = supabase.table("erank_keywords") \
+            .select("id,keyword") \
+            .eq("concept", concept) \
+            .execute()
+        existing = existing_response.data or []
+        existing_ids = [item.get("id") for item in existing if item.get("id") is not None]
+        existing_keys = {keyword_key(item.get("keyword")) for item in existing}
+        incoming_keys = {keyword_key(item.get("keyword")) for item in records}
+
+        inserted_response = supabase.table("erank_keywords").insert(records).execute()
+
+        # Keep requests small enough for Supabase/PostgREST query limits.
+        for start in range(0, len(existing_ids), 200):
+            id_chunk = existing_ids[start:start + 200]
+            if id_chunk:
+                supabase.table("erank_keywords").delete().in_("id", id_chunk).execute()
+
+        return {
+            "data": inserted_response.data,
+            "updated": len(existing_keys.intersection(incoming_keys)),
+            "replaced_old_rows": len(existing_ids),
+        }
+    except Exception as e:
+        raise Exception(f"Supabase bağlantı hatası (eRank son CSV güncellemesi): {e}")
 
 def get_prompt_pool():
     if not supabase:
