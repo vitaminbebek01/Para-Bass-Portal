@@ -48,6 +48,61 @@ def get_all_erank_keywords():
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
+def get_erank_dashboard_page(
+    page: int = 1,
+    page_size: int = 100,
+    high_competition_only: bool = False,
+):
+    """Return a stable 100-keyword dashboard page after legacy cleanup."""
+    if not supabase:
+        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+    try:
+        page = max(int(page or 1), 1)
+        page_size = min(max(int(page_size or 100), 25), 100)
+        batch_size = 1000
+        all_rows = []
+        offset = 0
+
+        # PostgREST returns a limited page by default. Fetch chunks so large pools
+        # are not silently capped before duplicate/low-volume cleanup runs.
+        while True:
+            response = supabase.table("erank_keywords") \
+                .select("*") \
+                .order("id", desc=True) \
+                .range(offset, offset + batch_size - 1) \
+                .execute()
+            chunk = response.data or []
+            all_rows.extend(chunk)
+            if len(chunk) < batch_size:
+                break
+            offset += batch_size
+
+        cleaned = clean_erank_records(all_rows)
+        cleaned.sort(key=lambda item: float(item.get("score", 0) or 0), reverse=True)
+        high_competition_count = sum(
+            1 for item in cleaned if int(item.get("competition", 0) or 0) > 100000
+        )
+        if high_competition_only:
+            cleaned = [
+                item for item in cleaned
+                if int(item.get("competition", 0) or 0) > 100000
+            ]
+        total = len(cleaned)
+        total_pages = max((total + page_size - 1) // page_size, 1)
+        page = min(page, total_pages)
+        start = (page - 1) * page_size
+        items = cleaned[start:start + page_size]
+        return {
+            "items": items,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": total_pages,
+            "high_competition_count": high_competition_count,
+        }
+    except Exception as e:
+        raise Exception(f"Supabase bağlantı hatası (eRank dashboard): {e}")
+
 def delete_erank_keyword(keyword_id_or_ids):
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")

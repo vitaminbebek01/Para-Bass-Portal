@@ -21,6 +21,7 @@ class handler(BaseHTTPRequestHandler):
             
             concept = data.get('concept')
             csv_content = data.get('csv_content')
+            is_preview = bool(data.get('preview'))
             
             if not concept or not csv_content:
                 self.send_error_json(400, "Concept and csv_content are required.")
@@ -28,6 +29,7 @@ class handler(BaseHTTPRequestHandler):
 
             try:
                 records, stats, headers = parse_erank_csv(csv_content, concept)
+                stats["valid_count"] = len(records)
 
                 if not records:
                     error_msg = f"Okunan sütunlar: {headers}"
@@ -43,6 +45,15 @@ class handler(BaseHTTPRequestHandler):
                 traceback.print_exc()
                 print(f"ERROR while parsing CSV: {e}")
                 self.send_error_json(400, "CSV okuma hatası: " + str(e))
+                return
+
+            if is_preview:
+                self.send_success_json({
+                    "message": f"{len(records)} geçerli keyword bulundu.",
+                    "stats": stats,
+                    "headers": headers,
+                    "preview": records[:10],
+                })
                 return
 
             result = upsert_erank_keywords_for_concept(concept, records)

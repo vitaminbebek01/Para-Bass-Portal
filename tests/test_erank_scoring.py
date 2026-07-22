@@ -85,6 +85,33 @@ high competition phrase,500,350,80%,150000,12%
             150,
         )
 
+    def test_dashboard_returns_100_keyword_pages_without_losing_rows(self):
+        rows = [
+            {
+                "id": index,
+                "concept": "Epoxy Magnet",
+                "keyword": f"keyword phrase {index}",
+                "searches": 100 + index,
+                "competition": 5000,
+                "score": index,
+            }
+            for index in range(1, 206)
+        ]
+        fake_supabase = FakeSupabase(rows)
+        with patch.object(db_handler, "supabase", fake_supabase):
+            first_page = db_handler.get_erank_dashboard_page(page=1, page_size=100)
+            second_page = db_handler.get_erank_dashboard_page(page=2, page_size=100)
+            third_page = db_handler.get_erank_dashboard_page(page=3, page_size=100)
+
+        self.assertEqual(second_page["total"], 205)
+        self.assertEqual(second_page["total_pages"], 3)
+        self.assertEqual(second_page["page"], 2)
+        self.assertEqual(len(first_page["items"]), 100)
+        self.assertEqual(len(second_page["items"]), 100)
+        self.assertEqual(len(third_page["items"]), 5)
+        page_ids = [item["id"] for item in first_page["items"] + second_page["items"] + third_page["items"]]
+        self.assertEqual(len(set(page_ids)), 205)
+
 
 class FakeResponse:
     def __init__(self, data):
@@ -98,9 +125,13 @@ class FakeTable:
         self.concept = None
         self.records = None
         self.ids = None
+        self.columns = None
+        self.range_start = None
+        self.range_end = None
 
     def select(self, _columns):
         self.operation = "select"
+        self.columns = _columns
         return self
 
     def eq(self, column, value):
@@ -111,6 +142,11 @@ class FakeTable:
         return self
 
     def order(self, _column, desc=False):
+        return self
+
+    def range(self, start, end):
+        self.range_start = start
+        self.range_end = end
         return self
 
     def insert(self, records):
@@ -135,11 +171,15 @@ class FakeTable:
     def execute(self):
         self.database.events.append(self.operation)
         if self.operation == "select":
-            return FakeResponse([
-                {"id": row["id"], "keyword": row["keyword"]}
-                for row in self.database.rows
-                if row.get("concept") == self.concept
-            ])
+            rows = [
+                row for row in self.database.rows
+                if self.concept is None or row.get("concept") == self.concept
+            ]
+            if self.range_start is not None:
+                rows = rows[self.range_start:self.range_end + 1]
+            if self.columns == "*":
+                return FakeResponse([dict(row) for row in rows])
+            return FakeResponse([{"id": row["id"], "keyword": row["keyword"]} for row in rows])
         if self.operation == "insert":
             next_id = max([row.get("id", 0) for row in self.database.rows] + [0]) + 1
             inserted = []

@@ -602,12 +602,14 @@
                         <div>
                             <h3 style="margin-top:0; font-size:16px; color:#34495e;">3. eRank CSV Yükle</h3>
                             <div style="display:flex; gap:10px; margin-bottom:10px;">
-                                <select id="erankCsvConcept" style="flex:1; padding:5px;">
+                                <select id="erankCsvConcept" style="flex:1; padding:5px;" onchange="renderErankLastUploadInfo()">
                                     <!-- Concepts injected by JS -->
                                 </select>
-                                <input type="file" id="erankCsvFile" accept=".csv" style="flex:2; font-size:12px;">
+                                <input type="file" id="erankCsvFile" accept=".csv" style="flex:2; font-size:12px;" onchange="previewErankCsv()">
                             </div>
+                            <div id="erankCsvPreview" style="display:none; margin-bottom:10px; padding:8px; background:#fff8e8; border:1px solid #f5d48b; border-radius:4px; font-size:11px;"></div>
                             <button class="small-btn" style="width:100%; background:#27ae60;" onclick="uploadErankCsv()">📤 CSV Yükle ve Skorla</button>
+                            <div id="erankLastUploadInfo" style="margin-top:8px; font-size:11px; color:#7f8c8d;"></div>
                             
                             <div id="csvStatsDisplay" style="display:none; margin-top:10px; padding:10px; background:#f0f4f8; border-radius:4px; font-size:12px; color:#333;">
                                 <strong>Yükleme İstatistikleri:</strong><br>
@@ -630,8 +632,13 @@
                             <div id="dashboardContainer" style="display:none; max-height:250px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; background:white; font-size:12px;">
                                 <div style="display:flex; gap:10px; margin-bottom:10px; align-items:center;">
                                     <input type="text" id="dashboardSearch" placeholder="Kelime ara..." style="flex:1; padding:5px; box-sizing:border-box;" onkeyup="filterDashboard()">
+                                    <select id="dashboardQualityFilter" style="padding:5px; font-size:12px;" onchange="filterDashboard()">
+                                        <option value="all">Tüm Puanlar</option>
+                                        <option value="weak">Zayıf Puan (&lt;45)</option>
+                                        <option value="low-volume">Hacim 50 Altı</option>
+                                    </select>
                                     <label style="font-size:12px; display:flex; align-items:center; gap:5px; white-space:nowrap;">
-                                        <input type="checkbox" id="showHighComp" onchange="filterDashboard()">
+                                        <input type="checkbox" id="showHighComp" onchange="loadErankDashboard(1)">
                                         Sadece 100k Üstü (<span id="highCompCount">0</span>)
                                     </label>
                                 </div>
@@ -664,6 +671,7 @@
                                         <!-- JS -->
                                     </tbody>
                                 </table>
+                                <div id="dashboardPagination" style="display:flex; gap:6px; align-items:center; justify-content:center; margin-top:12px; flex-wrap:wrap;"></div>
                             </div>
                         </div>
 
@@ -935,6 +943,69 @@
                     reader.readAsDataURL(file);
                 }
 
+                function escapeErankHtml(value) {
+                    const div = document.createElement('div');
+                    div.textContent = String(value || '');
+                    return div.innerHTML;
+                }
+
+                function getErankUploadHistory() {
+                    try { return JSON.parse(localStorage.getItem('erankUploadHistory') || '{}'); }
+                    catch(e) { return {}; }
+                }
+
+                function renderErankLastUploadInfo() {
+                    const concept = document.getElementById('erankCsvConcept').value;
+                    const info = getErankUploadHistory()[concept];
+                    const container = document.getElementById('erankLastUploadInfo');
+                    if(!container) return;
+                    if(!info) {
+                        container.innerText = 'Bu tarayıcıda bu konsept için önceki CSV bilgisi yok.';
+                        return;
+                    }
+                    container.innerText = `Son yükleme: ${info.fileName} — ${new Date(info.uploadedAt).toLocaleString('tr-TR')} (${info.added} yeni, ${info.updated} güncellenen)`;
+                }
+
+                function renderErankPreview(data) {
+                    const preview = document.getElementById('erankCsvPreview');
+                    if(!preview) return;
+                    const stats = data.stats || {};
+                    const items = (data.preview || []).map(item => escapeErankHtml(item.keyword)).join(', ');
+                    preview.innerHTML = `<strong>Yükleme önizlemesi:</strong> ${stats.valid_count || 0} geçerli keyword; ${stats.duplicates_collapsed || 0} CSV tekrarı; hacim ≤20: ${stats.rejected_low_search || 0}; 100k üstü: ${stats.high_competition || 0}.<br><span style="color:#666;">İlk örnekler: ${items || 'Yok'}</span>`;
+                    preview.style.display = 'block';
+                }
+
+                async function previewErankCsv() {
+                    const fileInput = document.getElementById('erankCsvFile');
+                    const concept = document.getElementById('erankCsvConcept').value;
+                    const preview = document.getElementById('erankCsvPreview');
+                    if(!fileInput.files || fileInput.files.length === 0) {
+                        preview.style.display = 'none';
+                        return;
+                    }
+                    preview.style.display = 'block';
+                    preview.innerHTML = '<em>CSV önizleniyor...</em>';
+                    const reader = new FileReader();
+                    reader.onloadend = async () => {
+                        try {
+                            const response = await fetchWithRetry('/api/upload-erank', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ concept, csv_content: reader.result, preview: true })
+                            });
+                            const data = await response.json();
+                            if(data.error) {
+                                preview.innerHTML = `<span style="color:red;">Önizleme hatası: ${escapeErankHtml(data.error)}</span>`;
+                                return;
+                            }
+                            renderErankPreview(data);
+                        } catch(error) {
+                            preview.innerHTML = '<span style="color:red;">Önizleme bağlantı hatası.</span>';
+                        }
+                    };
+                    reader.readAsText(fileInput.files[0]);
+                }
+
                 async function uploadErankCsv() {
                     const fileInput = document.getElementById('erankCsvFile');
                     const concept = document.getElementById('erankCsvConcept').value;
@@ -978,8 +1049,18 @@
                                     // Show toast summary
                                     showEtsyToast(`Yeni: ${data.stats.added} | Güncellenen: ${data.stats.updated || 0} | Hacim ≤20: ${data.stats.rejected_low_search} | 100k Üstü: ${data.stats.high_competition || 0}`, false);
                                 }
+                                const history = getErankUploadHistory();
+                                history[concept] = {
+                                    fileName: file.name,
+                                    uploadedAt: new Date().toISOString(),
+                                    added: data.stats?.added || 0,
+                                    updated: data.stats?.updated || 0
+                                };
+                                localStorage.setItem('erankUploadHistory', JSON.stringify(history));
+                                renderErankLastUploadInfo();
+                                document.getElementById('erankCsvPreview').style.display = 'none';
                                 fileInput.value = ""; // clear input
-                                loadErankDashboard(); // refresh
+                                loadErankDashboard(1); // refresh
                             }
                         } catch (error) {
                             showEtsyToast("Bağlantı hatası: " + error.message);
@@ -992,23 +1073,29 @@
                     reader.readAsText(file);
                 }
 
-                async function loadErankDashboard() {
+                async function loadErankDashboard(page = 1) {
                     const container = document.getElementById('dashboardContainer');
                     const tbody = document.getElementById('dashboardTableBody');
                     container.style.display = 'block';
                     tbody.innerHTML = "<tr><td colspan='7'><em>Yükleniyor...</em></td></tr>";
                     
                     try {
-                        const response = await fetchWithRetry('/api/erank-dashboard');
-                        const data = await response.json();
-                        if(data.error) {
-                            tbody.innerHTML = `<tr><td colspan='7' style='color:red;'>Hata: ${data.error}</td></tr>`;
+                        const highCompetitionOnly = document.getElementById('showHighComp').checked;
+                        const response = await fetchWithRetry(`/api/erank-dashboard?page=${page}&page_size=100&high_competition_only=${highCompetitionOnly}`);
+                        const payload = await response.json();
+                        if(payload.error) {
+                            tbody.innerHTML = `<tr><td colspan='7' style='color:red;'>Hata: ${escapeErankHtml(payload.error)}</td></tr>`;
                             return;
                         }
-                        
+                        const data = Array.isArray(payload) ? payload : (payload.items || []);
+                        const metadata = Array.isArray(payload)
+                            ? { page: 1, page_size: data.length, total: data.length, total_pages: 1 }
+                            : payload;
                         window.erankPoolData = data;
-                        document.getElementById('highCompCount').innerText = data.filter(item => Number(item.competition || 0) > 100000).length;
+                        window.erankDashboardMeta = metadata;
+                        document.getElementById('highCompCount').innerText = metadata.high_competition_count ?? data.filter(item => Number(item.competition || 0) > 100000).length;
                         renderDashboardTable(data);
+                        renderDashboardPagination(metadata);
                     } catch(e) {
                         tbody.innerHTML = "<tr><td colspan='7' style='color:red;'>Bağlantı hatası.</td></tr>";
                     }
@@ -1032,7 +1119,7 @@
                         const safeKwForAttr = kw.replace(/"/g, '&quot;');
                         const safeKwForFunc = kw.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                         html += `
-                        <tr class="dashboard-row" data-comp="${cmp}">
+                        <tr class="dashboard-row" data-comp="${cmp}" data-score="${score}" data-searches="${src}">
                             <td style="padding:5px;"><input type="checkbox" class="erank-row-cb" value="${item.id}" data-keyword="${safeKwForAttr}" data-searches="${src}" data-comp="${cmp}"></td>
                             <td style="padding:5px;" class="kw-text">
                                 <span style="cursor:pointer;" onclick="addSingleToActiveFavList('${safeKwForFunc}', ${src}, ${cmp})" title="Aktif favori listesine ekle">⭐</span> 
@@ -1055,17 +1142,42 @@
                 function filterDashboard() {
                     const search = document.getElementById('dashboardSearch').value.toLowerCase();
                     const showHighComp = document.getElementById('showHighComp').checked;
+                    const qualityFilter = document.getElementById('dashboardQualityFilter').value;
                     const rows = document.querySelectorAll('.dashboard-row');
                     rows.forEach(row => {
                         const text = row.querySelector('.kw-text').innerText.toLowerCase();
                         const comp = parseInt(row.getAttribute('data-comp') || 0);
+                        const score = Number(row.getAttribute('data-score') || 0);
+                        const searches = Number(row.getAttribute('data-searches') || 0);
                         
                         let isVisible = text.includes(search);
                         if (showHighComp && comp <= 100000) isVisible = false;
-                        if (!showHighComp && comp > 100000) isVisible = false;
+                        if (qualityFilter === 'weak' && score >= 45) isVisible = false;
+                        if (qualityFilter === 'low-volume' && searches >= 50) isVisible = false;
                         
                         row.style.display = isVisible ? '' : 'none';
                     });
+                }
+
+                function renderDashboardPagination(metadata) {
+                    const container = document.getElementById('dashboardPagination');
+                    if(!container) return;
+                    const totalPages = Number(metadata.total_pages || 1);
+                    const currentPage = Number(metadata.page || 1);
+                    const total = Number(metadata.total || 0);
+                    if(totalPages <= 1) {
+                        container.innerHTML = total ? `Toplam ${total} keyword` : '';
+                        return;
+                    }
+                    const start = Math.max(1, currentPage - 2);
+                    const end = Math.min(totalPages, currentPage + 2);
+                    let html = `<span style="font-size:12px; color:#666;">Toplam ${total} keyword — Sayfa ${currentPage}/${totalPages}</span>`;
+                    html += `<button class="small-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="loadErankDashboard(${currentPage - 1})">Önceki</button>`;
+                    for(let page = start; page <= end; page++) {
+                        html += `<button class="small-btn" style="${page === currentPage ? 'background:#3498db;' : ''}" onclick="loadErankDashboard(${page})">${page}</button>`;
+                    }
+                    html += `<button class="small-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="loadErankDashboard(${currentPage + 1})">Sonraki</button>`;
+                    container.innerHTML = html;
                 }
                 
                 function toggleErankSelectAll() {
@@ -2864,6 +2976,7 @@
             try { renderAiPrompts(); } catch(e){ console.error("aiPrompts err:", e); }
             try { renderOrders(); } catch(e){ console.error("renderOrders err:", e); }
             try { renderEtsyConceptsUI(); } catch(e){ console.error("etsyConcepts err:", e); }
+            try { renderErankLastUploadInfo(); } catch(e){ console.error("erankUploadInfo err:", e); }
             try { renderFavoriteLists(); } catch(e){ console.error("favList err:", e); }
         };
 

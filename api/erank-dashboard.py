@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 import sys
+from urllib.parse import parse_qs, urlparse
 
 # Ensure the parent directory is in sys.path to import etsy_hybrid_module
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -9,12 +10,16 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-from etsy_hybrid_module.db_handler import get_all_erank_keywords, delete_erank_keyword
+from etsy_hybrid_module.db_handler import get_erank_dashboard_page, delete_erank_keyword
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            data = get_all_erank_keywords()
+            params = parse_qs(urlparse(self.path).query)
+            page = params.get("page", [1])[0]
+            page_size = params.get("page_size", [100])[0]
+            high_competition_only = params.get("high_competition_only", ["false"])[0].lower() == "true"
+            data = get_erank_dashboard_page(page, page_size, high_competition_only)
             self.send_success_json(data)
         except Exception as e:
             self.send_error_json(500, "Sunucu hatası", str(e))
@@ -96,7 +101,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
         response_dict = {"success": False, "error": message}
@@ -108,7 +113,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode('utf-8'))
@@ -116,6 +121,6 @@ class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
