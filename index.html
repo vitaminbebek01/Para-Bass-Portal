@@ -611,7 +611,7 @@
                             
                             <div id="csvStatsDisplay" style="display:none; margin-top:10px; padding:10px; background:#f0f4f8; border-radius:4px; font-size:12px; color:#333;">
                                 <strong>Yükleme İstatistikleri:</strong><br>
-                                Güncel Kayıt: <span id="statAdded" style="color:green; font-weight:bold;">0</span> |
+                                Yeni Kayıt: <span id="statAdded" style="color:green; font-weight:bold;">0</span> |
                                 Güncellenen: <span id="statUpdated" style="color:#2980b9; font-weight:bold;">0</span><br>
                                 Tek Kelime (Reddedilen): <span id="statRejSingle" style="color:red;">0</span><br>
                                 Hacim 20 ve Altı (Silinen): <span id="statRejSearch" style="color:red;">0</span> |
@@ -976,7 +976,7 @@
                                     document.getElementById('csvStatsDisplay').style.display = 'block';
 
                                     // Show toast summary
-                                    showEtsyToast(`Güncel: ${data.stats.added} | Güncellenen: ${data.stats.updated || 0} | Hacim ≤20: ${data.stats.rejected_low_search} | 100k Üstü: ${data.stats.high_competition || 0}`, false);
+                                    showEtsyToast(`Yeni: ${data.stats.added} | Güncellenen: ${data.stats.updated || 0} | Hacim ≤20: ${data.stats.rejected_low_search} | 100k Üstü: ${data.stats.high_competition || 0}`, false);
                                 }
                                 fileInput.value = ""; // clear input
                                 loadErankDashboard(); // refresh

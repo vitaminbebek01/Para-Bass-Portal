@@ -75,11 +75,11 @@ def insert_erank_keywords(records: list):
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
-def replace_erank_keywords_for_concept(concept: str, records: list):
+def upsert_erank_keywords_for_concept(concept: str, records: list):
     """
-    Treat the uploaded CSV as the latest snapshot for one concept. New rows are
-    inserted first; only after a successful insert are the older rows removed.
-    This avoids losing the previous pool if insertion fails.
+    Preserve the existing pool. Only an exact normalized keyword in the same
+    concept is updated from the new CSV; all other earlier CSV keywords remain.
+    Existing duplicate copies of that exact keyword are removed.
     """
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
@@ -87,27 +87,51 @@ def replace_erank_keywords_for_concept(concept: str, records: list):
         existing_response = supabase.table("erank_keywords") \
             .select("id,keyword") \
             .eq("concept", concept) \
+            .order("id", desc=True) \
             .execute()
         existing = existing_response.data or []
-        existing_ids = [item.get("id") for item in existing if item.get("id") is not None]
-        existing_keys = {keyword_key(item.get("keyword")) for item in existing}
-        incoming_keys = {keyword_key(item.get("keyword")) for item in records}
+        existing_by_keyword = {}
+        duplicate_ids = []
+        for item in existing:
+            record_id = item.get("id")
+            key = keyword_key(item.get("keyword"))
+            if record_id is None or not key:
+                continue
+            if key in existing_by_keyword:
+                duplicate_ids.append(record_id)
+            else:
+                existing_by_keyword[key] = record_id
 
-        inserted_response = supabase.table("erank_keywords").insert(records).execute()
+        inserted_records = []
+        updated = 0
+        for record in records:
+            record_key = keyword_key(record.get("keyword"))
+            existing_id = existing_by_keyword.get(record_key)
+            if existing_id is None:
+                inserted_records.append(record)
+                continue
+            supabase.table("erank_keywords").update(record).eq("id", existing_id).execute()
+            updated += 1
 
-        # Keep requests small enough for Supabase/PostgREST query limits.
-        for start in range(0, len(existing_ids), 200):
-            id_chunk = existing_ids[start:start + 200]
+        inserted_data = []
+        if inserted_records:
+            inserted_response = supabase.table("erank_keywords").insert(inserted_records).execute()
+            inserted_data = inserted_response.data or []
+
+        # Only remove redundant copies of an otherwise identical keyword.
+        for start in range(0, len(duplicate_ids), 200):
+            id_chunk = duplicate_ids[start:start + 200]
             if id_chunk:
                 supabase.table("erank_keywords").delete().in_("id", id_chunk).execute()
 
         return {
-            "data": inserted_response.data,
-            "updated": len(existing_keys.intersection(incoming_keys)),
-            "replaced_old_rows": len(existing_ids),
+            "data": inserted_data,
+            "updated": updated,
+            "added": len(inserted_records),
+            "duplicates_removed": len(duplicate_ids),
         }
     except Exception as e:
-        raise Exception(f"Supabase bağlantı hatası (eRank son CSV güncellemesi): {e}")
+        raise Exception(f"Supabase bağlantı hatası (eRank keyword güncellemesi): {e}")
 
 def get_prompt_pool():
     if not supabase:

@@ -60,7 +60,7 @@ high competition phrase,500,350,80%,150000,12%
         self.assertEqual(cleaned[0]["id"], 3)
         self.assertEqual(cleaned[0]["searches"], 150)
 
-    def test_new_csv_is_inserted_before_old_concept_rows_are_removed(self):
+    def test_new_csv_updates_only_same_keyword_and_preserves_other_rows(self):
         fake_supabase = FakeSupabase([
             {"id": 1, "concept": "Epoxy Magnet", "keyword": "epoxy magnet", "searches": 100},
             {"id": 2, "concept": "Epoxy Magnet", "keyword": "magnet favor", "searches": 80},
@@ -71,12 +71,19 @@ high competition phrase,500,350,80%,150000,12%
         ]
 
         with patch.object(db_handler, "supabase", fake_supabase):
-            result = db_handler.replace_erank_keywords_for_concept("Epoxy Magnet", incoming)
+            result = db_handler.upsert_erank_keywords_for_concept("Epoxy Magnet", incoming)
 
-        self.assertEqual(fake_supabase.events, ["select", "insert", "delete"])
+        self.assertEqual(fake_supabase.events, ["select", "update", "insert"])
         self.assertEqual(result["updated"], 1)
-        self.assertEqual(result["replaced_old_rows"], 2)
-        self.assertEqual({row["keyword"] for row in fake_supabase.rows}, {"epoxy magnet", "epoxy party favor"})
+        self.assertEqual(result["added"], 1)
+        self.assertEqual(
+            {row["keyword"] for row in fake_supabase.rows},
+            {"epoxy magnet", "magnet favor", "epoxy party favor"},
+        )
+        self.assertEqual(
+            next(row for row in fake_supabase.rows if row["keyword"] == "epoxy magnet")["searches"],
+            150,
+        )
 
 
 class FakeResponse:
@@ -99,11 +106,21 @@ class FakeTable:
     def eq(self, column, value):
         if column == "concept":
             self.concept = value
+        if column == "id":
+            self.ids = value
+        return self
+
+    def order(self, _column, desc=False):
         return self
 
     def insert(self, records):
         self.operation = "insert"
         self.records = [dict(record) for record in records]
+        return self
+
+    def update(self, record):
+        self.operation = "update"
+        self.records = dict(record)
         return self
 
     def delete(self):
@@ -132,6 +149,12 @@ class FakeTable:
                 self.database.rows.append(item)
                 inserted.append(item)
             return FakeResponse(inserted)
+        if self.operation == "update":
+            for row in self.database.rows:
+                if row.get("id") == self.ids:
+                    row.update(self.records)
+                    return FakeResponse([dict(row)])
+            raise AssertionError("Güncellenecek sahte kayıt bulunamadı")
         if self.operation == "delete":
             self.database.rows = [row for row in self.database.rows if row.get("id") not in self.ids]
             return FakeResponse([])

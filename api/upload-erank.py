@@ -9,7 +9,7 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-from etsy_hybrid_module.db_handler import replace_erank_keywords_for_concept
+from etsy_hybrid_module.db_handler import upsert_erank_keywords_for_concept
 from etsy_hybrid_module.erank_scoring import parse_erank_csv
 
 class handler(BaseHTTPRequestHandler):
@@ -45,10 +45,11 @@ class handler(BaseHTTPRequestHandler):
                 self.send_error_json(400, "CSV okuma hatası: " + str(e))
                 return
 
-            result = replace_erank_keywords_for_concept(concept, records)
+            result = upsert_erank_keywords_for_concept(concept, records)
             stats["updated"] = result.get("updated", 0)
+            stats["added"] = result.get("added", 0)
             self.send_success_json({
-                "message": f"{concept} için son CSV esas alındı: {len(records)} güncel kayıt.",
+                "message": f"{concept} için {result.get('added', 0)} yeni kayıt eklendi, {result.get('updated', 0)} aynı keyword güncellendi.",
                 "data": result.get("data"),
                 "stats": stats
             })
