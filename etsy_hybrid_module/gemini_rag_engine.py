@@ -297,17 +297,24 @@ def build_listing_prompt(
     locked_tags: list = None,
     selected_concepts: list = None,
     custom_keyword: str = "",
+    product_details: dict = None,
 ) -> str:
     compact_rules = load_compact_rules(rules_path)
     prepared_locked = prepare_locked_tags(locked_tags)
     concepts = [normalize_text(item) for item in (selected_concepts or []) if normalize_text(item)]
     custom_keyword = normalize_text(custom_keyword)
+    product_details = {
+        str(key): normalize_text(value)
+        for key, value in (product_details or {}).items()
+        if normalize_text(value)
+    }
 
     strict_rules = (
         "CRITICAL RULES YOU MUST FOLLOW EXACTLY (DO NOT DEVIATE):\n"
         "1. LANGUAGE: Every generated word (Title, Tags, Description) MUST BE 100% in English. Absolutely no Turkish.\n"
         "2. TITLE: Return one natural full title in the 'title' field. It MUST be 140 characters or fewer. "
         "The source guide's 70-character recommendation is only for the separate short UI preview and MUST NOT limit the full title. "
+        "Prefer a clear, buyer-friendly title of 15 words or fewer; do not fill 140 characters unnecessarily. "
         "Do not repeat words unnecessarily.\n"
     )
 
@@ -370,18 +377,31 @@ def build_listing_prompt(
             f"- {custom_keyword}\n\n"
         )
 
+    product_details_section = ""
+    if product_details:
+        product_details_section = (
+            "KULLANICININ DOĞRULADIĞI ÜRÜN BİLGİLERİ (BUNLARI DEĞİŞTİRME VE YENİ BİLGİ UYDURMA):\n"
+            f"{json.dumps(product_details, ensure_ascii=False, indent=2)}\n\n"
+        )
+
     category_keywords = [_tag_text(obj) for obj in category_keywords_objs or [] if _tag_text(obj)]
     return (
         f"KISA ETSY KURALLARI:\n{compact_rules}\n\n"
         f"{concepts_section}"
         f"{custom_keyword_section}"
+        f"{product_details_section}"
         f"ERANK KELİMELERİ (YALNIZCA ÜRÜNLE İLGİLİ OLANLARI SEÇ):\n{category_keywords}\n\n"
         f"{strict_rules}\n\n"
         "Aşağıdaki mevcut JSON yapısını kullanarak yalnızca geçerli JSON döndür:\n"
         "- 'title' (string, full title, maximum 140 characters)\n"
         "- 'tags' (array of exactly 13 strings, each maximum 20 characters)\n"
         "- 'backup_tags' (array of exactly 10 strings, each maximum 20 characters)\n"
-        "- 'description' (string)"
+        "- 'description' (string)\n"
+        "- 'category_suggestion' (string; Etsy category suggestion, not an invented fact)\n"
+        "- 'attributes' (array of short strings based only on confirmed details or clearly visible photo evidence)\n"
+        "- 'image_observations' (array of short strings describing only clearly visible product traits)\n"
+        "- 'photo_order' (array of short suggestions for arranging the user's real product photos)\n"
+        "- 'uncertain_fields' (array of details the user should verify; never guess them)"
     )
 
 
@@ -394,6 +414,8 @@ def generate_optimized_listing(
     locked_tags: list = None,
     selected_concepts: list = None,
     custom_keyword: str = "",
+    product_details: dict = None,
+    image_parts: list = None,
 ) -> dict:
     """Generate an Etsy listing using compact rules, then validate the result locally."""
     try:
@@ -412,6 +434,7 @@ def generate_optimized_listing(
             prepared_locked,
             selected_concepts,
             custom_keyword,
+            product_details,
         )
         system_instruction = (
             "Sen deneyimli bir Etsy SEO uzmanısın. Verilen konseptleri, özel anahtar kelimeyi, eRank verilerini "
@@ -422,9 +445,11 @@ def generate_optimized_listing(
             system_instruction=system_instruction,
             generation_config={"response_mime_type": "application/json"},
         )
-        response = model.generate_content(prompt)
+        content = [prompt]
+        content.extend(image_parts or [])
+        response = model.generate_content(content)
         result = json.loads(response.text)
-        return validate_and_finalize_listing(
+        finalized = validate_and_finalize_listing(
             result,
             category_keywords_objs,
             product_type,
@@ -432,6 +457,13 @@ def generate_optimized_listing(
             custom_keyword,
             prepared_locked,
         )
+        for field in ("attributes", "image_observations", "photo_order", "uncertain_fields"):
+            value = finalized.get(field, [])
+            finalized[field] = [
+                normalize_text(item) for item in value if normalize_text(item)
+            ] if isinstance(value, list) else []
+        finalized["category_suggestion"] = normalize_text(finalized.get("category_suggestion"))
+        return finalized
     except Exception as exc:
         print(f"Error generating optimized listing: {exc}")
         return {"error": str(exc)}

@@ -16,6 +16,23 @@ RULES_PATH = ROOT / "etsy_hybrid_module" / "etsy_rules_compact.md"
 
 
 class EtsyListingValidationTests(unittest.TestCase):
+    def test_confirmed_product_details_are_added_without_empty_values(self):
+        prompt = build_listing_prompt(
+            [],
+            RULES_PATH,
+            product_type="Epoxy Magnet",
+            product_details={
+                "material": "epoxy and dried flowers",
+                "color": "ivory",
+                "price": "",
+            },
+        )
+
+        self.assertIn("epoxy and dried flowers", prompt)
+        self.assertIn('"color": "ivory"', prompt)
+        self.assertNotIn('"price"', prompt)
+        self.assertIn("YENİ BİLGİ UYDURMA", prompt)
+
     def setUp(self):
         keywords = [
             "wedding candle", "wedding favor", "wedding decor", "candle gift",

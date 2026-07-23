@@ -499,7 +499,7 @@
                     <div class="form-group" style="display:flex; gap:10px;">
                         <div style="flex:1;">
                             <label>Ürün Tipi</label>
-                            <select id="etsyDraftProductType">
+                            <select id="etsyDraftProductType" onchange="loadEtsyProductProfile()">
                                 <option value="Candle">Mum (Candle)</option>
                                 <option value="Epoxy Magnet">Epoksi Magnet</option>
                                 <option value="Keychain">Anahtarlık (Keychain)</option>
@@ -535,10 +535,58 @@
                         </div>
                     </div>
 
+                    <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div>
+                            <label>Malzeme</label>
+                            <input type="text" id="etsyDraftMaterial" placeholder="Örn: epoxy, dried flowers">
+                        </div>
+                        <div>
+                            <label>Renk</label>
+                            <input type="text" id="etsyDraftColor" placeholder="Örn: ivory and gold">
+                        </div>
+                        <div>
+                            <label>Satılan Adet</label>
+                            <input type="text" id="etsyDraftQuantity" placeholder="Örn: set of 10">
+                        </div>
+                        <div>
+                            <label>Kişiselleştirme</label>
+                            <input type="text" id="etsyDraftPersonalization" placeholder="Örn: name and event date">
+                        </div>
+                        <div>
+                            <label>Kullanım / Alıcı</label>
+                            <input type="text" id="etsyDraftOccasion" placeholder="Örn: wedding guest favor">
+                        </div>
+                        <div>
+                            <label>Paketleme</label>
+                            <input type="text" id="etsyDraftPackaging" placeholder="Örn: White Box">
+                        </div>
+                        <div>
+                            <label>Hazırlık Süresi</label>
+                            <input type="text" id="etsyDraftProcessingTime" placeholder="Örn: 1-5 business days">
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <div style="flex:1;">
+                                <label>Fiyat</label>
+                                <input type="text" id="etsyDraftPrice" placeholder="Örn: 24.90">
+                            </div>
+                            <div style="flex:1;">
+                                <label>Stok</label>
+                                <input type="number" id="etsyDraftStock" min="1" placeholder="10">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-group">
-                        <label>Gerçek Ürün Fotoğrafı</label>
-                        <input type="file" id="etsyDraftImage" accept="image/*" style="background:white; border:1px solid #ccc; padding:8px; border-radius:4px; width:100%;">
-                        <div style="font-size:11px; color:#7f8c8d; margin-top:4px;">* Maksimum 20 fotoğraf yüklenebilir.</div>
+                        <label>Ürünü Kısaca Anlatın</label>
+                        <textarea id="etsyDraftProductNotes" rows="3" placeholder="Gerçek ürünü, öne çıkan özelliğini ve müşterinin ne alacağını 1-3 cümleyle yazın."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Gerçek Ürün Fotoğrafları (1-10)</label>
+                        <input type="file" id="etsyDraftImage" accept="image/*" multiple onchange="analyzeEtsyPhotoSelection()" style="background:white; border:1px solid #ccc; padding:8px; border-radius:4px; width:100%;">
+                        <div style="font-size:11px; color:#7f8c8d; margin-top:4px;">İlk 3 küçültülmüş fotoğraf Gemini analizine gider; orijinal dosyalar değiştirilmez.</div>
+                        <div id="etsyPhotoPreview" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;"></div>
+                        <div id="etsyPhotoQualitySummary" style="display:none; margin-top:8px; padding:8px; border-radius:5px; background:#eef7ff; font-size:12px;"></div>
                     </div>
                     
                     <div class="form-group" style="margin-top:10px;">
@@ -548,10 +596,14 @@
                         </div>
                     </div>
 
-                    <button id="btnEtsyGenerate" class="action-btn" style="width:100%; font-size:16px; margin-top:15px; margin-bottom:15px;" onclick="generateEtsyDraft()">🚀 İçerik Üret (SEO)</button>
+                    <div style="display:flex; gap:8px; margin-top:15px; margin-bottom:15px;">
+                        <button class="small-btn" style="background:#7f8c8d;" onclick="saveEtsyProductProfile()">Bu Ürün Tipi İçin Bilgileri Kaydet</button>
+                        <button id="btnEtsyGenerate" class="action-btn" style="flex:1; font-size:16px;" onclick="generateEtsyDraft()">🚀 İçerik Üret (SEO)</button>
+                    </div>
                     
                     <!-- SONUÇ KUTULARI -->
                     <div id="etsyDraftResults" style="display:none; margin-top:20px;">
+                        <div id="etsyReadinessBox" class="result-box" style="border-left:5px solid #3498db;"></div>
                         <div class="result-box" style="position:relative;">
                             <button class="copy-btn" onclick="copyToClipboard('etsyResShortTitle')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
                             <label>Kısa Başlık (En Fazla 70 Karakter)</label>
@@ -581,6 +633,14 @@
                             <label>Lüks Açıklama (Description)</label>
                             <textarea id="etsyResDesc" style="width:100%; font-size:13px; margin-top:5px; padding:10px; border:1px solid #ccc; border-radius:4px; color:#555; white-space:pre-wrap; min-height:150px; resize:vertical; box-sizing:border-box;" readonly></textarea>
                         </div>
+                        <div class="result-box" style="margin-top:15px;">
+                            <label>Kategori, Özellikler ve Fotoğraf Sırası</label>
+                            <div id="etsyResListingAdvice" style="font-size:12px; line-height:1.6; white-space:pre-wrap;"></div>
+                        </div>
+                        <div style="display:flex; gap:8px; margin-top:12px;">
+                            <button class="small-btn" style="background:#16a085; flex:1;" onclick="downloadEtsyDraftPackage()">Taslak Bilgi Paketini İndir</button>
+                            <button class="small-btn" style="background:#bdc3c7; flex:1;" disabled title="Güvenli OAuth bağlantısı tamamlandıktan sonra açılacak.">Etsy’ye Taslak Gönder — Bağlantı Gerekli</button>
+                        </div>
                     </div>
                 </div>
 
@@ -588,13 +648,9 @@
                 <div style="flex:1; min-width:300px; display:flex; flex-direction:column; gap:20px;">
                     
                     <div style="background:#fdfdfd; padding:20px; border-radius:8px; border:1px solid #e1e8ed;">
-                        <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. OpenCV AI Filigran Silici</h3>
-                        <div class="file-drop-area" onclick="document.getElementById('etsyWatermarkImage').click()">
-                            <span style="font-size:24px;">💧</span><br>
-                            <span style="font-size:13px; color:#555;">Filigranlı görseli buraya tıklayıp seçin</span>
-                            <input type="file" id="etsyWatermarkImage" style="display:none;" accept="image/*">
-                        </div>
-                        <button class="action-btn" style="background:#9b59b6;" onclick="removeEtsyWatermark()">🪄 Sağ Alt Filigranı Temizle</button>
+                        <h3 style="margin-top:0; font-size:16px; color:#34495e;">2. Thumbnail ve Fotoğraf Yardımcısı</h3>
+                        <p style="font-size:12px; color:#666;">Gerçek ürün fotoğraflarının netlik ve ışığını kontrol eder; kare thumbnail indirir. Yapay zekâ filigranı kaldırmaz.</p>
+                        <button class="action-btn" style="background:#9b59b6;" onclick="downloadEtsySquareThumbnail()">📐 İlk Fotoğraftan Kare Thumbnail İndir</button>
                     </div>
 
                     <div style="background:#fdfdfd; padding:20px; border-radius:8px; border:1px solid #e1e8ed; flex:1; display:flex; flex-direction:column; gap:15px;">
@@ -652,6 +708,7 @@
 
                                 <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
                                     <button class="small-btn" style="background:#e74c3c;" onclick="deleteSelectedErankKeywords()">🗑️ Seçilenleri Sil</button>
+                                    <button class="small-btn" style="background:#7f8c8d;" onclick="blockSelectedErankKeywords()">🚫 Üretimde Kullanma</button>
                                     <button class="small-btn" style="background:#f39c12;" onclick="openAddToFavoritesModal()">⭐ Favori Listesine Ekle</button>
                                     <button class="small-btn" style="background:#27ae60;" onclick="sendSelectedToLockedTags()">🚀 Seçilenleri Üretime Gönder (Kilitli)</button>
                                 </div>
@@ -841,6 +898,239 @@
                     });
                 }
 
+                let etsyPhotoMetrics = [];
+                let etsyAnalysisImages = [];
+                let latestEtsyDraftResult = null;
+
+                function readImageFile(file) {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const image = new Image();
+                            image.onload = () => resolve(image);
+                            image.onerror = reject;
+                            image.src = reader.result;
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                }
+
+                function measureEtsyPhoto(canvas, fileName) {
+                    const context = canvas.getContext('2d', { willReadFrequently: true });
+                    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+                    let brightnessTotal = 0;
+                    let sharpnessTotal = 0;
+                    let samples = 0;
+                    for(let y = 0; y < canvas.height; y += 4) {
+                        for(let x = 0; x < canvas.width - 1; x += 4) {
+                            const index = (y * canvas.width + x) * 4;
+                            const nextIndex = index + 4;
+                            const current = (pixels[index] + pixels[index + 1] + pixels[index + 2]) / 3;
+                            const next = (pixels[nextIndex] + pixels[nextIndex + 1] + pixels[nextIndex + 2]) / 3;
+                            brightnessTotal += current;
+                            sharpnessTotal += Math.abs(current - next);
+                            samples++;
+                        }
+                    }
+                    return {
+                        file_name: fileName,
+                        width: canvas.width,
+                        height: canvas.height,
+                        brightness: Number((brightnessTotal / Math.max(samples, 1)).toFixed(1)),
+                        sharpness: Number((sharpnessTotal / Math.max(samples, 1)).toFixed(1))
+                    };
+                }
+
+                async function prepareEtsyAnalysisImage(file) {
+                    const image = await readImageFile(file);
+                    const maxSide = 768;
+                    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+                    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+                    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+                    const metric = measureEtsyPhoto(canvas, file.name);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                    return {
+                        metric,
+                        analysis: { mime_type: 'image/jpeg', data: dataUrl.split(',')[1] },
+                        preview: dataUrl
+                    };
+                }
+
+                async function analyzeEtsyPhotoSelection() {
+                    const input = document.getElementById('etsyDraftImage');
+                    const preview = document.getElementById('etsyPhotoPreview');
+                    const summary = document.getElementById('etsyPhotoQualitySummary');
+                    const files = Array.from(input.files || []).slice(0, 10);
+                    if((input.files || []).length > 10) {
+                        showEtsyToast("İlk 10 fotoğraf kullanılacak.");
+                    }
+                    etsyPhotoMetrics = [];
+                    etsyAnalysisImages = [];
+                    preview.innerHTML = '';
+                    summary.style.display = files.length ? 'block' : 'none';
+                    summary.innerText = files.length ? 'Fotoğraflar kontrol ediliyor...' : '';
+                    for(let index = 0; index < files.length; index++) {
+                        try {
+                            const prepared = await prepareEtsyAnalysisImage(files[index]);
+                            etsyPhotoMetrics.push(prepared.metric);
+                            if(index < 3) etsyAnalysisImages.push(prepared.analysis);
+                            const card = document.createElement('div');
+                            card.style.cssText = 'width:82px; font-size:10px; text-align:center;';
+                            const image = document.createElement('img');
+                            image.src = prepared.preview;
+                            image.style.cssText = 'width:80px; height:80px; object-fit:cover; border-radius:5px; border:1px solid #ddd;';
+                            const text = document.createElement('div');
+                            text.innerText = `${index + 1}. Işık ${prepared.metric.brightness} / Netlik ${prepared.metric.sharpness}`;
+                            card.append(image, text);
+                            preview.appendChild(card);
+                        } catch(error) {
+                            showEtsyToast(`${files[index].name} okunamadı.`);
+                        }
+                    }
+                    if(!etsyPhotoMetrics.length) {
+                        summary.innerText = 'Geçerli fotoğraf okunamadı.';
+                        return;
+                    }
+                    const first = etsyPhotoMetrics[0];
+                    const notes = [];
+                    notes.push(first.brightness < 55 ? 'Ana fotoğraf karanlık.' : (first.brightness > 220 ? 'Ana fotoğraf fazla parlak.' : 'Ana fotoğraf ışığı uygun.'));
+                    notes.push(first.sharpness < 10 ? 'Ana fotoğraf bulanık olabilir.' : 'Ana fotoğraf netliği uygun görünüyor.');
+                    notes.push(`${etsyPhotoMetrics.length} gerçek fotoğraf hazır; ilk 3 fotoğraf Gemini tarafından incelenecek.`);
+                    summary.innerText = notes.join(' ');
+                }
+
+                async function downloadEtsySquareThumbnail() {
+                    const input = document.getElementById('etsyDraftImage');
+                    const file = input.files && input.files[0];
+                    if(!file) {
+                        showEtsyToast("Önce gerçek ürün fotoğrafı seçin.");
+                        return;
+                    }
+                    const image = await readImageFile(file);
+                    const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
+                    const sourceX = Math.floor((image.naturalWidth - sourceSize) / 2);
+                    const sourceY = Math.floor((image.naturalHeight - sourceSize) / 2);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 2000;
+                    canvas.height = 2000;
+                    canvas.getContext('2d').drawImage(
+                        image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, 2000, 2000
+                    );
+                    const link = document.createElement('a');
+                    link.download = 'etsy-thumbnail-2000x2000.jpg';
+                    link.href = canvas.toDataURL('image/jpeg', 0.92);
+                    link.click();
+                    showEtsyToast("Kare thumbnail indirildi.", false);
+                }
+
+                function getEtsyProductDetails() {
+                    return {
+                        material: document.getElementById('etsyDraftMaterial').value.trim(),
+                        color: document.getElementById('etsyDraftColor').value.trim(),
+                        quantity: document.getElementById('etsyDraftQuantity').value.trim(),
+                        personalization: document.getElementById('etsyDraftPersonalization').value.trim(),
+                        occasion: document.getElementById('etsyDraftOccasion').value.trim(),
+                        packaging: document.getElementById('etsyDraftPackaging').value.trim(),
+                        processing_time: document.getElementById('etsyDraftProcessingTime').value.trim(),
+                        price: document.getElementById('etsyDraftPrice').value.trim(),
+                        stock: document.getElementById('etsyDraftStock').value.trim(),
+                        product_notes: document.getElementById('etsyDraftProductNotes').value.trim()
+                    };
+                }
+
+                const etsyProfileFieldMap = {
+                    material: 'etsyDraftMaterial',
+                    color: 'etsyDraftColor',
+                    quantity: 'etsyDraftQuantity',
+                    personalization: 'etsyDraftPersonalization',
+                    occasion: 'etsyDraftOccasion',
+                    packaging: 'etsyDraftPackaging',
+                    processing_time: 'etsyDraftProcessingTime',
+                    price: 'etsyDraftPrice',
+                    stock: 'etsyDraftStock',
+                    product_notes: 'etsyDraftProductNotes'
+                };
+
+                function getEtsyProductProfiles() {
+                    try { return JSON.parse(localStorage.getItem('etsyProductProfiles') || '{}'); }
+                    catch(error) { return {}; }
+                }
+
+                function saveEtsyProductProfile() {
+                    const productType = document.getElementById('etsyDraftProductType').value;
+                    const profiles = getEtsyProductProfiles();
+                    profiles[productType] = {
+                        details: getEtsyProductDetails(),
+                        product_size: document.getElementById('etsyDraftProductSize').value.trim(),
+                        box_size: document.getElementById('etsyDraftBoxSize').value.trim()
+                    };
+                    localStorage.setItem('etsyProductProfiles', JSON.stringify(profiles));
+                    showEtsyToast(`${productType} varsayılanları bu tarayıcıya kaydedildi.`, false);
+                }
+
+                function loadEtsyProductProfile() {
+                    const productType = document.getElementById('etsyDraftProductType').value;
+                    const profile = getEtsyProductProfiles()[productType];
+                    if(!profile) return;
+                    Object.entries(etsyProfileFieldMap).forEach(([key, elementId]) => {
+                        document.getElementById(elementId).value = profile.details?.[key] || '';
+                    });
+                    document.getElementById('etsyDraftProductSize').value = profile.product_size || '';
+                    document.getElementById('etsyDraftBoxSize').value = profile.box_size || '';
+                }
+
+                function renderEtsyReadiness(readiness) {
+                    const box = document.getElementById('etsyReadinessBox');
+                    const data = readiness || {};
+                    const breakdown = data.breakdown || {};
+                    box.innerHTML = '';
+                    const title = document.createElement('strong');
+                    title.innerText = `Listing Hazırlık Puanı: ${data.score || 0}/100 — ${data.label || 'Eksik'}`;
+                    const detail = document.createElement('div');
+                    detail.style.cssText = 'font-size:12px; margin-top:6px;';
+                    detail.innerText = `Ürün ${breakdown.product_information || 0}/20 · SEO ${breakdown.search_relevance || 0}/25 · Kategori ${breakdown.category_attributes || 0}/15 · Fotoğraf ${breakdown.photo_quality || 0}/25 · Güven ${breakdown.policy_trust || 0}/15`;
+                    const warnings = document.createElement('ul');
+                    (data.warnings || []).forEach(item => {
+                        const li = document.createElement('li');
+                        li.innerText = item;
+                        warnings.appendChild(li);
+                    });
+                    const disclaimer = document.createElement('small');
+                    disclaimer.innerText = data.disclaimer || '';
+                    box.append(title, detail, warnings, disclaimer);
+                }
+
+                function downloadEtsyDraftPackage() {
+                    if(!latestEtsyDraftResult) {
+                        showEtsyToast("Önce Etsy içeriği üretin.");
+                        return;
+                    }
+                    const packageData = {
+                        generated_at: new Date().toISOString(),
+                        title: latestEtsyDraftResult.title,
+                        short_title: latestEtsyDraftResult.short_title,
+                        tags: (latestEtsyDraftResult.tags || []).map(item => item.keyword || item),
+                        description: latestEtsyDraftResult.description,
+                        category_suggestion: latestEtsyDraftResult.category_suggestion,
+                        attributes: latestEtsyDraftResult.attributes || [],
+                        photo_order: latestEtsyDraftResult.photo_order || [],
+                        product_details: getEtsyProductDetails(),
+                        product_size: document.getElementById('etsyDraftProductSize').value.trim(),
+                        box_size: document.getElementById('etsyDraftBoxSize').value.trim(),
+                        readiness: latestEtsyDraftResult.readiness
+                    };
+                    const blob = new Blob([JSON.stringify(packageData, null, 2)], { type: 'application/json' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = 'etsy-listing-draft.json';
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                    showEtsyToast("Taslak bilgi paketi indirildi.", false);
+                }
+
                 async function generateEtsyDraft() {
                     const product_type = document.getElementById('etsyDraftProductType').value;
                     const checkboxes = document.querySelectorAll('.concept-cb:checked');
@@ -848,6 +1138,7 @@
                     const keyword = document.getElementById('etsyDraftKeyword').value;
                     const product_size = document.getElementById('etsyDraftProductSize').value;
                     const box_size = document.getElementById('etsyDraftBoxSize').value;
+                    const product_details = getEtsyProductDetails();
                     
                     const btn = document.getElementById('btnEtsyGenerate');
                     const results = document.getElementById('etsyDraftResults');
@@ -866,7 +1157,18 @@
                         const response = await fetchWithRetry('/api/etsy-draft', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ product_type, concept, keyword, product_size, box_size, locked_tags: lockedTags })
+                            body: JSON.stringify({
+                                product_type,
+                                concept,
+                                keyword,
+                                product_size,
+                                box_size,
+                                locked_tags: lockedTags,
+                                product_details,
+                                product_images: etsyAnalysisImages,
+                                photo_metrics: etsyPhotoMetrics,
+                                blocked_keywords: getBlockedErankKeywords()
+                            })
                         });
                         
                         const data = await response.json();
@@ -874,6 +1176,7 @@
                         if(data.error) {
                             showEtsyToast("Hata: " + data.error);
                         } else {
+                            latestEtsyDraftResult = data;
                             document.getElementById('etsyResShortTitle').value = data.short_title || "Bulunamadı";
                             document.getElementById('etsyResTitle').value = data.title || "Bulunamadı";
                             
@@ -881,6 +1184,15 @@
                             renderTags(data.backup_tags || [], 'etsyResBackupTags');
 
                             document.getElementById('etsyResDesc').value = data.description || "Bulunamadı";
+                            renderEtsyReadiness(data.readiness);
+                            const advice = [
+                                `Kategori önerisi: ${data.category_suggestion || 'Doğrulanmalı'}`,
+                                `Özellikler: ${(data.attributes || []).join(', ') || 'Doğrulanmalı'}`,
+                                `Fotoğraf sırası: ${(data.photo_order || []).join(' → ') || 'Ana ürün, detay, ölçü, paketleme'}`,
+                                `Fotoğrafta görülenler: ${(data.image_observations || []).join(', ') || 'Fotoğraf analizi yok'}`,
+                                `Kontrol edilecekler: ${(data.uncertain_fields || []).join(', ') || 'Yok'}`
+                            ];
+                            document.getElementById('etsyResListingAdvice').innerText = advice.join('\n');
                             results.style.display = 'block';
                             showEtsyToast("İçerik başarıyla üretildi!", false);
                         }
@@ -891,56 +1203,6 @@
                         btn.innerHTML = "✨ İçerik Üret";
                         btn.style.opacity = "1";
                     }
-                }
-
-                async function removeEtsyWatermark() {
-                    const imageInput = document.getElementById('etsyWatermarkImage');
-                    if(!imageInput.files || imageInput.files.length === 0) {
-                        showEtsyToast("Lütfen önce bir görsel seçin!");
-                        return;
-                    }
-
-                    const file = imageInput.files[0];
-                    const reader = new FileReader();
-                    const btn = document.querySelector('button[onclick="removeEtsyWatermark()"]');
-                    
-                    btn.disabled = true;
-                    btn.innerHTML = "Temizleniyor... ⏳";
-                    btn.style.opacity = "0.7";
-                    
-                    reader.onloadend = async () => {
-                        const base64String = reader.result;
-                        
-                        try {
-                            const response = await fetchWithRetry('/api/remove-watermark', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ image: base64String })
-                            });
-                            
-                            const data = await response.json();
-                            
-                            if(data.error) {
-                                showEtsyToast("Hata: " + data.error);
-                            } else if (data.image) {
-                                const link = document.createElement('a');
-                                link.href = data.image;
-                                link.download = 'watermark_temizlenmis.jpg';
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                showEtsyToast("Görsel başarıyla temizlendi ve indirildi!", false);
-                            }
-                        } catch (error) {
-                            showEtsyToast("Bağlantı hatası: API'ye ulaşılamadı.");
-                        } finally {
-                            btn.disabled = false;
-                            btn.innerHTML = "🪄 Sağ Alt Filigranı Temizle";
-                            btn.style.opacity = "1";
-                        }
-                    };
-                    
-                    reader.readAsDataURL(file);
                 }
 
                 function escapeErankHtml(value) {
@@ -1136,6 +1398,13 @@
                         `;
                     });
                     tbody.innerHTML = html;
+                    const blockedKeywords = new Set(getBlockedErankKeywords());
+                    tbody.querySelectorAll('.erank-row-cb').forEach(checkbox => {
+                        if(blockedKeywords.has(String(checkbox.dataset.keyword || '').trim().toLowerCase())) {
+                            checkbox.closest('tr').style.opacity = '0.45';
+                            checkbox.closest('tr').title = 'Bu keyword üretimde kullanılmıyor.';
+                        }
+                    });
                     filterDashboard(); // Apply default filters on load
                 }
                 
@@ -1223,6 +1492,28 @@
                     } finally {
                         if(btn) btn.innerHTML = origText;
                     }
+                }
+
+                function getBlockedErankKeywords() {
+                    try { return JSON.parse(localStorage.getItem('blockedErankKeywords') || '[]'); }
+                    catch(error) { return []; }
+                }
+
+                function blockSelectedErankKeywords() {
+                    const selected = Array.from(document.querySelectorAll('.erank-row-cb:checked'));
+                    if(!selected.length) {
+                        showEtsyToast("Üretimde kullanılmayacak keywordleri seçin.");
+                        return;
+                    }
+                    const blocked = new Set(getBlockedErankKeywords().map(item => String(item).trim().toLowerCase()));
+                    selected.forEach(checkbox => {
+                        const keyword = String(checkbox.dataset.keyword || '').trim().toLowerCase();
+                        if(keyword) blocked.add(keyword);
+                        checkbox.closest('tr').style.opacity = '0.45';
+                        checkbox.checked = false;
+                    });
+                    localStorage.setItem('blockedErankKeywords', JSON.stringify(Array.from(blocked)));
+                    showEtsyToast(`${selected.length} keyword silinmeden üretim dışı bırakıldı.`, false);
                 }
                 
                 async function deleteErankKeyword(id) {
@@ -2976,6 +3267,7 @@
             try { renderAiPrompts(); } catch(e){ console.error("aiPrompts err:", e); }
             try { renderOrders(); } catch(e){ console.error("renderOrders err:", e); }
             try { renderEtsyConceptsUI(); } catch(e){ console.error("etsyConcepts err:", e); }
+            try { loadEtsyProductProfile(); } catch(e){ console.error("etsyProductProfile err:", e); }
             try { renderErankLastUploadInfo(); } catch(e){ console.error("erankUploadInfo err:", e); }
             try { renderFavoriteLists(); } catch(e){ console.error("favList err:", e); }
         };

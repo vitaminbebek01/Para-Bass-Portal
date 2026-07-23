@@ -57,30 +57,30 @@ def calculate_keyword_score(
     volume_ratio = min(math.log1p(searches) / math.log1p(5000), 1.0)
     competition_ratio = 1.0 - min(math.log1p(competition) / math.log1p(500000), 1.0)
 
-    earned = (volume_ratio * 40.0) + (competition_ratio * 35.0)
-    available = 75.0
-
-    # Long-tail phrases carry clearer buyer intent than single generic words.
-    earned += 5.0 if word_count >= 3 else (3.0 if word_count == 2 else 0.0)
-    available += 5.0
+    # Missing optional eRank fields no longer inflate a partial score to 100.
+    # The fixed 100-point scale stays comparable between different CSV exports.
+    earned = (volume_ratio * 25.0) + (competition_ratio * 20.0)
+    earned += 10.0 if word_count >= 3 else (6.0 if word_count == 2 else 0.0)
+    completeness = 12.0
 
     if clicks is not None:
         click_ratio = min(max(float(clicks), 0.0) / max(searches, 1), 1.5) / 1.5
         earned += click_ratio * 10.0
-        available += 10.0
+        completeness += 1.0
 
     if ctr is not None:
         ctr_ratio = min(max(float(ctr), 0.0), 150.0) / 150.0
         earned += ctr_ratio * 10.0
-        available += 10.0
+        completeness += 1.0
 
     if trend is not None:
-        # Positive change can add up to five points; negative change removes up to five.
+        # Positive change can add up to ten points; negative change removes up to ten.
         trend_ratio = max(-100.0, min(float(trend), 100.0)) / 100.0
-        earned += trend_ratio * 5.0
-        available += 5.0
+        earned += trend_ratio * 10.0
+        completeness += 1.0
 
-    return round(max(0.0, min((earned / available) * 100.0, 100.0)), 2)
+    earned += min(completeness, 15.0)
+    return round(max(0.0, min(earned, 100.0)), 2)
 
 
 def normalize_stored_score(record: dict) -> float:

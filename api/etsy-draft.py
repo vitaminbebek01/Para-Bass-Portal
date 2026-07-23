@@ -2,6 +2,8 @@ from http.server import BaseHTTPRequestHandler
 import json
 import os
 import sys
+import base64
+import binascii
 
 # Ensure the parent directory is in sys.path to import etsy_hybrid_module
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -11,6 +13,31 @@ if parent_dir not in sys.path:
 
 from etsy_hybrid_module.db_handler import get_erank_keywords, check_cached_seo
 from etsy_hybrid_module.gemini_rag_engine import generate_optimized_listing
+from etsy_hybrid_module.listing_quality import calculate_listing_readiness
+
+
+MAX_ANALYSIS_IMAGES = 3
+MAX_IMAGE_BYTES = 1_500_000
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+def prepare_image_parts(raw_images):
+    parts = []
+    for raw_image in (raw_images or [])[:MAX_ANALYSIS_IMAGES]:
+        if not isinstance(raw_image, dict):
+            continue
+        mime_type = str(raw_image.get("mime_type") or "").lower()
+        encoded = str(raw_image.get("data") or "")
+        if mime_type not in ALLOWED_IMAGE_TYPES or not encoded:
+            continue
+        try:
+            image_bytes = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            raise ValueError("Ürün fotoğraflarından biri geçerli biçimde okunamadı.")
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            raise ValueError("Analiz için gönderilen bir fotoğraf 1,5 MB sınırını aşıyor.")
+        parts.append({"mime_type": mime_type, "data": image_bytes})
+    return parts
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -32,6 +59,21 @@ class handler(BaseHTTPRequestHandler):
             product_size = data.get('product_size', '')
             box_size = data.get('box_size', '')
             locked_tags = data.get('locked_tags', [])
+            product_details = data.get("product_details", {})
+            if not isinstance(product_details, dict):
+                product_details = {}
+            photo_metrics = data.get("photo_metrics", [])
+            if not isinstance(photo_metrics, list):
+                photo_metrics = []
+            image_parts = prepare_image_parts(data.get("product_images", []))
+            raw_blocked_keywords = data.get("blocked_keywords", [])
+            if not isinstance(raw_blocked_keywords, list):
+                raw_blocked_keywords = []
+            blocked_keywords = {
+                str(item).strip().casefold()
+                for item in raw_blocked_keywords
+                if str(item).strip()
+            }
             
             # Form search term for caching/fallback
             base_category = f"{product_type} {' '.join(concept)}".strip()
@@ -42,7 +84,9 @@ class handler(BaseHTTPRequestHandler):
                 return
             
             # 1. Check cache first (saves LLM tokens & time)
-            cached = check_cached_seo(search_term)
+            # Legacy cache keys omit dimensions, product facts and photos. Reuse
+            # them only for the old minimal request shape to avoid stale listings.
+            cached = check_cached_seo(search_term) if not product_details and not image_parts else None
             # Legacy cache entries do not contain the validated short title.
             if cached and cached.get('short_title'):
                 self.send_success_json(cached)
@@ -57,12 +101,11 @@ class handler(BaseHTTPRequestHandler):
             if erank_data:
                 for item in erank_data:
                     kw = str(item.get('keyword', '')).lower()
+                    if kw.strip().casefold() in blocked_keywords:
+                        continue
                     sv = int(item.get('searches', 0) or 0)
                     comp = int(item.get('competition', 0) or 0)
                     
-                    if comp > 100000:
-                        continue
-                        
                     # Quick regex check for whole words to prevent accidental matching like 'gaming' if not intended, but simple 'in' is what user asked.
                     # Using simple 'in' check as requested:
                     if any(garbage in kw for garbage in garbage_words):
@@ -99,17 +142,26 @@ class handler(BaseHTTPRequestHandler):
                 locked_tags,
                 selected_concepts=concept,
                 custom_keyword=keyword,
+                product_details=product_details,
+                image_parts=image_parts,
             )
 
             if "error" in result:
                 self.send_error_json(500, result["error"])
                 return
 
+            result["readiness"] = calculate_listing_readiness(
+                product_details,
+                result,
+                photo_metrics,
+            )
             self.send_success_json(result)
 
         except Exception as e:
             err_str = str(e)
-            if "Supabase" in err_str:
+            if isinstance(e, ValueError):
+                self.send_error_json(400, "Geçersiz ürün verisi", err_str)
+            elif "Supabase" in err_str:
                 self.send_error_json(500, "Supabase bağlantı hatası", err_str)
             else:
                 self.send_error_json(500, "Sunucu hatası", err_str)
