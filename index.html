@@ -584,7 +584,7 @@
                     <div class="form-group">
                         <label>Gerçek Ürün Fotoğrafları (1-10)</label>
                         <input type="file" id="etsyDraftImage" accept="image/*" multiple onchange="analyzeEtsyPhotoSelection()" style="background:white; border:1px solid #ccc; padding:8px; border-radius:4px; width:100%;">
-                        <div style="font-size:11px; color:#7f8c8d; margin-top:4px;">İlk 3 küçültülmüş fotoğraf Gemini analizine gider; orijinal dosyalar değiştirilmez.</div>
+                        <div style="font-size:11px; color:#7f8c8d; margin-top:4px;">İlk fotoğraf küçültülerek Gemini analizine gider; orijinal dosyalar değiştirilmez.</div>
                         <div id="etsyPhotoPreview" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;"></div>
                         <div id="etsyPhotoQualitySummary" style="display:none; margin-top:8px; padding:8px; border-radius:5px; background:#eef7ff; font-size:12px;"></div>
                     </div>
@@ -848,7 +848,7 @@
                             const response = await fetch(url, options);
                             // If Vercel timeouts (504) or hard crashes (500), throw to retry.
                             // If it's a 4xx error, return it so the caller can read the JSON error message.
-                            if (!response.ok && response.status >= 500) {
+                            if ([502, 503, 504].includes(response.status)) {
                                 throw new Error(`HTTP error! status: ${response.status}`);
                             }
                             return response;
@@ -944,14 +944,14 @@
 
                 async function prepareEtsyAnalysisImage(file) {
                     const image = await readImageFile(file);
-                    const maxSide = 768;
+                    const maxSide = 512;
                     const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
                     const canvas = document.createElement('canvas');
                     canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
                     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
                     canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
                     const metric = measureEtsyPhoto(canvas, file.name);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
                     return {
                         metric,
                         analysis: { mime_type: 'image/jpeg', data: dataUrl.split(',')[1] },
@@ -976,7 +976,7 @@
                         try {
                             const prepared = await prepareEtsyAnalysisImage(files[index]);
                             etsyPhotoMetrics.push(prepared.metric);
-                            if(index < 3) etsyAnalysisImages.push(prepared.analysis);
+                            if(index === 0) etsyAnalysisImages.push(prepared.analysis);
                             const card = document.createElement('div');
                             card.style.cssText = 'width:82px; font-size:10px; text-align:center;';
                             const image = document.createElement('img');
@@ -998,7 +998,7 @@
                     const notes = [];
                     notes.push(first.brightness < 55 ? 'Ana fotoğraf karanlık.' : (first.brightness > 220 ? 'Ana fotoğraf fazla parlak.' : 'Ana fotoğraf ışığı uygun.'));
                     notes.push(first.sharpness < 10 ? 'Ana fotoğraf bulanık olabilir.' : 'Ana fotoğraf netliği uygun görünüyor.');
-                    notes.push(`${etsyPhotoMetrics.length} gerçek fotoğraf hazır; ilk 3 fotoğraf Gemini tarafından incelenecek.`);
+                    notes.push(`${etsyPhotoMetrics.length} gerçek fotoğraf hazır; ana fotoğraf Gemini tarafından incelenecek.`);
                     summary.innerText = notes.join(' ');
                 }
 
@@ -1172,9 +1172,9 @@
                         });
                         
                         const data = await response.json();
-                        
+
                         if(data.error) {
-                            showEtsyToast("Hata: " + data.error);
+                            showEtsyToast("Hata: " + data.error + (data.details ? " — " + data.details : ""));
                         } else {
                             latestEtsyDraftResult = data;
                             document.getElementById('etsyResShortTitle').value = data.short_title || "Bulunamadı";
@@ -1197,7 +1197,7 @@
                             showEtsyToast("İçerik başarıyla üretildi!", false);
                         }
                     } catch (error) {
-                        showEtsyToast("API bağlantı hatası. Lütfen bağlantınızı kontrol edin.");
+                        showEtsyToast("API bağlantı hatası: " + error.message);
                     } finally {
                         btn.disabled = false;
                         btn.innerHTML = "✨ İçerik Üret";
@@ -1346,7 +1346,8 @@
                         const response = await fetchWithRetry(`/api/erank-dashboard?page=${page}&page_size=100&high_competition_only=${highCompetitionOnly}`);
                         const payload = await response.json();
                         if(payload.error) {
-                            tbody.innerHTML = `<tr><td colspan='7' style='color:red;'>Hata: ${escapeErankHtml(payload.error)}</td></tr>`;
+                            const dashboardError = payload.error + (payload.details ? ` — ${payload.details}` : '');
+                            tbody.innerHTML = `<tr><td colspan='7' style='color:red;'>Hata: ${escapeErankHtml(dashboardError)}</td></tr>`;
                             return;
                         }
                         const data = Array.isArray(payload) ? payload : (payload.items || []);
@@ -1359,7 +1360,7 @@
                         renderDashboardTable(data);
                         renderDashboardPagination(metadata);
                     } catch(e) {
-                        tbody.innerHTML = "<tr><td colspan='7' style='color:red;'>Bağlantı hatası.</td></tr>";
+                        tbody.innerHTML = `<tr><td colspan='7' style='color:red;'>Bağlantı hatası: ${escapeErankHtml(e.message)}</td></tr>`;
                     }
                 }
                 

@@ -59,46 +59,35 @@ def get_erank_dashboard_page(
     try:
         page = max(int(page or 1), 1)
         page_size = min(max(int(page_size or 100), 25), 100)
-        batch_size = 1000
-        all_rows = []
-        offset = 0
-
-        # PostgREST returns a limited page by default. Fetch chunks so large pools
-        # are not silently capped before duplicate/low-volume cleanup runs.
-        while True:
-            response = supabase.table("erank_keywords") \
-                .select("*") \
-                .order("id", desc=True) \
-                .range(offset, offset + batch_size - 1) \
-                .execute()
-            chunk = response.data or []
-            all_rows.extend(chunk)
-            if len(chunk) < batch_size:
-                break
-            offset += batch_size
-
-        cleaned = clean_erank_records(all_rows)
-        cleaned.sort(key=lambda item: float(item.get("score", 0) or 0), reverse=True)
-        high_competition_count = sum(
-            1 for item in cleaned if int(item.get("competition", 0) or 0) > 100000
-        )
-        if high_competition_only:
-            cleaned = [
-                item for item in cleaned
-                if int(item.get("competition", 0) or 0) > 100000
-            ]
-        total = len(cleaned)
-        total_pages = max((total + page_size - 1) // page_size, 1)
-        page = min(page, total_pages)
         start = (page - 1) * page_size
-        items = cleaned[start:start + page_size]
+        end = start + page_size - 1
+
+        # Fetch only the requested page. Loading the complete keyword table inside
+        # a Vercel function caused dashboard requests to time out as the pool grew.
+        query = supabase.table("erank_keywords") \
+            .select("*", count="exact") \
+            .gte("searches", 21)
+        if high_competition_only:
+            query = query.gt("competition", 100000)
+        response = query \
+            .order("score", desc=True) \
+            .order("id", desc=True) \
+            .range(start, end) \
+            .execute()
+
+        cleaned = clean_erank_records(response.data or [])
+        cleaned.sort(key=lambda item: float(item.get("score", 0) or 0), reverse=True)
+        total = int(response.count or 0)
+        total_pages = max((total + page_size - 1) // page_size, 1)
+        if page > total_pages:
+            return get_erank_dashboard_page(total_pages, page_size, high_competition_only)
         return {
-            "items": items,
+            "items": cleaned,
             "page": page,
             "page_size": page_size,
             "total": total,
             "total_pages": total_pages,
-            "high_competition_count": high_competition_count,
+            "high_competition_count": total if high_competition_only else None,
         }
     except Exception as e:
         raise Exception(f"Supabase bağlantı hatası (eRank dashboard): {e}")

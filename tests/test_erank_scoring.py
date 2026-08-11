@@ -114,8 +114,9 @@ high competition phrase,500,350,80%,150000,12%
 
 
 class FakeResponse:
-    def __init__(self, data):
+    def __init__(self, data, count=None):
         self.data = data
+        self.count = count
 
 
 class FakeTable:
@@ -128,10 +129,22 @@ class FakeTable:
         self.columns = None
         self.range_start = None
         self.range_end = None
+        self.min_searches = None
+        self.min_competition = None
 
-    def select(self, _columns):
+    def select(self, _columns, count=None):
         self.operation = "select"
         self.columns = _columns
+        return self
+
+    def gte(self, column, value):
+        if column == "searches":
+            self.min_searches = value
+        return self
+
+    def gt(self, column, value):
+        if column == "competition":
+            self.min_competition = value
         return self
 
     def eq(self, column, value):
@@ -175,11 +188,16 @@ class FakeTable:
                 row for row in self.database.rows
                 if self.concept is None or row.get("concept") == self.concept
             ]
+            if self.min_searches is not None:
+                rows = [row for row in rows if row.get("searches", 0) >= self.min_searches]
+            if self.min_competition is not None:
+                rows = [row for row in rows if row.get("competition", 0) > self.min_competition]
+            total = len(rows)
             if self.range_start is not None:
                 rows = rows[self.range_start:self.range_end + 1]
             if self.columns == "*":
-                return FakeResponse([dict(row) for row in rows])
-            return FakeResponse([{"id": row["id"], "keyword": row["keyword"]} for row in rows])
+                return FakeResponse([dict(row) for row in rows], count=total)
+            return FakeResponse([{"id": row["id"], "keyword": row["keyword"]} for row in rows], count=total)
         if self.operation == "insert":
             next_id = max([row.get("id", 0) for row in self.database.rows] + [0]) + 1
             inserted = []

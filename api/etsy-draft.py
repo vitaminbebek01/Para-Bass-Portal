@@ -16,8 +16,8 @@ from etsy_hybrid_module.gemini_rag_engine import generate_optimized_listing
 from etsy_hybrid_module.listing_quality import calculate_listing_readiness
 
 
-MAX_ANALYSIS_IMAGES = 3
-MAX_IMAGE_BYTES = 1_500_000
+MAX_ANALYSIS_IMAGES = 1
+MAX_IMAGE_BYTES = 600_000
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
@@ -35,7 +35,7 @@ def prepare_image_parts(raw_images):
         except (ValueError, binascii.Error):
             raise ValueError("Ürün fotoğraflarından biri geçerli biçimde okunamadı.")
         if len(image_bytes) > MAX_IMAGE_BYTES:
-            raise ValueError("Analiz için gönderilen bir fotoğraf 1,5 MB sınırını aşıyor.")
+            raise ValueError("Analiz için gönderilen fotoğraf 600 KB sınırını aşıyor.")
         parts.append({"mime_type": mime_type, "data": image_bytes})
     return parts
 
@@ -93,7 +93,13 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             # 2. Fetch high volume keywords from eRank DB using the concept as category tag
-            erank_data = get_erank_keywords(concept if concept else [product_type])
+            try:
+                erank_data = get_erank_keywords(concept if concept else [product_type])
+            except Exception as erank_error:
+                # eRank enriches the result, but a temporary Supabase problem must
+                # not prevent the user from generating a listing from confirmed facts.
+                print(f"eRank fallback used: {erank_error}")
+                erank_data = []
             
             # --- GARBAGE AND MATH FILTER ---
             garbage_words = ["simpsons", "skateboard", "poker", "tack shop", "chip", "casino", "game", "toy", "deck", "cards", "dice"]
