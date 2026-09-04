@@ -81,7 +81,7 @@ function splitCsvLine(line, delimiter) {
   return cells;
 }
 
-function parseCsv(content, concept) {
+function parseCsv(content, concept, shopName = '') {
   const lines = String(content || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
   if (!lines.length) throw new Error('CSV boş.');
   const delimiter = [';', '\t', ','].sort((a, b) => splitCsvLine(lines[0], b).length - splitCsvLine(lines[0], a).length)[0];
@@ -106,7 +106,7 @@ function parseCsv(content, concept) {
     const trend = rawTrend === undefined ? null : number(rawTrend);
     const key = keywordKey(keyword);
     if (records.has(key)) stats.duplicates_collapsed += 1;
-    records.set(key, { concept: String(concept).trim(), keyword, searches, competition, score: score(searches, competition, clicks, ctr, trend, keyword.split(' ').length) });
+    records.set(key, { concept: String(concept).trim(), shop_name: String(shopName).trim() || null, keyword, searches, competition, score: score(searches, competition, clicks, ctr, trend, keyword.split(' ').length) });
     if (clicks !== null) stats.with_clicks += 1;
     if (ctr !== null) stats.with_ctr += 1;
     if (trend !== null) stats.with_trend += 1;
@@ -119,34 +119,52 @@ function parseCsv(content, concept) {
 
 async function dashboard(req, res) {
   const page = Math.max(Number(req.query.page) || 1, 1);
-  const pageSize = Math.min(Math.max(Number(req.query.page_size) || 100, 25), 100);
+  const pageSize = [100, 250, 500].includes(Number(req.query.page_size)) ? Number(req.query.page_size) : 100;
   const offset = (page - 1) * pageSize;
-  const { data, count } = await supabaseRequest(`erank_keywords?select=*&order=score.desc,id.desc&offset=${offset}&limit=${pageSize}`, { headers: { Prefer: 'count=exact' } });
+  const filters = [];
+  if (req.query.keyword) filters.push(`keyword=ilike.*${encodeURIComponent(String(req.query.keyword).trim())}*`);
+  if (req.query.concept) filters.push(`concept=eq.${encodeURIComponent(String(req.query.concept).trim())}`);
+  if (req.query.shop_name) filters.push(`shop_name=ilike.*${encodeURIComponent(String(req.query.shop_name).trim())}*`);
+  const where = filters.length ? `&${filters.join('&')}` : '';
+  const { data, count } = await supabaseRequest(`erank_keywords?select=*&order=score.desc,id.desc&offset=${offset}&limit=${pageSize}${where}`, { headers: { Prefer: 'count=exact' } });
   const items = (data || []).filter(item => Number(item.searches || 0) >= MIN_SEARCH_VOLUME && String(item.keyword || '').trim().split(/\s+/).length >= 2);
   const total = Number((count || '*/0').split('/')[1]) || 0;
   send(res, 200, { items, page, page_size: pageSize, total, total_pages: Math.max(Math.ceil(total / pageSize), 1), high_competition_count: null });
 }
 
 async function upload(req, res) {
-  const { concept, csv_content: csvContent, preview } = req.body || {};
+  const { concept, shop_name: shopName, csv_content: csvContent, preview } = req.body || {};
   if (!concept || !csvContent) return send(res, 400, { success: false, error: 'Concept and csv_content are required.' });
-  const { records, stats, headers } = parseCsv(csvContent, concept);
+  const { records, stats, headers } = parseCsv(csvContent, concept, shopName);
   stats.valid_count = records.length;
   if (!records.length) return send(res, 400, { success: false, error: "CSV tarandı ancak hacmi 20'nin üzerinde olan geçerli, çok kelimeli veri bulunamadı.", details: `Okunan sütunlar: ${headers.join(', ')}` });
   if (preview) return send(res, 200, { message: `${records.length} geçerli keyword bulundu.`, stats, headers, preview: records.slice(0, 10) });
   const filter = encodeURIComponent(String(concept).trim());
-  const existing = await supabaseRequest(`erank_keywords?select=id,keyword&concept=eq.${filter}`);
-  const byKeyword = new Map((existing.data || []).map(item => [keywordKey(item.keyword), item.id]));
+  const existing = await supabaseRequest(`erank_keywords?select=id,keyword,shop_name&concept=eq.${filter}`);
+  const byKeyword = new Map((existing.data || []).map(item => [`${keywordKey(item.keyword)}|${keywordKey(item.shop_name)}`, item.id]));
   const additions = [];
   let updated = 0;
   for (const record of records) {
-    const id = byKeyword.get(keywordKey(record.keyword));
+    const id = byKeyword.get(`${keywordKey(record.keyword)}|${keywordKey(record.shop_name)}`);
     if (!id) additions.push(record);
     else { await supabaseRequest(`erank_keywords?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(record) }); updated += 1; }
   }
   if (additions.length) await supabaseRequest('erank_keywords', { method: 'POST', headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(additions) });
   stats.added = additions.length; stats.updated = updated;
   send(res, 200, { message: `${concept} için ${additions.length} yeni kayıt eklendi, ${updated} aynı keyword güncellendi.`, stats });
+}
+
+async function updateKeyword(req, res) {
+  const { id, concept, shop_name: shopName, keyword, searches, competition } = req.body || {};
+  if (!/^[0-9a-f-]{1,64}$/i.test(String(id || '')) || !String(concept || '').trim() || !String(keyword || '').trim()) {
+    return send(res, 400, { success: false, error: 'ID, konsept ve keyword zorunludur.' });
+  }
+  const safeSearches = Math.max(0, Math.trunc(number(searches)));
+  const safeCompetition = Math.max(0, Math.trunc(number(competition)));
+  const normalizedKeyword = String(keyword).trim().replace(/\s+/g, ' ');
+  const record = { concept: String(concept).trim(), shop_name: String(shopName || '').trim() || null, keyword: normalizedKeyword, searches: safeSearches, competition: safeCompetition, score: score(safeSearches, safeCompetition, null, null, null, normalizedKeyword.split(' ').length) };
+  await supabaseRequest(`erank_keywords?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(record) });
+  send(res, 200, { success: true, message: 'Keyword güncellendi.' });
 }
 
 async function deleteKeywords(req, res) {
@@ -166,7 +184,11 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   try {
     if (req.method === 'GET') return await dashboard(req, res);
-    if (req.method === 'POST') return req.body?.action === 'delete' ? await deleteKeywords(req, res) : await upload(req, res);
+    if (req.method === 'POST') {
+      if (req.body?.action === 'delete') return await deleteKeywords(req, res);
+      if (req.body?.action === 'update') return await updateKeyword(req, res);
+      return await upload(req, res);
+    }
     return send(res, 405, { success: false, error: 'Method not allowed.' });
   } catch (error) {
     return send(res, 500, { success: false, error: 'Supabase bağlantı hatası', details: error.message });

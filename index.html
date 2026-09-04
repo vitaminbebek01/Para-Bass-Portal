@@ -489,6 +489,7 @@
         <div id="module-etsy" class="module">
             <h2>🛍️ Etsy Modülü</h2>
             <p style="color:#666; font-size:13px;">Bu alan Vercel API üzerinden arka plandaki Python motoruna (Gemini 2.5 RAG & OpenCV) bağlanır.</p>
+            <button class="action-btn" style="background:#34495e; margin:0 0 16px;" onclick="openErankPoolPage()">📊 eRank Veri Havuzu’nu Aç</button>
             
             <div style="display:flex; gap:20px; flex-wrap:wrap;">
                 
@@ -784,6 +785,15 @@
                 </div>
             </div>
 
+            <div id="etsyErankPoolPage" style="display:none; margin-top:20px; background:#f8fafc; border:1px solid #ccd6dd; border-radius:8px; padding:20px;">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;"><h2 style="margin:0;">📊 eRank Veri Havuzu</h2><button class="small-btn" onclick="closeErankPoolPage()">← Etsy ana ekrana dön</button></div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin:15px 0;"><input id="erankPoolKeyword" placeholder="Keyword ara"><select id="erankPoolConcept"></select><input id="erankPoolShopFilter" placeholder="Mağaza ara"><select id="erankPoolPageSize"><option>100</option><option>250</option><option>500</option></select><button class="small-btn" style="background:#34495e" onclick="loadErankPoolPage(1)">Filtrele / Yenile</button></div>
+                <div style="background:white; border:1px solid #ddd; padding:12px; border-radius:6px; margin-bottom:14px;"><b>Yeni eRank CSV yükle</b><div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;"><input id="erankPoolShopUpload" placeholder="Mağaza adı (opsiyonel)"><select id="erankPoolConceptUpload"></select><input id="erankPoolCsv" type="file" accept=".csv"><button class="small-btn" style="background:#27ae60" onclick="uploadErankPoolCsv()">CSV Yükle</button></div></div>
+                <div style="overflow:auto;" oncontextmenu="erankPoolMenu(event)"><table style="width:100%; border-collapse:collapse; background:white;"><thead><tr style="background:#edf1f4"><th><input type="checkbox" onchange="selectErankPoolPage(this.checked)"></th><th>Mağaza</th><th>Konsept</th><th>Keyword</th><th>Hacim</th><th>Rekabet</th><th>Puan</th><th>İşlem</th></tr></thead><tbody id="erankPoolBody"></tbody></table></div>
+                <div style="display:flex; gap:8px; margin-top:12px; align-items:center;"><button class="small-btn" style="background:#e74c3c" onclick="deleteErankPoolRows()">Seçilenleri Sil</button><button id="erankPoolPrev" class="small-btn" onclick="loadErankPoolPage(erankPoolPage-1)">Önceki</button><button id="erankPoolNext" class="small-btn" onclick="loadErankPoolPage(erankPoolPage+1)">Sonraki</button><span id="erankPoolMeta"></span></div>
+                <div id="erankPoolMenu" style="display:none; position:absolute; z-index:10001; background:white; border:1px solid #aaa; padding:5px;"><button class="small-btn" onclick="selectErankPoolPage(true)">Bu sayfayı seç</button><button class="small-btn" onclick="selectErankPoolPage(false)">Seçimi kaldır</button></div>
+            </div>
+            <div id="erankEditModal" style="display:none; position:fixed; inset:0; z-index:10002; background:rgba(0,0,0,.45); align-items:center; justify-content:center;"><div style="background:white; padding:20px; border-radius:8px; width:420px; max-width:90%;"><h3>Keyword Düzenle</h3><input id="erankEditId" type="hidden"><input id="erankEditShop" placeholder="Mağaza adı" style="width:100%;margin:4px 0"><input id="erankEditConcept" placeholder="Konsept" style="width:100%;margin:4px 0"><input id="erankEditKeyword" placeholder="Keyword" style="width:100%;margin:4px 0"><input id="erankEditSearches" type="number" placeholder="Hacim" style="width:100%;margin:4px 0"><input id="erankEditCompetition" type="number" placeholder="Rekabet" style="width:100%;margin:4px 0"><button class="small-btn" style="background:#27ae60" onclick="saveErankEdit()">Kaydet</button> <button class="small-btn" onclick="erankEditModal.style.display='none'">İptal</button></div></div>
             <!-- MODALS FOR FAVORITES -->
             <div id="addToFavoritesModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:9999;">
                 <div style="background:white; padding:20px; border-radius:8px; width:400px; max-width:90%;">
@@ -1227,6 +1237,38 @@
                     }
                     container.innerText = `Son yükleme: ${info.fileName} — ${new Date(info.uploadedAt).toLocaleString('tr-TR')} (${info.added} yeni, ${info.updated} güncellenen)`;
                 }
+
+                let erankPoolPage = 1;
+                function openErankPoolPage() {
+                    const host = document.getElementById('etsyErankPoolPage');
+                    host.style.display = 'block';
+                    host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    const concept = document.getElementById('erankPoolConcept');
+                    concept.innerHTML = '<option value="">Tüm konseptler</option>' + etsyConcepts.map(item => `<option value="${item}">${item}</option>`).join('');
+                    document.getElementById('erankPoolConceptUpload').innerHTML = etsyConcepts.map(item => `<option value="${item}">${item}</option>`).join('');
+                    loadErankPoolPage(1);
+                }
+                function closeErankPoolPage() { document.getElementById('etsyErankPoolPage').style.display = 'none'; }
+                function erankPoolEscape(value) { const box = document.createElement('div'); box.textContent = value || ''; return box.innerHTML; }
+                async function loadErankPoolPage(page = 1) {
+                    erankPoolPage = page;
+                    const params = new URLSearchParams({ page, page_size: document.getElementById('erankPoolPageSize').value, keyword: document.getElementById('erankPoolKeyword').value, concept: document.getElementById('erankPoolConcept').value, shop_name: document.getElementById('erankPoolShopFilter').value });
+                    const body = document.getElementById('erankPoolBody'); body.innerHTML = '<tr><td colspan="8">Yükleniyor...</td></tr>';
+                    try {
+                        const response = await fetchWithRetry('/api/etsy-erank?' + params.toString()); const payload = await response.json();
+                        if (payload.error) throw new Error(payload.error + (payload.details ? ' — ' + payload.details : ''));
+                        body.innerHTML = (payload.items || []).map(item => `<tr class="erank-pool-row"><td><input class="erank-pool-cb" type="checkbox" value="${item.id}"></td><td>${erankPoolEscape(item.shop_name || 'Belirtilmemiş')}</td><td>${erankPoolEscape(item.concept)}</td><td>${erankPoolEscape(item.keyword)}</td><td>${item.searches}</td><td>${item.competition}</td><td>${Number(item.score || 0).toFixed(1)}</td><td><button class="small-btn" onclick='openErankEdit(${JSON.stringify(item).replace(/'/g, '&apos;')})'>Düzenle</button> <button class="small-btn" style="background:#e74c3c" onclick="deleteErankPoolRows(['${item.id}'])">Sil</button></td></tr>`).join('') || '<tr><td colspan="8">Kayıt bulunamadı.</td></tr>';
+                        document.getElementById('erankPoolMeta').innerText = `Toplam ${payload.total || 0} keyword — Sayfa ${payload.page || 1}/${payload.total_pages || 1}`;
+                        document.getElementById('erankPoolPrev').disabled = page <= 1; document.getElementById('erankPoolNext').disabled = page >= (payload.total_pages || 1);
+                    } catch (error) { body.innerHTML = `<tr><td colspan="8" style="color:#c0392b">${erankPoolEscape(error.message)}</td></tr>`; }
+                }
+                function erankPoolIds() { return Array.from(document.querySelectorAll('.erank-pool-cb:checked')).map(item => item.value); }
+                async function deleteErankPoolRows(ids = erankPoolIds()) { if (!ids.length || !confirm(`${ids.length} keyword silinsin mi?`)) return; const response = await fetchWithRetry('/api/etsy-erank', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'delete',ids}) }); const data = await response.json(); if(data.error) return showEtsyToast(data.error); loadErankPoolPage(erankPoolPage); }
+                function openErankEdit(item) { document.getElementById('erankEditId').value=item.id; document.getElementById('erankEditShop').value=item.shop_name||''; document.getElementById('erankEditConcept').value=item.concept||''; document.getElementById('erankEditKeyword').value=item.keyword||''; document.getElementById('erankEditSearches').value=item.searches||0; document.getElementById('erankEditCompetition').value=item.competition||0; document.getElementById('erankEditModal').style.display='flex'; }
+                async function saveErankEdit() { const payload={action:'update',id:erankEditId.value,shop_name:erankEditShop.value,concept:erankEditConcept.value,keyword:erankEditKeyword.value,searches:erankEditSearches.value,competition:erankEditCompetition.value}; const response=await fetchWithRetry('/api/etsy-erank',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); const data=await response.json(); if(data.error) return showEtsyToast(data.error); erankEditModal.style.display='none'; loadErankPoolPage(erankPoolPage); }
+                async function uploadErankPoolCsv() { const file=document.getElementById('erankPoolCsv').files[0]; if(!file) return showEtsyToast('Lütfen CSV dosyası seçin.'); const content=await file.text(); const response=await fetchWithRetry('/api/etsy-erank',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({concept:erankPoolConceptUpload.value,shop_name:erankPoolShopUpload.value,csv_content:content})}); const data=await response.json(); if(data.error) return showEtsyToast(data.error); showEtsyToast(data.message,false); document.getElementById('erankPoolCsv').value=''; loadErankPoolPage(1); }
+                function erankPoolMenu(event) { event.preventDefault(); const menu=document.getElementById('erankPoolMenu'); menu.style.display='block'; menu.style.left=event.pageX+'px'; menu.style.top=event.pageY+'px'; }
+                function selectErankPoolPage(selected) { document.querySelectorAll('.erank-pool-cb').forEach(box=>box.checked=selected); document.getElementById('erankPoolMenu').style.display='none'; }
 
                 function renderErankPreview(data) {
                     const preview = document.getElementById('erankCsvPreview');
