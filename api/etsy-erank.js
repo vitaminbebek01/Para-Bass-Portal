@@ -1,3 +1,5 @@
+const https = require('node:https');
+
 const MIN_SEARCH_VOLUME = 21;
 
 function send(res, status, body) {
@@ -5,27 +7,46 @@ function send(res, status, body) {
 }
 
 function supabaseConfig() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+  const url = String(process.env.SUPABASE_URL || '').trim();
+  const key = String(process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || '').trim();
   if (!url || !key) throw new Error('Supabase ortam değişkenleri eksik.');
   return { url: url.replace(/\/$/, ''), key };
 }
 
 async function supabaseRequest(path, options = {}) {
   const { url, key } = supabaseConfig();
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    ...options,
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      ...options.headers,
-    },
+  const body = options.body || null;
+  const headers = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    ...options.headers,
+  };
+  if (body) headers['Content-Length'] = Buffer.byteLength(body);
+  return new Promise((resolve, reject) => {
+    const request = https.request(new URL(`${url}/rest/v1/${path}`), {
+      method: options.method || 'GET',
+      headers,
+      timeout: 15000,
+    }, (response) => {
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { text += chunk; });
+      response.on('end', () => {
+        let data;
+        try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          const details = typeof data === 'object' ? (data.message || data.hint || JSON.stringify(data)) : text;
+          reject(new Error(`Supabase HTTP ${response.statusCode}: ${details || 'Bilinmeyen hata'}`));
+          return;
+        }
+        resolve({ data, count: response.headers['content-range'] || null });
+      });
+    });
+    request.on('timeout', () => request.destroy(new Error('Supabase bağlantısı 15 saniye içinde yanıt vermedi.')));
+    request.on('error', error => reject(new Error(`Supabase ağ bağlantısı kurulamadı: ${error.message}`)));
+    if (body) request.write(body);
+    request.end();
   });
-  const text = await response.text();
-  let data;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-  if (!response.ok) throw new Error(typeof data === 'object' ? (data.message || data.hint || JSON.stringify(data)) : text);
-  return { data, count: response.headers.get('content-range') };
 }
 
 function number(value) {
