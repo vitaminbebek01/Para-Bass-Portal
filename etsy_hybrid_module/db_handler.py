@@ -1,3 +1,4 @@
+import os
 import sys
 try:
     from supabase import create_client, Client
@@ -18,9 +19,25 @@ if SUPABASE_URL and SUPABASE_KEY and create_client:
     except Exception as e:
         print(f"Error initializing Supabase client: {e}")
 
-def get_erank_keywords(concept):
+
+def _require_supabase():
+    """Initialize again when a serverless function receives its environment late."""
+    global supabase
+    if supabase:
+        return
+
+    url = os.getenv("SUPABASE_URL") or SUPABASE_URL
+    key = os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_KEY") or SUPABASE_KEY
+    if url and key and create_client:
+        try:
+            supabase = create_client(url, key)
+        except Exception as e:
+            raise Exception(f"Supabase client başlatılamadı: {e}")
     if not supabase:
         raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+
+def get_erank_keywords(concept):
+    _require_supabase()
     try:
         query = supabase.table("erank_keywords").select("*")
         
@@ -38,8 +55,7 @@ def get_erank_keywords(concept):
         raise Exception(f"Supabase bağlantı hatası: {e}")
 
 def get_all_erank_keywords():
-    if not supabase:
-        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+    _require_supabase()
     try:
         response = supabase.table("erank_keywords").select("*").order("id", desc=True).execute()
         data = clean_erank_records(response.data)
@@ -54,21 +70,17 @@ def get_erank_dashboard_page(
     high_competition_only: bool = False,
 ):
     """Return a stable 100-keyword dashboard page after legacy cleanup."""
-    if not supabase:
-        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+    _require_supabase()
     try:
         page = max(int(page or 1), 1)
         page_size = min(max(int(page_size or 100), 25), 100)
         start = (page - 1) * page_size
         end = start + page_size - 1
 
-        # Fetch only the requested page. Loading the complete keyword table inside
-        # a Vercel function caused dashboard requests to time out as the pool grew.
+        # Do not filter numeric fields inside Supabase. Legacy rows can hold text
+        # values, and a numeric database filter would fail the entire dashboard.
         query = supabase.table("erank_keywords") \
-            .select("*", count="exact") \
-            .gte("searches", 21)
-        if high_competition_only:
-            query = query.gt("competition", 100000)
+            .select("*", count="exact")
         response = query \
             .order("score", desc=True) \
             .order("id", desc=True) \
@@ -76,6 +88,11 @@ def get_erank_dashboard_page(
             .execute()
 
         cleaned = clean_erank_records(response.data or [])
+        if high_competition_only:
+            cleaned = [
+                item for item in cleaned
+                if int(item.get("competition", 0) or 0) > 100000
+            ]
         cleaned.sort(key=lambda item: float(item.get("score", 0) or 0), reverse=True)
         total = int(response.count or 0)
         total_pages = max((total + page_size - 1) // page_size, 1)
@@ -93,8 +110,7 @@ def get_erank_dashboard_page(
         raise Exception(f"Supabase bağlantı hatası (eRank dashboard): {e}")
 
 def delete_erank_keyword(keyword_id_or_ids):
-    if not supabase:
-        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+    _require_supabase()
     try:
         if isinstance(keyword_id_or_ids, list):
             # Fast delete with .in_()
@@ -125,8 +141,7 @@ def upsert_erank_keywords_for_concept(concept: str, records: list):
     concept is updated from the new CSV; all other earlier CSV keywords remain.
     Existing duplicate copies of that exact keyword are removed.
     """
-    if not supabase:
-        raise Exception("Supabase bağlantı hatası: Client is not initialized.")
+    _require_supabase()
     try:
         existing_response = supabase.table("erank_keywords") \
             .select("id,keyword") \

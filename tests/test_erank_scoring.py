@@ -1,4 +1,5 @@
 import unittest
+import os
 from unittest.mock import patch
 
 from etsy_hybrid_module import db_handler
@@ -10,6 +11,14 @@ from etsy_hybrid_module.erank_scoring import (
 
 
 class ErankScoringTests(unittest.TestCase):
+    def test_supabase_client_retries_when_environment_arrives_after_import(self):
+        client = object()
+        with patch.object(db_handler, "supabase", None), \
+             patch.object(db_handler, "create_client", return_value=client), \
+             patch.dict(os.environ, {"SUPABASE_URL": "https://example.supabase.co", "SUPABASE_ANON_KEY": "test-key"}, clear=True):
+            db_handler._require_supabase()
+            self.assertIs(db_handler.supabase, client)
+
     def test_latest_duplicate_row_wins_and_low_volume_is_removed(self):
         csv_content = """Keyword,Average Searches,Average Clicks,Average CTR,Etsy Competition,Trend Change
 epoxy magnet,100,60,60%,2500,5%
@@ -48,6 +57,18 @@ high competition phrase,500,350,80%,150000,12%
         self.assertGreater(enriched, basic)
         self.assertGreater(basic, weak_engagement)
         self.assertTrue(0 <= enriched <= 100)
+
+    def test_semicolon_erank_export_is_parsed(self):
+        csv_content = """Keyword;Average Searches;Average Clicks;Average CTR;Etsy Competition;Trend Change
+epoxy party favor;250;120;48%;4500;6%
+"""
+        records, stats, headers = parse_erank_csv(csv_content, "Epoxy Magnet")
+
+        self.assertEqual(headers[0], "keyword")
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["keyword"], "epoxy party favor")
+        self.assertEqual(records[0]["searches"], 250)
+        self.assertEqual(stats["with_clicks"], 1)
 
     def test_dashboard_cleanup_keeps_newest_concept_keyword(self):
         newest_first = [

@@ -123,7 +123,11 @@ def clean_erank_records(records: list) -> list:
 
 def parse_erank_csv(csv_content: str, concept: str):
     csv_content = str(csv_content or "").encode("utf-8").decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(csv_content))
+    try:
+        dialect = csv.Sniffer().sniff(csv_content[:4096], delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    reader = csv.DictReader(io.StringIO(csv_content), dialect=dialect)
     if reader.fieldnames:
         reader.fieldnames = [str(name).strip().lower() for name in reader.fieldnames if name]
 
