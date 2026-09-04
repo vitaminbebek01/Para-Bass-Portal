@@ -125,16 +125,27 @@ async function dashboard(req, res) {
   }
   const page = Math.max(Number(req.query.page) || 1, 1);
   const pageSize = [100, 250, 500].includes(Number(req.query.page_size)) ? Number(req.query.page_size) : 100;
-  const offset = (page - 1) * pageSize;
   const filters = [];
   if (req.query.keyword) filters.push(`keyword=ilike.*${encodeURIComponent(String(req.query.keyword).trim())}*`);
   if (req.query.concept) filters.push(`concept=eq.${encodeURIComponent(String(req.query.concept).trim())}`);
   if (req.query.shop_name) filters.push(`shop_name=ilike.*${encodeURIComponent(String(req.query.shop_name).trim())}*`);
   const where = filters.length ? `&${filters.join('&')}` : '';
-  const { data, count } = await supabaseRequest(`erank_keywords?select=*&order=score.desc,id.desc&offset=${offset}&limit=${pageSize}${where}`, { headers: { Prefer: 'count=exact' } });
-  const items = (data || []).filter(item => Number(item.searches || 0) >= MIN_SEARCH_VOLUME && String(item.keyword || '').trim().split(/\s+/).length >= 2);
-  const total = Number((count || '*/0').split('/')[1]) || 0;
-  send(res, 200, { items, page, page_size: pageSize, total, total_pages: Math.max(Math.ceil(total / pageSize), 1), high_competition_count: null });
+  // Fetch newest-first, then collapse the same keyword from different shops.
+  // The first row is the newest display record; remaining shop names become metadata.
+  const { data } = await supabaseRequest(`erank_keywords?select=*&order=id.desc&limit=10000${where}`);
+  const grouped = new Map();
+  for (const item of (data || [])) {
+    if (Number(item.searches || 0) < MIN_SEARCH_VOLUME || String(item.keyword || '').trim().split(/\s+/).length < 2) continue;
+    const key = keywordKey(item.keyword);
+    if (!grouped.has(key)) grouped.set(key, { ...item, source_shops: [] });
+    const group = grouped.get(key);
+    const shop = String(item.shop_name || '').trim();
+    if (shop && !group.source_shops.includes(shop)) group.source_shops.push(shop);
+  }
+  const collapsed = [...grouped.values()];
+  const total = collapsed.length;
+  const start = (page - 1) * pageSize;
+  send(res, 200, { items: collapsed.slice(start, start + pageSize), page, page_size: pageSize, total, total_pages: Math.max(Math.ceil(total / pageSize), 1), high_competition_count: null });
 }
 
 async function upload(req, res) {
