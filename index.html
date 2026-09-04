@@ -1250,7 +1250,7 @@
                     const reader = new FileReader();
                     reader.onloadend = async () => {
                         try {
-                            const response = await fetchWithRetry('/api/upload-erank', {
+                            const response = await fetchWithRetry('/api/etsy-erank', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ concept, csv_content: reader.result, preview: true })
@@ -1288,7 +1288,7 @@
                         const csvContent = reader.result;
                         
                         try {
-                            const response = await fetchWithRetry('/api/upload-erank', {
+                            const response = await fetchWithRetry('/api/etsy-erank', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ concept: concept, csv_content: csvContent })
@@ -1343,7 +1343,7 @@
                     
                     try {
                         const highCompetitionOnly = document.getElementById('showHighComp').checked;
-                        const response = await fetchWithRetry(`/api/erank-dashboard?page=${page}&page_size=100&high_competition_only=${highCompetitionOnly}`);
+                        const response = await fetchWithRetry(`/api/etsy-erank?page=${page}&page_size=100&high_competition_only=${highCompetitionOnly}`);
                         const payload = await response.json();
                         if(payload.error) {
                             const dashboardError = payload.error + (payload.details ? ` — ${payload.details}` : '');
@@ -1475,7 +1475,7 @@
                     if(btn) btn.innerHTML = "⏳ Siliniyor... Lütfen bekleyin";
                     
                     try {
-                        const response = await fetchWithRetry('/api/erank-dashboard', {
+                        const response = await fetchWithRetry('/api/etsy-erank', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ action: 'delete', ids: selected })
@@ -1520,7 +1520,7 @@
                 async function deleteErankKeyword(id) {
                     if(!confirm("Bu kelimeyi veritabanından silmek istediğinize emin misiniz?")) return;
                     try {
-                        const response = await fetchWithRetry('/api/erank-dashboard', {
+                        const response = await fetchWithRetry('/api/etsy-erank', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ action: 'delete', id: String(id) })
