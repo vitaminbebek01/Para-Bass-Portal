@@ -118,6 +118,11 @@ function parseCsv(content, concept, shopName = '') {
 }
 
 async function dashboard(req, res) {
+  if (String(req.query.facets || '') === 'true') {
+    const { data } = await supabaseRequest('erank_keywords?select=shop_name,concept&limit=10000');
+    const unique = key => [...new Set((data || []).map(item => String(item[key] || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    return send(res, 200, { shops: unique('shop_name'), concepts: unique('concept') });
+  }
   const page = Math.max(Number(req.query.page) || 1, 1);
   const pageSize = [100, 250, 500].includes(Number(req.query.page_size)) ? Number(req.query.page_size) : 100;
   const offset = (page - 1) * pageSize;
