@@ -80,8 +80,6 @@ def prepare_locked_tags(locked_tags: list = None) -> list:
         tag = _tag_text(raw_tag)
         if not tag:
             continue
-        if len(tag) > MAX_TAG_LENGTH:
-            raise ValueError(f"Kilitli etiket 20 karakteri aşıyor ve değiştirilemez: '{tag}'")
         key = comparison_key(tag)
         if key in seen:
             raise ValueError(f"Aynı kilitli etiket birden fazla seçilmiş: '{tag}'")
@@ -199,6 +197,8 @@ def validate_and_finalize_listing(
         raise ValueError("Gemini sonucu geçerli bir JSON nesnesi değil.")
 
     prepared_locked = prepare_locked_tags(locked_tags)
+    safe_locked = [tag for tag in prepared_locked if len(tag) <= MAX_TAG_LENGTH]
+    long_locked = [tag for tag in prepared_locked if len(tag) > MAX_TAG_LENGTH]
     full_title = finalize_full_title(result.get("title", ""))
     short_title = build_short_title(full_title)
 
@@ -233,7 +233,7 @@ def validate_and_finalize_listing(
         return True
 
     # Locked tags always lead the list and retain the user's normalized display form.
-    for tag in prepared_locked:
+    for tag in safe_locked:
         append_tag(tag, require_relevance=False)
 
     generated_tags = result.get("tags", [])
@@ -284,6 +284,23 @@ def validate_and_finalize_listing(
     finalized["short_title"] = short_title
     finalized["tags"] = main_tags
     finalized["backup_tags"] = backup_tags[:BACKUP_TAG_COUNT]
+    long_sources = []
+    for item in category_keywords_objs or []:
+        tag = _tag_text(item)
+        if len(tag) > MAX_TAG_LENGTH:
+            long_sources.append(tag)
+    long_sources.extend(long_locked)
+    unique_long = []
+    for tag in long_sources:
+        if comparison_key(tag) not in {comparison_key(item) for item in unique_long}:
+            unique_long.append(tag)
+    alternatives = result.get("long_tag_alternatives", [])
+    if not isinstance(alternatives, list):
+        alternatives = []
+    finalized["long_tag_alternatives"] = [
+        {"long_keyword": tag, "alternatives": [normalize_text(item) for item in alternatives if normalize_text(item) and len(normalize_text(item)) <= MAX_TAG_LENGTH][:3]}
+        for tag in unique_long
+    ]
     finalized["description"] = str(result.get("description", ""))
     return finalized
 
@@ -320,9 +337,9 @@ def build_listing_prompt(
 
     if prepared_locked:
         strict_rules += (
-            f"3. LOCKED TAGS (CRITICAL): Use these {len(prepared_locked)} tags exactly as written, without shortening, "
-            f"reordering words, changing casing or replacing them: {json.dumps(prepared_locked, ensure_ascii=False)}. "
-            f"Fill the remaining {MAIN_TAG_COUNT - len(prepared_locked)} slots with relevant tags.\n"
+            f"3. LOCKED TAGS (CRITICAL): Mention every one of these phrases naturally and exactly in the description: "
+            f"{json.dumps(prepared_locked, ensure_ascii=False)}. Only locked phrases up to 20 characters may occupy Etsy tag slots; "
+            "longer locked phrases are description SEO phrases, not Etsy tags.\n"
         )
     else:
         strict_rules += (
@@ -385,6 +402,13 @@ def build_listing_prompt(
         )
 
     category_keywords = [_tag_text(obj) for obj in category_keywords_objs or [] if _tag_text(obj)]
+    long_category_keywords = [tag for tag in category_keywords if len(tag) > MAX_TAG_LENGTH]
+    if long_category_keywords:
+        strict_rules += (
+            "LONG eRANK KEYWORDS: These phrases exceed Etsy's 20-character tag limit. Do not put them in tags, "
+            "but use relevant ones naturally in the title or description for SEO and provide short replacement tags: "
+            f"{json.dumps(long_category_keywords, ensure_ascii=False)}.\n"
+        )
     return (
         f"KISA ETSY KURALLARI:\n{compact_rules}\n\n"
         f"{concepts_section}"
@@ -396,6 +420,7 @@ def build_listing_prompt(
         "- 'title' (string, full title, maximum 140 characters)\n"
         "- 'tags' (array of exactly 13 strings, each maximum 20 characters)\n"
         "- 'backup_tags' (array of exactly 10 strings, each maximum 20 characters)\n"
+        "- 'long_tag_alternatives' (array of short, relevant replacement tags; each maximum 20 characters)\n"
         "- 'description' (string)\n"
         "- 'category_suggestion' (string; Etsy category suggestion, not an invented fact)\n"
         "- 'attributes' (array of short strings based only on confirmed details or clearly visible photo evidence)\n"

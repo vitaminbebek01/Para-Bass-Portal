@@ -620,6 +620,10 @@
                             <label>10 Yedek Tag (Virgülle Ayrılmış)</label>
                             <div id="etsyResBackupTags" style="margin-top:5px; padding:10px 80px 10px 10px; border-radius:4px; border:1px solid #eee; background:white; min-height:40px;"></div>
                         </div>
+                        <div id="etsyLongTagNotice" class="result-box" style="display:none; border-left:4px solid #f39c12; margin-top:15px;">
+                            <label>20 Karakteri Aşan SEO Kelimeleri — Tag Alternatifleri</label>
+                            <div id="etsyResLongTagAlternatives" style="font-size:12px; line-height:1.6;"></div>
+                        </div>
 
                         <div class="result-box" style="position:relative; margin-top:15px;">
                             <button class="copy-btn" onclick="copyToClipboard('etsyResDesc')" style="position:absolute; right:10px; top:10px;">Kopyala</button>
@@ -1184,6 +1188,10 @@
                             
                             renderTags(data.tags || [], 'etsyResTags');
                             renderTags(data.backup_tags || [], 'etsyResBackupTags');
+                            const longTagNotice = document.getElementById('etsyLongTagNotice');
+                            const longTagAlternatives = data.long_tag_alternatives || [];
+                            longTagNotice.style.display = longTagAlternatives.length ? 'block' : 'none';
+                            document.getElementById('etsyResLongTagAlternatives').innerHTML = longTagAlternatives.map(item => `<div><strong>${escapeErankHtml(item.long_keyword)}</strong> → ${(item.alternatives || []).map(escapeErankHtml).join(', ') || 'Uygun kısa alternatif bulunamadı'}</div>`).join('');
 
                             document.getElementById('etsyResDesc').value = data.description || "Bulunamadı";
                             renderEtsyReadiness(data.readiness);

@@ -89,8 +89,10 @@ class EtsyListingValidationTests(unittest.TestCase):
         self.assertEqual(prepare_locked_tags([" Baby   Shower "]), ["Baby Shower"])
         with self.assertRaisesRegex(ValueError, "birden fazla"):
             prepare_locked_tags(["Baby Shower", " baby   shower "])
-        with self.assertRaisesRegex(ValueError, "20 karakter"):
-            prepare_locked_tags(["personalized wedding keepsake"])
+        self.assertEqual(
+            prepare_locked_tags(["personalized wedding keepsake"]),
+            ["personalized wedding keepsake"],
+        )
 
     def test_tags_are_unique_relevant_and_locked_tag_is_unchanged(self):
         result = {
