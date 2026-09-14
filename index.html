@@ -539,7 +539,9 @@
                     <div class="form-group" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                         <div>
                             <label>Malzeme</label>
-                            <input type="text" id="etsyDraftMaterial" placeholder="Örn: epoxy, dried flowers">
+                            <input type="hidden" id="etsyDraftMaterial" value="">
+                            <div id="etsyMaterialOptions" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+                            <div style="display:flex;gap:5px;margin-top:5px;"><input id="etsyMaterialNew" placeholder="Malzeme ekle" style="min-width:0;"><button class="small-btn" onclick="addEtsySelectableOption('material')">Ekle</button></div>
                         </div>
                         <div>
                             <label>Renk</label>
@@ -549,7 +551,9 @@
                         </div>
                         <div>
                             <label>Kişiselleştirme</label>
-                            <input type="text" id="etsyDraftPersonalization" value="name and event date" readonly>
+                            <input type="hidden" id="etsyDraftPersonalization" value="name | event date">
+                            <div id="etsyPersonalizationOptions" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+                            <div style="display:flex;gap:5px;margin-top:5px;"><input id="etsyPersonalizationNew" placeholder="Seçenek ekle" style="min-width:0;"><button class="small-btn" onclick="addEtsySelectableOption('personalization')">Ekle</button></div>
                         </div>
                         <div>
                             <label>Paketleme</label>
@@ -1024,12 +1028,12 @@
                     showEtsyToast("Kare thumbnail indirildi.", false);
                 }
 
-                const etsySelectableDefaults = { color: ['Gold', 'Silver'], packaging: ['Clear Bag', 'White box', 'Kraft box'], processing: ['1-5 Business days'] };
+                const etsySelectableDefaults = { material: ['Epoxy', 'Dried Flowers', 'Rope', 'Pearl', 'Magnet', 'Clear bag', 'White Box', 'Kraft Box', 'Candle', 'Sticker'], color: ['Gold', 'Silver'], personalization: ['name', 'event date', 'text'], packaging: ['Clear Bag', 'White box', 'Kraft box'], processing: ['1-5 Business days'] };
                 function getEtsySelectableOptions(type) { try { return JSON.parse(localStorage.getItem('etsySelectableOptions') || '{}')[type] || etsySelectableDefaults[type]; } catch(e) { return etsySelectableDefaults[type]; } }
-                function renderEtsySelectableOptions(type) { const config={color:['etsyColorOptions','etsyDraftColor'],packaging:['etsyPackagingOptions','etsyDraftPackaging'],processing:['etsyProcessingOptions','etsyDraftProcessingTime']}[type]; const selected=new Set((document.getElementById(config[1]).value||'').split(' | ').filter(Boolean)); document.getElementById(config[0]).innerHTML=getEtsySelectableOptions(type).map(value=>`<button type="button" class="small-btn" style="background:${selected.has(value)?'#2980b9':'#bdc3c7'}" onclick="toggleEtsySelectableOption('${type}', '${value.replace(/'/g,"\\'")}')">${value}</button>`).join(''); }
-                function toggleEtsySelectableOption(type,value) { const id={color:'etsyDraftColor',packaging:'etsyDraftPackaging',processing:'etsyDraftProcessingTime'}[type]; const values=new Set((document.getElementById(id).value||'').split(' | ').filter(Boolean)); values.has(value)?values.delete(value):values.add(value); document.getElementById(id).value=[...values].join(' | '); renderEtsySelectableOptions(type); }
-                function addEtsySelectableOption(type) { const input=document.getElementById({color:'etsyColorNew',packaging:'etsyPackagingNew',processing:'etsyProcessingNew'}[type]); const value=input.value.trim(); if(!value)return; const all=JSON.parse(localStorage.getItem('etsySelectableOptions')||'{}'); const options=all[type]||[...etsySelectableDefaults[type]]; if(!options.includes(value)) options.push(value); all[type]=options; localStorage.setItem('etsySelectableOptions',JSON.stringify(all)); input.value=''; toggleEtsySelectableOption(type,value); }
-                function renderAllEtsySelectableOptions() { ['color','packaging','processing'].forEach(renderEtsySelectableOptions); }
+                function renderEtsySelectableOptions(type) { const config={material:['etsyMaterialOptions','etsyDraftMaterial'],color:['etsyColorOptions','etsyDraftColor'],personalization:['etsyPersonalizationOptions','etsyDraftPersonalization'],packaging:['etsyPackagingOptions','etsyDraftPackaging'],processing:['etsyProcessingOptions','etsyDraftProcessingTime']}[type]; const selected=new Set((document.getElementById(config[1]).value||'').split(' | ').filter(Boolean)); document.getElementById(config[0]).innerHTML=getEtsySelectableOptions(type).map(value=>`<button type="button" class="small-btn" style="background:${selected.has(value)?'#2980b9':'#bdc3c7'}" onclick="toggleEtsySelectableOption('${type}', '${value.replace(/'/g,"\\'")}')">${value}</button>`).join(''); }
+                function toggleEtsySelectableOption(type,value) { const id={material:'etsyDraftMaterial',color:'etsyDraftColor',personalization:'etsyDraftPersonalization',packaging:'etsyDraftPackaging',processing:'etsyDraftProcessingTime'}[type]; const values=new Set((document.getElementById(id).value||'').split(' | ').filter(Boolean)); values.has(value)?values.delete(value):values.add(value); document.getElementById(id).value=[...values].join(' | '); renderEtsySelectableOptions(type); }
+                function addEtsySelectableOption(type) { const input=document.getElementById({material:'etsyMaterialNew',color:'etsyColorNew',personalization:'etsyPersonalizationNew',packaging:'etsyPackagingNew',processing:'etsyProcessingNew'}[type]); const value=input.value.trim(); if(!value)return; const all=JSON.parse(localStorage.getItem('etsySelectableOptions')||'{}'); const options=all[type]||[...etsySelectableDefaults[type]]; if(!options.includes(value)) options.push(value); all[type]=options; localStorage.setItem('etsySelectableOptions',JSON.stringify(all)); input.value=''; toggleEtsySelectableOption(type,value); }
+                function renderAllEtsySelectableOptions() { ['material','color','personalization','packaging','processing'].forEach(renderEtsySelectableOptions); }
 
                 function getEtsyProductDetails() {
                     return {
@@ -1073,7 +1077,6 @@
                     const profile = getEtsyProductProfiles()[productType];
                     if(!profile) { renderAllEtsySelectableOptions(); return; }
                     Object.entries(etsyProfileFieldMap).forEach(([key, elementId]) => {
-                        if(key === 'personalization') return;
                         document.getElementById(elementId).value = profile.details?.[key] || '';
                     });
                     document.getElementById('etsyDraftProductSize').value = profile.product_size || '';
