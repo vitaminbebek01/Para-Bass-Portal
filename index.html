@@ -543,37 +543,25 @@
                         </div>
                         <div>
                             <label>Renk</label>
-                            <input type="text" id="etsyDraftColor" placeholder="Örn: ivory and gold">
-                        </div>
-                        <div>
-                            <label>Satılan Adet</label>
-                            <input type="text" id="etsyDraftQuantity" placeholder="Örn: set of 10">
+                            <input type="hidden" id="etsyDraftColor" value="">
+                            <div id="etsyColorOptions" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+                            <div style="display:flex;gap:5px;margin-top:5px;"><input id="etsyColorNew" placeholder="Renk ekle" style="min-width:0;"><button class="small-btn" onclick="addEtsySelectableOption('color')">Ekle</button></div>
                         </div>
                         <div>
                             <label>Kişiselleştirme</label>
-                            <input type="text" id="etsyDraftPersonalization" placeholder="Örn: name and event date">
-                        </div>
-                        <div>
-                            <label>Kullanım / Alıcı</label>
-                            <input type="text" id="etsyDraftOccasion" placeholder="Örn: wedding guest favor">
+                            <input type="text" id="etsyDraftPersonalization" value="name and event date" readonly>
                         </div>
                         <div>
                             <label>Paketleme</label>
-                            <input type="text" id="etsyDraftPackaging" placeholder="Örn: White Box">
+                            <input type="hidden" id="etsyDraftPackaging" value="">
+                            <div id="etsyPackagingOptions" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+                            <div style="display:flex;gap:5px;margin-top:5px;"><input id="etsyPackagingNew" placeholder="Paketleme ekle" style="min-width:0;"><button class="small-btn" onclick="addEtsySelectableOption('packaging')">Ekle</button></div>
                         </div>
                         <div>
                             <label>Hazırlık Süresi</label>
-                            <input type="text" id="etsyDraftProcessingTime" placeholder="Örn: 1-5 business days">
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <div style="flex:1;">
-                                <label>Fiyat</label>
-                                <input type="text" id="etsyDraftPrice" placeholder="Örn: 24.90">
-                            </div>
-                            <div style="flex:1;">
-                                <label>Stok</label>
-                                <input type="number" id="etsyDraftStock" min="1" placeholder="10">
-                            </div>
+                            <input type="hidden" id="etsyDraftProcessingTime" value="1-5 Business days">
+                            <div id="etsyProcessingOptions" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+                            <div style="display:flex;gap:5px;margin-top:5px;"><input id="etsyProcessingNew" placeholder="Süre ekle" style="min-width:0;"><button class="small-btn" onclick="addEtsySelectableOption('processing')">Ekle</button></div>
                         </div>
                     </div>
 
@@ -1036,17 +1024,20 @@
                     showEtsyToast("Kare thumbnail indirildi.", false);
                 }
 
+                const etsySelectableDefaults = { color: ['Gold', 'Silver'], packaging: ['Clear Bag', 'White box', 'Kraft box'], processing: ['1-5 Business days'] };
+                function getEtsySelectableOptions(type) { try { return JSON.parse(localStorage.getItem('etsySelectableOptions') || '{}')[type] || etsySelectableDefaults[type]; } catch(e) { return etsySelectableDefaults[type]; } }
+                function renderEtsySelectableOptions(type) { const config={color:['etsyColorOptions','etsyDraftColor'],packaging:['etsyPackagingOptions','etsyDraftPackaging'],processing:['etsyProcessingOptions','etsyDraftProcessingTime']}[type]; const selected=new Set((document.getElementById(config[1]).value||'').split(' | ').filter(Boolean)); document.getElementById(config[0]).innerHTML=getEtsySelectableOptions(type).map(value=>`<button type="button" class="small-btn" style="background:${selected.has(value)?'#2980b9':'#bdc3c7'}" onclick="toggleEtsySelectableOption('${type}', '${value.replace(/'/g,"\\'")}')">${value}</button>`).join(''); }
+                function toggleEtsySelectableOption(type,value) { const id={color:'etsyDraftColor',packaging:'etsyDraftPackaging',processing:'etsyDraftProcessingTime'}[type]; const values=new Set((document.getElementById(id).value||'').split(' | ').filter(Boolean)); values.has(value)?values.delete(value):values.add(value); document.getElementById(id).value=[...values].join(' | '); renderEtsySelectableOptions(type); }
+                function addEtsySelectableOption(type) { const input=document.getElementById({color:'etsyColorNew',packaging:'etsyPackagingNew',processing:'etsyProcessingNew'}[type]); const value=input.value.trim(); if(!value)return; const all=JSON.parse(localStorage.getItem('etsySelectableOptions')||'{}'); const options=all[type]||[...etsySelectableDefaults[type]]; if(!options.includes(value)) options.push(value); all[type]=options; localStorage.setItem('etsySelectableOptions',JSON.stringify(all)); input.value=''; toggleEtsySelectableOption(type,value); }
+                function renderAllEtsySelectableOptions() { ['color','packaging','processing'].forEach(renderEtsySelectableOptions); }
+
                 function getEtsyProductDetails() {
                     return {
                         material: document.getElementById('etsyDraftMaterial').value.trim(),
                         color: document.getElementById('etsyDraftColor').value.trim(),
-                        quantity: document.getElementById('etsyDraftQuantity').value.trim(),
                         personalization: document.getElementById('etsyDraftPersonalization').value.trim(),
-                        occasion: document.getElementById('etsyDraftOccasion').value.trim(),
                         packaging: document.getElementById('etsyDraftPackaging').value.trim(),
                         processing_time: document.getElementById('etsyDraftProcessingTime').value.trim(),
-                        price: document.getElementById('etsyDraftPrice').value.trim(),
-                        stock: document.getElementById('etsyDraftStock').value.trim(),
                         product_notes: document.getElementById('etsyDraftProductNotes').value.trim()
                     };
                 }
@@ -1054,13 +1045,9 @@
                 const etsyProfileFieldMap = {
                     material: 'etsyDraftMaterial',
                     color: 'etsyDraftColor',
-                    quantity: 'etsyDraftQuantity',
                     personalization: 'etsyDraftPersonalization',
-                    occasion: 'etsyDraftOccasion',
                     packaging: 'etsyDraftPackaging',
                     processing_time: 'etsyDraftProcessingTime',
-                    price: 'etsyDraftPrice',
-                    stock: 'etsyDraftStock',
                     product_notes: 'etsyDraftProductNotes'
                 };
 
@@ -1084,12 +1071,14 @@
                 function loadEtsyProductProfile() {
                     const productType = document.getElementById('etsyDraftProductType').value;
                     const profile = getEtsyProductProfiles()[productType];
-                    if(!profile) return;
+                    if(!profile) { renderAllEtsySelectableOptions(); return; }
                     Object.entries(etsyProfileFieldMap).forEach(([key, elementId]) => {
+                        if(key === 'personalization') return;
                         document.getElementById(elementId).value = profile.details?.[key] || '';
                     });
                     document.getElementById('etsyDraftProductSize').value = profile.product_size || '';
                     document.getElementById('etsyDraftBoxSize').value = profile.box_size || '';
+                    renderAllEtsySelectableOptions();
                 }
 
                 function renderEtsyReadiness(readiness) {
