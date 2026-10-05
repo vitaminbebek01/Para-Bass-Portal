@@ -380,6 +380,8 @@ class handler(BaseHTTPRequestHandler):
         if asset_type not in ALLOWED_ASSET_TYPES:
             raise ValueError("Geçersiz Mockup Studio varlık türü.")
         mime_type = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if asset_type == "output":
+            mime_type = "image/png"
         if mime_type not in ALLOWED_ASSET_TYPES[asset_type]:
             allowed = ", ".join(sorted(ALLOWED_ASSET_TYPES[asset_type]))
             raise ValueError(f"Bu varlık türü için izin verilen formatlar: {allowed}")
@@ -393,6 +395,8 @@ class handler(BaseHTTPRequestHandler):
         if query.get("template_id", [None])[0]:
             template_id = require_uuid(query["template_id"][0], "şablon kimliği")
         original_filename = clean_filename(query.get("filename", ["image.png"])[0])
+        if asset_type == "output" and not original_filename.endswith(".png"):
+            original_filename = f"{os.path.splitext(original_filename)[0]}.png"
         file_bytes = self.rfile.read(length)
         asset = self.persist_asset(asset_type, mime_type, original_filename, file_bytes, template_id)
         self.send_json(201, {"success": True, "asset": asset})
@@ -415,7 +419,7 @@ class handler(BaseHTTPRequestHandler):
         get_supabase().storage.from_(BUCKET_NAME).upload(
             path=chunk_path,
             file=body,
-            file_options={"content-type": "application/octet-stream", "upsert": "false"},
+            file_options={"content-type": "image/png", "upsert": "false"},
         )
         self.send_json(201, {"success": True, "chunk_index": chunk_index})
 

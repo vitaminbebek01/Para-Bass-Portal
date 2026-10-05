@@ -40,11 +40,14 @@ async function mockApi(route) {
         return json(route, { asset }, 201);
     }
     if (method === 'POST' && url.searchParams.get('action') === 'upload_chunk') {
+        assert.strictEqual(request.headers()['content-type'], 'image/png', 'Çıktı parçaları image/png gönderilmeli');
         return json(route, { success: true, chunk_index: Number(url.searchParams.get('chunk_index')) }, 201);
     }
     if (method === 'POST') {
         const body = request.postDataJSON();
         if (body.action === 'finalize_upload') {
+            assert.strictEqual(body.mime_type, 'image/png', 'Finalize işlemi PNG MIME türünü zorlamalı');
+            assert(body.filename.endsWith('.png'), 'Çıktı dosya adı .png olmalı');
             const id = crypto.randomUUID();
             const asset = { id, asset_type: 'output', original_filename: body.filename, mime_type: 'image/png', storage_path: `output/library/${id}.png` };
             db.assets.push(asset);
@@ -116,10 +119,23 @@ async function mockApi(route) {
             await page.waitForFunction((count) => document.querySelectorAll('.ms-layer').length === count, slotCount);
         }
         assert.strictEqual(await page.locator('.ms-layer').count(), 3, '3 ürün slotu oluşmalı');
-        await page.locator('.ms-layer').nth(1).click();
-        await page.locator('.ms-layer').nth(2).click();
+        await page.locator('.ms-layer').nth(1).click({ modifiers: ['Control'] });
+        await page.locator('.ms-layer').nth(2).click({ modifiers: ['Control'] });
         await page.locator('#msAddSlotBtn').click();
         await page.getByText('Ürün 3 slota yerleştirildi.').waitFor();
+
+        const frames = [
+            { x: '400', rotation: '-12' },
+            { x: '1000', rotation: '0' },
+            { x: '1600', rotation: '18' }
+        ];
+        for (let index = 0; index < frames.length; index += 1) {
+            await page.locator('.ms-layer').nth(index).click();
+            await page.locator('[data-frame-key="x"]').fill(frames[index].x);
+            await page.locator('[data-frame-key="x"]').press('Tab');
+            await page.locator('[data-frame-key="rotation"]').fill(frames[index].rotation);
+            await page.locator('[data-frame-key="rotation"]').press('Tab');
+        }
 
         const xInput = page.locator('[data-frame-key="x"]');
         const originalX = await xInput.inputValue();
@@ -145,6 +161,7 @@ async function mockApi(route) {
         assert.strictEqual(db.templates[0].document.layers[0].type, 'scene_background', 'Arka sahne en altta olmalı');
         assert(db.templates[0].document.layers.slice(1, -1).every(layer => layer.type === 'product_slot'), 'Ürün slotları sahne ile maskenin arasında olmalı');
         assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => layer.assetId)).size, 1, 'Aynı ürün üç slota bağlanmalı');
+        assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => `${layer.frame.x}:${layer.frame.rotation}`)).size, 3, 'Slot dönüşümleri bağımsız kalmalı');
         assert.strictEqual(db.templates[0].document.layers.at(-1).type, 'foreground_mask', 'Foreground mask ürünün önünde olmalı');
 
         await page.reload({ waitUntil: 'domcontentloaded' });

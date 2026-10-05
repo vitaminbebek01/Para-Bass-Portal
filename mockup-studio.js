@@ -17,6 +17,7 @@
         transformer: null,
         baseRect: null,
         nodes: new Map(),
+        selectionMarkers: new Map(),
         selectedLayerId: null,
         selectedLayerIds: new Set(),
         selectedAssetId: null,
@@ -170,8 +171,8 @@
                                 <label class="ms-upload-label">Ürün dosyası yükle<input id="msEditorProductInput" type="file" accept="image/png,image/jpeg"></label>
                                 <div id="msEditorAssetList" class="ms-asset-list"></div>
                                 <button id="msNewSlotBtn" class="ms-btn ms-full">+ Yeni ürün slotu</button>
-                                <button id="msAddSlotBtn" class="ms-btn ms-btn-primary ms-full" disabled>Seçili ürünü seçili slotlara yerleştir</button>
-                                <small class="ms-help">Bir veya daha fazla slot katmanına tıklayıp ürünü hepsine bağlayın.</small>
+                                <button id="msAddSlotBtn" class="ms-btn ms-btn-primary ms-full" disabled>Seçili slotlara ürün ekle</button>
+                                <small id="msSlotSelectionHint" class="ms-help">Önce bir slot seçin. Çoklu seçim için Ctrl/Cmd basılı tutun.</small>
                             </div>
                             <div class="ms-section">
                                 <div class="ms-inline ms-between"><h4>KATMANLAR</h4><small>Sürükleyerek sırala</small></div>
@@ -610,12 +611,16 @@
 
     function updateSlotBindingButton() {
         const button = document.getElementById('msAddSlotBtn');
+        const hint = document.getElementById('msSlotSelectionHint');
         if (!button || !state.editor) return;
         const slotCount = state.editor.document.layers.filter((layer) => layer.type === 'product_slot' && state.selectedLayerIds.has(layer.id)).length;
         button.disabled = !preferredEditorProduct() || slotCount === 0;
         button.textContent = slotCount > 0
-            ? `Seçili ürünü ${slotCount} slota yerleştir`
-            : 'Seçili ürünü seçili slotlara yerleştir';
+            ? `Seçili slotlara ürün ekle (${slotCount})`
+            : 'Seçili slotlara ürün ekle';
+        if (hint) hint.textContent = slotCount > 0
+            ? `${slotCount} slot seçili. Ctrl/Cmd+tıklama ile seçime ekleyip çıkarabilirsiniz.`
+            : 'Önce bir slot seçin. Çoklu seçim için Ctrl/Cmd basılı tutun.';
     }
 
     function renderEditorAssets() {
@@ -647,7 +652,7 @@
                 <button data-action="rename" class="ms-icon-btn" title="Yeniden adlandır">✎</button>
                 <button data-action="visible" class="ms-icon-btn" title="Görünürlük">${layer.visible ? '👁️' : '🙈'}</button>
                 <button data-action="lock" class="ms-icon-btn" title="Kilitle">${layer.locked ? '🔒' : '🔓'}</button>`;
-            row.addEventListener('click', (event) => selectLayer(layer.id, layer.type === 'product_slot' && !(event.target instanceof HTMLButtonElement)));
+            row.addEventListener('click', (event) => selectLayer(layer.id, layer.type === 'product_slot' && (event.ctrlKey || event.metaKey)));
             row.addEventListener('dragstart', () => { state.dragLayerId = layer.id; });
             row.addEventListener('dragover', (e) => e.preventDefault());
             row.addEventListener('drop', (e) => { e.preventDefault(); reorderLayer(state.dragLayerId, layer.id); });
@@ -707,7 +712,8 @@
     }
     function clearCanvas() {
         if (!state.stage) return;
-        state.transformer.nodes([]); state.nodes.forEach((node) => node.destroy()); state.nodes.clear(); state.stage.batchDraw();
+        state.transformer.nodes([]); state.nodes.forEach((node) => node.destroy()); state.nodes.clear();
+        state.selectionMarkers.forEach((marker) => marker.destroy()); state.selectionMarkers.clear(); state.stage.batchDraw();
     }
     async function rebuildCanvas() {
         clearCanvas();
@@ -728,9 +734,10 @@
             node.setAttr('mockupLayerId', layer.id);
             node.on('click tap', (event) => { event.cancelBubble = true; selectLayer(layer.id, Boolean(event.evt && (event.evt.ctrlKey || event.evt.metaKey))); });
             node.on('dragstart', () => node.setAttr('historyBefore', editorSnapshot()));
-            node.on('dragend', () => { updateFrameFromNode(layer, node, false); recordHistory(node.getAttr('historyBefore')); renderInspector(); });
+            node.on('dragmove transform', renderSelectionMarkers);
+            node.on('dragend', () => { updateFrameFromNode(layer, node, false); recordHistory(node.getAttr('historyBefore')); renderInspector(); renderSelectionMarkers(); });
             node.on('transformstart', () => node.setAttr('historyBefore', editorSnapshot()));
-            node.on('transformend', () => { updateFrameFromNode(layer, node, true); recordHistory(node.getAttr('historyBefore')); renderInspector(); });
+            node.on('transformend', () => { updateFrameFromNode(layer, node, true); recordHistory(node.getAttr('historyBefore')); renderInspector(); renderSelectionMarkers(); });
             state.contentLayer.add(node); state.nodes.set(layer.id, node); return node;
         } catch (error) { setStatus('Görsel yüklenemedi: ' + asset.name, true); return null; }
     }
@@ -751,7 +758,24 @@
         if (transformed) { f.width = Math.max(40, Math.round(node.width() * node.scaleX())); f.height = Math.max(40, Math.round(node.height() * node.scaleY())); node.scale({ x: 1, y: 1 }); node.size({ width: f.width, height: f.height }); node.offset({ x: f.width / 2, y: f.height / 2 }); applyEffects(node, f); }
     }
     function syncOrder() {
-        state.baseRect.moveToBottom(); state.editor.document.layers.forEach((layer, i) => { const node = state.nodes.get(layer.id); if (node) node.zIndex(i + 1); }); state.contentLayer.batchDraw();
+        state.baseRect.moveToBottom(); state.editor.document.layers.forEach((layer, i) => { const node = state.nodes.get(layer.id); if (node) node.zIndex(i + 1); }); state.contentLayer.batchDraw(); renderSelectionMarkers();
+    }
+    function renderSelectionMarkers() {
+        if (!state.uiLayer || !state.editor) return;
+        state.selectionMarkers.forEach((marker) => marker.destroy());
+        state.selectionMarkers.clear();
+        state.editor.document.layers.forEach((layer) => {
+            if (layer.type !== 'product_slot' || !state.selectedLayerIds.has(layer.id) || layer.visible === false) return;
+            const node = state.nodes.get(layer.id);
+            if (!node) return;
+            const marker = new Konva.Rect({
+                x: node.x(), y: node.y(), width: node.width() * node.scaleX(), height: node.height() * node.scaleY(),
+                offsetX: node.width() * node.scaleX() / 2, offsetY: node.height() * node.scaleY() / 2,
+                rotation: node.rotation(), stroke: '#16a085', strokeWidth: 5, dash: [18, 10], listening: false
+            });
+            state.uiLayer.add(marker); marker.moveToBottom(); state.selectionMarkers.set(layer.id, marker);
+        });
+        state.transformer.moveToTop(); state.uiLayer.batchDraw();
     }
     function selectLayer(id, toggle, preserveSet) {
         if (!preserveSet) {
@@ -768,7 +792,7 @@
         const node = layer ? state.nodes.get(layer.id) : null;
         state.transformer.nodes(layer && node && !layer.locked && layer.visible ? [node] : []);
         state.transformer.find('Rect').forEach((anchor) => anchor.hitStrokeWidth(28));
-        state.uiLayer.batchDraw(); renderLayers(); renderInspector(); updateSlotBindingButton();
+        renderSelectionMarkers(); state.uiLayer.batchDraw(); renderLayers(); renderInspector(); updateSlotBindingButton();
     }
 
     function renderInspector() {
@@ -798,15 +822,21 @@
         });
         input.addEventListener('change', () => { recordHistory(before); before=null; });
     }
-    function updateNode(layer) { const node=state.nodes.get(layer.id); if(!node)return; const f=layer.frame; node.position({x:f.x,y:f.y}); node.size({width:f.width,height:f.height}); node.offset({x:f.width/2,y:f.height/2}); node.rotation(f.rotation||0); applyEffects(node,f); state.transformer.forceUpdate(); state.stage.batchDraw(); }
+    function updateNode(layer) { const node=state.nodes.get(layer.id); if(!node)return; const f=layer.frame; node.position({x:f.x,y:f.y}); node.size({width:f.width,height:f.height}); node.offset({x:f.width/2,y:f.height/2}); node.rotation(f.rotation||0); applyEffects(node,f); state.transformer.forceUpdate(); renderSelectionMarkers(); state.stage.batchDraw(); }
     async function duplicateLayer(layer) { const before=editorSnapshot(), copy=clone(layer); copy.id=uid(); copy.name=layer.name+' Kopya'; copy.frame.x+=60; copy.frame.y+=60; state.editor.document.layers.push(copy); state.selectedLayerIds=new Set([copy.id]); recordHistory(before); await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); }
     function removeLayer(layer) { const before=editorSnapshot(), index=state.editor.document.layers.findIndex((l)=>l.id===layer.id); if(index<0)return; const node=state.nodes.get(layer.id); if(node)node.destroy(); state.nodes.delete(layer.id); state.editor.document.layers.splice(index,1); state.selectedLayerIds.delete(layer.id); state.selectedLayerId=[...state.selectedLayerIds].pop()||null; state.transformer.nodes([]); recordHistory(before); state.stage.batchDraw(); renderEditor(); }
 
     async function exportEditorBlob(targetSize) {
         if (!state.stage) return null;
         const selected = state.selectedLayerId; state.transformer.nodes([]); state.uiLayer.hide(); state.stage.draw();
-        try { return await state.stage.toBlob({ x:0,y:0,width:state.stage.width(),height:state.stage.height(),pixelRatio:targetSize/state.stage.width(),mimeType:'image/png' }); }
+        try { return await ensurePngBlob(await state.stage.toBlob({ x:0,y:0,width:state.stage.width(),height:state.stage.height(),pixelRatio:targetSize/state.stage.width(),mimeType:'image/png' })); }
         finally { state.uiLayer.show(); if(selected) selectLayer(selected); state.stage.draw(); }
+    }
+
+    async function ensurePngBlob(data) {
+        if (!data) return null;
+        const bytes = data instanceof Blob ? await data.arrayBuffer() : data;
+        return new Blob([bytes], { type: 'image/png' });
     }
 
     async function uploadFile(file, type, templateId) {
@@ -825,14 +855,17 @@
         }
     }
     async function uploadBlobChunked(blob, filename, mimeType) {
+        const pngBlob = await ensurePngBlob(blob);
         const chunkSize = 2 * 1024 * 1024;
-        const chunkCount = Math.ceil(blob.size / chunkSize);
+        const chunkCount = Math.ceil(pngBlob.size / chunkSize);
         const uploadId = uid();
         for (let index = 0; index < chunkCount; index += 1) {
             const query = new URLSearchParams({ action:'upload_chunk', upload_id:uploadId, chunk_index:String(index) });
-            await api(API+'?'+query.toString(), { method:'POST', headers:{'Content-Type':'application/octet-stream'}, body:blob.slice(index * chunkSize, Math.min(blob.size, (index + 1) * chunkSize)) });
+            const slice = pngBlob.slice(index * chunkSize, Math.min(pngBlob.size, (index + 1) * chunkSize));
+            const pngChunk = new Blob([await slice.arrayBuffer()], { type: 'image/png' });
+            await api(API+'?'+query.toString(), { method:'POST', headers:{'Content-Type':'image/png'}, body:pngChunk });
         }
-        const data = await api(API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'finalize_upload', upload_id:uploadId, asset_type:'output', filename, mime_type:mimeType, chunk_count:chunkCount }) });
+        const data = await api(API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'finalize_upload', upload_id:uploadId, asset_type:'output', filename:filename.endsWith('.png')?filename:filename+'.png', mime_type:'image/png', chunk_count:chunkCount }) });
         return normalizeAsset(data.asset);
     }
     function readDimensions(file) { return new Promise((resolve)=>{ const url=URL.createObjectURL(file),img=new Image(); img.onload=()=>{resolve({width:img.naturalWidth,height:img.naturalHeight});URL.revokeObjectURL(url);};img.onerror=()=>{resolve({width:null,height:null});URL.revokeObjectURL(url);};img.src=url; }); }
@@ -916,7 +949,7 @@
             setStatus('Çıktı oluşturulamadı: '+error.message,true);return null;
         }finally{if(opts.manageBusy!==false)setBusy(false);}
     }
-    async function renderSnapshot(snapshot,product){const host=document.getElementById('msRenderHost');host.innerHTML='';const stage=new Konva.Stage({container:host,width:SIZE,height:SIZE}),layerCanvas=new Konva.Layer();stage.add(layerCanvas);layerCanvas.add(new Konva.Rect({x:0,y:0,width:SIZE,height:SIZE,fill:'#fff',listening:false}));for(const item of snapshot.layers||[]){if(item.visible===false)continue;let asset=item.type==='product_slot'?product:(snapshot.assets||[]).find(a=>a.id===item.assetId);if(!asset||!asset.storagePath)continue;try{const image=await loadImage(assetUrl(asset.storagePath));const node=makeImageNode(image,{type:item.type,visible:true,locked:true},Object.assign(defaultFrame(),item.frame||{}));node.draggable(false);layerCanvas.add(node);}catch(error){throw new Error('Render varlığı yüklenemedi: '+(asset.name||asset.storagePath));}}layerCanvas.draw();try{return await stage.toBlob({mimeType:'image/png',pixelRatio:1});}finally{stage.destroy();host.innerHTML='';}}
+    async function renderSnapshot(snapshot,product){const host=document.getElementById('msRenderHost');host.innerHTML='';const stage=new Konva.Stage({container:host,width:SIZE,height:SIZE}),layerCanvas=new Konva.Layer();stage.add(layerCanvas);layerCanvas.add(new Konva.Rect({x:0,y:0,width:SIZE,height:SIZE,fill:'#fff',listening:false}));for(const item of snapshot.layers||[]){if(item.visible===false)continue;let asset=item.type==='product_slot'?product:(snapshot.assets||[]).find(a=>a.id===item.assetId);if(!asset||!asset.storagePath)continue;try{const image=await loadImage(assetUrl(asset.storagePath));const node=makeImageNode(image,{type:item.type,visible:true,locked:true},Object.assign(defaultFrame(),item.frame||{}));node.draggable(false);layerCanvas.add(node);}catch(error){throw new Error('Render varlığı yüklenemedi: '+(asset.name||asset.storagePath));}}layerCanvas.draw();try{return await ensurePngBlob(await stage.toBlob({mimeType:'image/png',pixelRatio:1}));}finally{stage.destroy();host.innerHTML='';}}
 
     function renderOutputs(){const root=document.getElementById('msViewOutputs');if(!root)return;root.innerHTML=`<div class="ms-view-header"><div><h3>Çıktılar</h3><p>Şablonlardan bağımsız kalıcı mockup görselleri</p></div></div><div id="msOutputGrid" class="ms-card-grid"></div>`;const grid=document.getElementById('msOutputGrid');if(!state.outputs.length){grid.innerHTML='<div class="ms-empty-card">Henüz kayıtlı çıktı yok.</div>';return;}state.outputs.forEach(output=>{const card=document.createElement('article');card.className='ms-library-card';card.innerHTML=`<div class="ms-card-preview"><img src="${assetUrl(output.export_path)}" alt="${esc(output.name)}"></div><div class="ms-card-content"><h4>${esc(output.name)}</h4><p>${esc(output.template_name)} • v${output.template_version}</p><p>${esc(formatDate(output.created_at))}</p><div class="ms-card-actions"><a class="ms-btn ms-btn-primary ms-btn-small" href="${assetUrl(output.export_path)}" download="${safeName(output.name)}.png">İndir</a><button data-action="rename" class="ms-btn ms-btn-small">Adlandır</button><button data-action="rerun" class="ms-btn ms-btn-small">Tekrar Üret</button><button data-action="delete" class="ms-btn ms-btn-danger ms-btn-small">Sil</button></div></div>`;card.querySelector('[data-action="rename"]').addEventListener('click',()=>renameOutput(output));card.querySelector('[data-action="rerun"]').addEventListener('click',()=>rerunOutput(output));card.querySelector('[data-action="delete"]').addEventListener('click',()=>deleteOutput(output));grid.appendChild(card);});}
     async function renameOutput(output){const name=window.prompt('Çıktının yeni adı:',output.name);if(name===null)return;if(!name.trim())return setStatus('Çıktı adı zorunludur.',true);try{await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'rename_output',id:output.id,name:name.trim()})});await loadOutputs();}catch(error){setStatus('Çıktı yeniden adlandırılamadı: '+error.message,true);}}
