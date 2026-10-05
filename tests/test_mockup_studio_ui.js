@@ -119,19 +119,27 @@ async function mockApi(route) {
         await page.waitForFunction(() => document.querySelector('[data-frame-key="x"]')?.value === '1450');
         assert.strictEqual(await page.locator('[data-frame-key="x"]').inputValue(), '1450', 'Redo tek slot değişikliğini yinelemeli');
 
+        await page.locator('#msSceneInput').setInputFiles({ name: 'open_box_scene.png', mimeType: 'image/png', buffer: png });
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 11);
+        await page.locator('#msMaskInput').setInputFiles({ name: 'box_front_edge.png', mimeType: 'image/png', buffer: png });
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 12);
+
         await page.locator('#msEditorName').fill('Test White Box Hero');
         await page.locator('#msEditorName').press('Tab');
         await page.locator('#msSaveBtn').click();
         await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
         assert.strictEqual(db.templates[0].slot_count, 10, 'Kaydedilen şablonda 10 slot olmalı');
+        assert.strictEqual(db.templates[0].document.layers[0].type, 'scene_background', 'Arka sahne en altta olmalı');
+        assert(db.templates[0].document.layers.slice(1, -1).every(layer => layer.type === 'product_slot'), 'Ürün slotları sahne ile maskenin arasında olmalı');
+        assert.strictEqual(db.templates[0].document.layers.at(-1).type, 'foreground_mask', 'Foreground mask ürünün önünde olmalı');
 
         await page.reload({ waitUntil: 'domcontentloaded' });
         await page.locator('#menuStudio').click();
         await page.locator('#tabMockupStudio').click();
         await page.getByText('Test White Box Hero', { exact: true }).waitFor();
         await page.getByRole('button', { name: 'Aç/Düzenle' }).click();
-        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 10);
-        assert.strictEqual(await page.locator('.ms-layer').count(), 10, 'Şablon yeniden açılınca slotlar korunmalı');
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 12);
+        assert.strictEqual(await page.locator('.ms-layer').count(), 12, 'Şablon yeniden açılınca açık kutu katmanları korunmalı');
 
         await page.locator('[data-view="create"]').click();
         await page.locator('#msCreateTemplate').selectOption(db.templates[0].id);
