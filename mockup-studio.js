@@ -18,7 +18,9 @@
         baseRect: null,
         nodes: new Map(),
         selectedLayerId: null,
+        selectedLayerIds: new Set(),
         selectedAssetId: null,
+        selectedTemplateIds: new Set(),
         scale: 1,
         history: { undo: [], redo: [] },
         dragLayerId: null,
@@ -118,7 +120,14 @@
         const response = await fetch(url, options);
         const type = response.headers.get('content-type') || '';
         const body = type.includes('application/json') ? await response.json() : await response.text();
-        if (!response.ok) throw new Error(body && body.error ? body.error : String(body || response.status));
+        if (!response.ok) {
+            const message = body && body.error ? body.error : String(body || response.status);
+            console.error('[Mockup Studio API]', { status: response.status, path: String(url).split('?')[0], message });
+            const error = new Error(message);
+            error.status = response.status;
+            error.payload = body;
+            throw error;
+        }
         return body;
     }
 
@@ -160,7 +169,9 @@
                                 </select>
                                 <label class="ms-upload-label">Ürün dosyası yükle<input id="msEditorProductInput" type="file" accept="image/png,image/jpeg"></label>
                                 <div id="msEditorAssetList" class="ms-asset-list"></div>
-                                <button id="msAddSlotBtn" class="ms-btn ms-btn-primary ms-full">Seçili ürünle slot ekle</button>
+                                <button id="msNewSlotBtn" class="ms-btn ms-full">+ Yeni ürün slotu</button>
+                                <button id="msAddSlotBtn" class="ms-btn ms-btn-primary ms-full" disabled>Seçili ürünü seçili slotlara yerleştir</button>
+                                <small class="ms-help">Bir veya daha fazla slot katmanına tıklayıp ürünü hepsine bağlayın.</small>
                             </div>
                             <div class="ms-section">
                                 <div class="ms-inline ms-between"><h4>KATMANLAR</h4><small>Sürükleyerek sırala</small></div>
@@ -203,7 +214,8 @@
         document.getElementById('msMaskInput').addEventListener('change', (e) => editorUpload(e, 'foreground_mask'));
         document.getElementById('msGraphicInput').addEventListener('change', (e) => editorUpload(e, 'optional_graphic'));
         document.getElementById('msEditorProductInput').addEventListener('change', editorProductUpload);
-        document.getElementById('msAddSlotBtn').addEventListener('click', addProductSlot);
+        document.getElementById('msNewSlotBtn').addEventListener('click', () => addProductSlot());
+        document.getElementById('msAddSlotBtn').addEventListener('click', bindProductToSelectedSlots);
         window.addEventListener('resize', resizeStage);
         document.addEventListener('keydown', handleKeyboard);
     }
@@ -248,7 +260,9 @@
         }
         createStage();
         newEditor(false);
-        await Promise.all([loadTemplates(), loadProducts(), loadOutputs()]);
+        await loadTemplates();
+        await loadProducts();
+        await loadOutputs();
         showView('templates');
     }
 
@@ -268,6 +282,8 @@
         try {
             const data = await api(API + '?resource=templates');
             state.templates = data.templates || [];
+            const available = new Set(state.templates.map((template) => template.id));
+            state.selectedTemplateIds = new Set([...state.selectedTemplateIds].filter((id) => available.has(id)));
         } catch (error) { setStatus('Şablonlar alınamadı: ' + error.message, true); }
         renderTemplateLibrary();
     }
@@ -295,7 +311,7 @@
         const root = document.getElementById('msViewTemplates');
         if (!root) return;
         root.innerHTML = `
-            <div class="ms-view-header"><div><h3>Şablonlar</h3><p>Kalıcı mockup şablon kütüphanesi</p></div><button id="msNewTemplateBtn" class="ms-btn ms-btn-primary">+ Yeni Şablon</button></div>
+            <div class="ms-view-header"><div><h3>Şablonlar</h3><p>Kartlara tıklayarak bir veya daha fazla şablon seçin.</p></div><div class="ms-template-header-actions"><span id="msTemplateSelectionCount" class="ms-selection-count">${state.selectedTemplateIds.size} seçili</span><button id="msNewTemplateBtn" class="ms-btn ms-btn-primary">+ Yeni Şablon</button></div></div>
             <div class="ms-card-grid" id="msTemplateGrid"></div>`;
         document.getElementById('msNewTemplateBtn').addEventListener('click', () => { newEditor(true); });
         const grid = document.getElementById('msTemplateGrid');
@@ -305,12 +321,16 @@
         }
         state.templates.forEach((template) => {
             const card = document.createElement('article');
-            card.className = 'ms-library-card';
+            const selected = state.selectedTemplateIds.has(template.id);
+            card.className = 'ms-library-card ms-template-card' + (selected ? ' is-selected' : '');
+            card.tabIndex = 0;
+            card.setAttribute('role', 'checkbox');
+            card.setAttribute('aria-checked', String(selected));
             const preview = template.thumbnail_path
                 ? `<img src="${assetUrl(template.thumbnail_path)}" alt="${esc(template.name)} önizlemesi">`
                 : '<div class="ms-card-placeholder">2000×2000</div>';
             card.innerHTML = `
-                <div class="ms-card-preview">${preview}</div>
+                <div class="ms-card-preview">${preview}<span class="ms-template-check" aria-hidden="true">${selected ? '✓' : '+'}</span></div>
                 <div class="ms-card-content"><h4>${esc(template.name)}</h4>
                 <p>v${template.current_version} • ${template.layer_count} katman • ${template.slot_count} slot</p>
                 <p>${esc(formatDate(template.updated_at))}</p>
@@ -320,17 +340,27 @@
                     <button data-action="rename" class="ms-btn ms-btn-small">Adlandır</button>
                     <button data-action="delete" class="ms-btn ms-btn-danger ms-btn-small">Sil</button>
                 </div></div>`;
-            card.querySelector('[data-action="open"]').addEventListener('click', () => openTemplate(template.id));
-            card.querySelector('[data-action="duplicate"]').addEventListener('click', () => duplicateTemplate(template));
-            card.querySelector('[data-action="rename"]').addEventListener('click', () => renameTemplate(template));
-            card.querySelector('[data-action="delete"]').addEventListener('click', () => deleteTemplate(template));
+            const toggle = () => toggleTemplateSelection(template.id);
+            card.addEventListener('click', (event) => { if (!event.target.closest('.ms-card-actions')) toggle(); });
+            card.addEventListener('keydown', (event) => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('.ms-card-actions')) { event.preventDefault(); toggle(); } });
+            card.querySelector('[data-action="open"]').addEventListener('click', (event) => { event.stopPropagation(); openTemplate(template.id); });
+            card.querySelector('[data-action="duplicate"]').addEventListener('click', (event) => { event.stopPropagation(); duplicateTemplate(template); });
+            card.querySelector('[data-action="rename"]').addEventListener('click', (event) => { event.stopPropagation(); renameTemplate(template); });
+            card.querySelector('[data-action="delete"]').addEventListener('click', (event) => { event.stopPropagation(); deleteTemplate(template); });
             grid.appendChild(card);
         });
+    }
+
+    function toggleTemplateSelection(id) {
+        if (state.selectedTemplateIds.has(id)) state.selectedTemplateIds.delete(id);
+        else state.selectedTemplateIds.add(id);
+        renderTemplateLibrary();
     }
 
     function newEditor(openView) {
         state.editor = blankEditor();
         state.selectedLayerId = null;
+        state.selectedLayerIds = new Set();
         state.selectedAssetId = null;
         resetHistory();
         clearCanvas();
@@ -348,6 +378,7 @@
                 persisted: true, document: normalizeDocument(item.document)
             };
             state.selectedLayerId = null;
+            state.selectedLayerIds = new Set();
             state.selectedAssetId = preferredEditorProduct() ? preferredEditorProduct().id : null;
             resetHistory();
             await rebuildCanvas();
@@ -420,6 +451,7 @@
         state.editor.name = parsed.name;
         state.editor.document = normalizeDocument(parsed.document);
         state.selectedLayerId = state.editor.document.layers.some((l) => l.id === state.selectedLayerId) ? state.selectedLayerId : null;
+        state.selectedLayerIds = new Set([...state.selectedLayerIds].filter((id) => state.editor.document.layers.some((layer) => layer.id === id)));
         await rebuildCanvas();
         renderEditor();
     }
@@ -461,6 +493,7 @@
             });
             state.editor.persisted = true;
             state.editor.currentVersion = data.template.current_version;
+            state.selectedTemplateIds.add(state.editor.id);
             await saveThumbnail();
             await loadTemplates();
             renderEditor();
@@ -547,11 +580,42 @@
         layer.frame.y += count * 35;
         state.editor.document.layers.push(layer);
         state.selectedLayerId = layer.id;
+        state.selectedLayerIds = new Set([layer.id]);
         recordHistory(before);
         await createNode(layer);
         syncOrder();
         selectLayer(layer.id);
         renderEditor();
+    }
+
+    async function bindProductToSelectedSlots() {
+        const asset = preferredEditorProduct();
+        const slots = state.editor.document.layers.filter((layer) => layer.type === 'product_slot' && state.selectedLayerIds.has(layer.id));
+        if (!asset) return setStatus('Önce temizlenmiş bir ürün PNG’si seçin.', true);
+        if (!slots.length) return setStatus('Ürünü yerleştirmek için en az bir slot seçin.', true);
+        const before = editorSnapshot();
+        for (const slot of slots) {
+            slot.assetId = asset.id;
+            const oldNode = state.nodes.get(slot.id);
+            if (oldNode) oldNode.destroy();
+            state.nodes.delete(slot.id);
+            await createNode(slot);
+        }
+        recordHistory(before);
+        syncOrder();
+        selectLayer(state.selectedLayerId || slots[slots.length - 1].id, false, true);
+        renderEditor();
+        setStatus(`Ürün ${slots.length} slota yerleştirildi.`, false);
+    }
+
+    function updateSlotBindingButton() {
+        const button = document.getElementById('msAddSlotBtn');
+        if (!button || !state.editor) return;
+        const slotCount = state.editor.document.layers.filter((layer) => layer.type === 'product_slot' && state.selectedLayerIds.has(layer.id)).length;
+        button.disabled = !preferredEditorProduct() || slotCount === 0;
+        button.textContent = slotCount > 0
+            ? `Seçili ürünü ${slotCount} slota yerleştir`
+            : 'Seçili ürünü seçili slotlara yerleştir';
     }
 
     function renderEditorAssets() {
@@ -563,9 +627,10 @@
             const row = document.createElement('button');
             row.className = 'ms-asset' + (asset.id === state.selectedAssetId ? ' is-selected' : '');
             row.innerHTML = `<span>📦</span><span class="ms-asset-name">${esc(asset.name)}</span>`;
-            row.addEventListener('click', () => { state.selectedAssetId = asset.id; renderEditorAssets(); });
+            row.addEventListener('click', () => { state.selectedAssetId = asset.id; renderEditorAssets(); updateSlotBindingButton(); });
             list.appendChild(row);
         });
+        updateSlotBindingButton();
     }
 
     function renderLayers() {
@@ -575,14 +640,14 @@
         if (!state.editor.document.layers.length) list.innerHTML = '<div class="ms-empty">Henüz katman yok.</div>';
         [...state.editor.document.layers].reverse().forEach((layer) => {
             const row = document.createElement('div');
-            row.className = 'ms-layer' + (layer.id === state.selectedLayerId ? ' is-selected' : '');
+            row.className = 'ms-layer' + (state.selectedLayerIds.has(layer.id) ? ' is-selected' : '');
             row.draggable = true;
             row.dataset.id = layer.id;
             row.innerHTML = `<span class="ms-layer-icon">${layerIcon(layer.type)}</span><span class="ms-layer-name">${esc(layer.name)}</span>
                 <button data-action="rename" class="ms-icon-btn" title="Yeniden adlandır">✎</button>
                 <button data-action="visible" class="ms-icon-btn" title="Görünürlük">${layer.visible ? '👁️' : '🙈'}</button>
                 <button data-action="lock" class="ms-icon-btn" title="Kilitle">${layer.locked ? '🔒' : '🔓'}</button>`;
-            row.addEventListener('click', () => selectLayer(layer.id));
+            row.addEventListener('click', (event) => selectLayer(layer.id, layer.type === 'product_slot' && !(event.target instanceof HTMLButtonElement)));
             row.addEventListener('dragstart', () => { state.dragLayerId = layer.id; });
             row.addEventListener('dragover', (e) => e.preventDefault());
             row.addEventListener('drop', (e) => { e.preventDefault(); reorderLayer(state.dragLayerId, layer.id); });
@@ -591,6 +656,7 @@
             row.querySelector('[data-action="lock"]').addEventListener('click', (e) => { e.stopPropagation(); toggleLayer(layer, 'locked'); });
             list.appendChild(row);
         });
+        updateSlotBindingButton();
     }
 
     function layerIcon(type) {
@@ -625,7 +691,8 @@
         state.stage.add(state.contentLayer); state.stage.add(state.uiLayer);
         state.baseRect = new Konva.Rect({ x: 0, y: 0, width: SIZE, height: SIZE, fill: '#fff', listening: false });
         state.contentLayer.add(state.baseRect);
-        state.transformer = new Konva.Transformer({ rotateEnabled: true, keepRatio: true, flipEnabled: false, anchorSize: 30, anchorStrokeWidth: 4, borderStrokeWidth: 4, anchorFill: '#fff', anchorStroke: '#8e44ad', borderStroke: '#8e44ad', boundBoxFunc: (oldBox, newBox) => Math.abs(newBox.width) < 40 || Math.abs(newBox.height) < 40 ? oldBox : newBox });
+        state.transformer = new Konva.Transformer({ rotateEnabled: true, keepRatio: true, flipEnabled: false, anchorSize: 4, anchorStrokeWidth: 1, borderStrokeWidth: 1, anchorCornerRadius: 1, rotateAnchorOffset: 24, anchorFill: '#fff', anchorStroke: '#8e44ad', borderStroke: '#8e44ad', boundBoxFunc: (oldBox, newBox) => Math.abs(newBox.width) < 40 || Math.abs(newBox.height) < 40 ? oldBox : newBox });
+        state.transformer.on('mouseenter', () => { state.transformer.find('Rect').forEach((anchor) => anchor.hitStrokeWidth(28)); });
         state.uiLayer.add(state.transformer); resizeStage();
     }
     function resizeStage() {
@@ -659,7 +726,7 @@
             const image = await loadImage(assetUrl(asset.storagePath));
             const node = makeImageNode(image, layer, layer.frame);
             node.setAttr('mockupLayerId', layer.id);
-            node.on('click tap', (event) => { event.cancelBubble = true; selectLayer(layer.id); });
+            node.on('click tap', (event) => { event.cancelBubble = true; selectLayer(layer.id, Boolean(event.evt && (event.evt.ctrlKey || event.evt.metaKey))); });
             node.on('dragstart', () => node.setAttr('historyBefore', editorSnapshot()));
             node.on('dragend', () => { updateFrameFromNode(layer, node, false); recordHistory(node.getAttr('historyBefore')); renderInspector(); });
             node.on('transformstart', () => node.setAttr('historyBefore', editorSnapshot()));
@@ -686,9 +753,22 @@
     function syncOrder() {
         state.baseRect.moveToBottom(); state.editor.document.layers.forEach((layer, i) => { const node = state.nodes.get(layer.id); if (node) node.zIndex(i + 1); }); state.contentLayer.batchDraw();
     }
-    function selectLayer(id) {
-        state.selectedLayerId = id; const layer = state.editor.document.layers.find((l) => l.id === id); const node = state.nodes.get(id);
-        state.transformer.nodes(layer && node && !layer.locked && layer.visible ? [node] : []); state.uiLayer.batchDraw(); renderLayers(); renderInspector();
+    function selectLayer(id, toggle, preserveSet) {
+        if (!preserveSet) {
+            const clicked = state.editor.document.layers.find((layer) => layer.id === id);
+            if (toggle && clicked && clicked.type === 'product_slot') {
+                if (state.selectedLayerIds.has(id)) state.selectedLayerIds.delete(id);
+                else state.selectedLayerIds.add(id);
+            } else {
+                state.selectedLayerIds = id ? new Set([id]) : new Set();
+            }
+        }
+        state.selectedLayerId = state.selectedLayerIds.has(id) ? id : ([...state.selectedLayerIds].pop() || null);
+        const layer = state.editor.document.layers.find((item) => item.id === state.selectedLayerId);
+        const node = layer ? state.nodes.get(layer.id) : null;
+        state.transformer.nodes(layer && node && !layer.locked && layer.visible ? [node] : []);
+        state.transformer.find('Rect').forEach((anchor) => anchor.hitStrokeWidth(28));
+        state.uiLayer.batchDraw(); renderLayers(); renderInspector(); updateSlotBindingButton();
     }
 
     function renderInspector() {
@@ -719,8 +799,8 @@
         input.addEventListener('change', () => { recordHistory(before); before=null; });
     }
     function updateNode(layer) { const node=state.nodes.get(layer.id); if(!node)return; const f=layer.frame; node.position({x:f.x,y:f.y}); node.size({width:f.width,height:f.height}); node.offset({x:f.width/2,y:f.height/2}); node.rotation(f.rotation||0); applyEffects(node,f); state.transformer.forceUpdate(); state.stage.batchDraw(); }
-    async function duplicateLayer(layer) { const before=editorSnapshot(), copy=clone(layer); copy.id=uid(); copy.name=layer.name+' Kopya'; copy.frame.x+=60; copy.frame.y+=60; state.editor.document.layers.push(copy); recordHistory(before); await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); }
-    function removeLayer(layer) { const before=editorSnapshot(), index=state.editor.document.layers.findIndex((l)=>l.id===layer.id); if(index<0)return; const node=state.nodes.get(layer.id); if(node)node.destroy(); state.nodes.delete(layer.id); state.editor.document.layers.splice(index,1); state.selectedLayerId=null; state.transformer.nodes([]); recordHistory(before); state.stage.batchDraw(); renderEditor(); }
+    async function duplicateLayer(layer) { const before=editorSnapshot(), copy=clone(layer); copy.id=uid(); copy.name=layer.name+' Kopya'; copy.frame.x+=60; copy.frame.y+=60; state.editor.document.layers.push(copy); state.selectedLayerIds=new Set([copy.id]); recordHistory(before); await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); }
+    function removeLayer(layer) { const before=editorSnapshot(), index=state.editor.document.layers.findIndex((l)=>l.id===layer.id); if(index<0)return; const node=state.nodes.get(layer.id); if(node)node.destroy(); state.nodes.delete(layer.id); state.editor.document.layers.splice(index,1); state.selectedLayerIds.delete(layer.id); state.selectedLayerId=[...state.selectedLayerIds].pop()||null; state.transformer.nodes([]); recordHistory(before); state.stage.batchDraw(); renderEditor(); }
 
     async function exportEditorBlob(targetSize) {
         if (!state.stage) return null;
@@ -732,25 +812,53 @@
     async function uploadFile(file, type, templateId) {
         const dimensions = await readDimensions(file); const asset = await uploadBlob(file, type, file.name, templateId, file.type); if (!asset) return null; asset.width=dimensions.width; asset.height=dimensions.height; return asset;
     }
-    async function uploadBlob(blob, type, filename, templateId, mimeType) {
+    async function uploadBlob(blob, type, filename, templateId, mimeType, throwOnError) {
         try {
+            if (type === 'output') return await uploadBlobChunked(blob, filename, mimeType || 'image/png');
             const query = new URLSearchParams({ action:'upload', asset_type:type, filename }); if(templateId)query.set('template_id',templateId);
             const data = await api(API+'?'+query.toString(),{method:'POST',headers:{'Content-Type':mimeType||blob.type||'application/octet-stream'},body:blob}); return normalizeAsset(data.asset);
-        } catch(error) { setStatus('Dosya yüklenemedi: '+error.message,true); return null; }
+        } catch(error) {
+            console.error('[Mockup Studio upload]', { type, size: blob && blob.size, message: error.message });
+            if (throwOnError) throw error;
+            setStatus('Dosya yüklenemedi: '+error.message,true);
+            return null;
+        }
+    }
+    async function uploadBlobChunked(blob, filename, mimeType) {
+        const chunkSize = 2 * 1024 * 1024;
+        const chunkCount = Math.ceil(blob.size / chunkSize);
+        const uploadId = uid();
+        for (let index = 0; index < chunkCount; index += 1) {
+            const query = new URLSearchParams({ action:'upload_chunk', upload_id:uploadId, chunk_index:String(index) });
+            await api(API+'?'+query.toString(), { method:'POST', headers:{'Content-Type':'application/octet-stream'}, body:blob.slice(index * chunkSize, Math.min(blob.size, (index + 1) * chunkSize)) });
+        }
+        const data = await api(API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'finalize_upload', upload_id:uploadId, asset_type:'output', filename, mime_type:mimeType, chunk_count:chunkCount }) });
+        return normalizeAsset(data.asset);
     }
     function readDimensions(file) { return new Promise((resolve)=>{ const url=URL.createObjectURL(file),img=new Image(); img.onload=()=>{resolve({width:img.naturalWidth,height:img.naturalHeight});URL.revokeObjectURL(url);};img.onerror=()=>{resolve({width:null,height:null});URL.revokeObjectURL(url);};img.src=url; }); }
 
     function renderCreateView() {
         const root=document.getElementById('msViewCreate'); if(!root)return;
+        const selected = state.templates.filter((template) => state.selectedTemplateIds.has(template.id));
+        const templateCards = state.templates.map((template) => `<button type="button" class="ms-create-template${state.selectedTemplateIds.has(template.id)?' is-selected':''}" data-template-id="${template.id}"><span>${state.selectedTemplateIds.has(template.id)?'✓':'+'}</span>${esc(template.name)} <small>v${template.current_version}</small></button>`).join('');
+        const versionPicker = selected.length === 1
+            ? '<select id="msCreateVersion" class="ms-select" style="margin-top:8px;"><option value="">Sürümler yükleniyor…</option></select>'
+            : `<div class="ms-selection-summary">${selected.length ? selected.length+' şablon seçili; her biri en güncel kayıtlı sürümü kullanacak.' : 'En az bir şablon seçin.'}</div>`;
         root.innerHTML=`<div class="ms-view-header"><div><h3>Ürünle Oluştur</h3><p>Kaydedilmiş bir şablon sürümünü değiştirmeden ürün PNG’siyle render alın.</p></div></div>
-            <div class="ms-create-grid"><div class="ms-panel"><div class="ms-panel-title">1. Şablon ve Sürüm</div><div class="ms-panel-body"><select id="msCreateTemplate" class="ms-select"><option value="">Şablon seçin</option>${state.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select><select id="msCreateVersion" class="ms-select" style="margin-top:8px;"><option value="">Önce şablon seçin</option></select></div></div>
+            <div class="ms-create-grid"><div class="ms-panel"><div class="ms-panel-title">1. Şablonlar ve Sürüm</div><div class="ms-panel-body"><div id="msCreateTemplates" class="ms-create-template-list">${templateCards||'<div class="ms-empty">Kayıtlı şablon yok.</div>'}</div>${versionPicker}</div></div>
             <div class="ms-panel"><div class="ms-panel-title">2. Ürün PNG</div><div class="ms-panel-body"><select id="msCreateProductType" class="ms-select"><option value="product_box_clean">Ürün + gerçek kutusu</option><option value="product_only_clean">Kutusuz ürün</option></select><label class="ms-upload-label">Yeni ürün PNG yükle<input id="msCreateProductInput" type="file" accept="image/png"></label><div id="msCreateProducts" class="ms-product-grid"></div></div></div>
-            <div class="ms-panel"><div class="ms-panel-title">3. Çıktı</div><div class="ms-panel-body"><input id="msOutputName" class="fin-input" placeholder="Çıktı adı" maxlength="160"><button id="msGenerateBtn" class="ms-btn ms-btn-success ms-full">2000×2000 Oluştur ve Kaydet</button><div id="msCreatePreview" class="ms-output-preview"><span>Henüz çıktı oluşturulmadı.</span></div></div></div></div>`;
-        document.getElementById('msCreateTemplate').addEventListener('change',(e)=>loadCreateVersions(e.target.value));
-        document.getElementById('msCreateVersion').addEventListener('change',(e)=>{state.createVersionId=e.target.value||null; updateDefaultOutputName();});
+            <div class="ms-panel"><div class="ms-panel-title">3. Çıktı</div><div class="ms-panel-body"><input id="msOutputName" class="fin-input" placeholder="Çıktı adı" maxlength="160"><button id="msGenerateBtn" class="ms-btn ms-btn-success ms-full">Seçili Şablonlardan 2000×2000 Oluştur</button><div id="msCreatePreview" class="ms-output-preview"><span>Henüz çıktı oluşturulmadı.</span></div></div></div></div>`;
+        root.querySelectorAll('[data-template-id]').forEach((button) => button.addEventListener('click', () => {
+            const id = button.dataset.templateId;
+            if (state.selectedTemplateIds.has(id)) state.selectedTemplateIds.delete(id); else state.selectedTemplateIds.add(id);
+            state.createVersions=[]; state.createVersionId=null; renderCreateView();
+        }));
+        const versionSelect=document.getElementById('msCreateVersion');
+        if(versionSelect){versionSelect.addEventListener('change',(e)=>{state.createVersionId=e.target.value||null;updateDefaultOutputName();});loadCreateVersions(selected[0].id);}
         document.getElementById('msCreateProductInput').addEventListener('change',createProductUpload);
-        document.getElementById('msGenerateBtn').addEventListener('click',generateSelectedOutput);
+        document.getElementById('msGenerateBtn').addEventListener('click',generateSelectedOutputs);
         renderCreateProducts();
+        updateDefaultOutputName();
     }
     async function loadCreateVersions(templateId) {
         state.createVersions=[];state.createVersionId=null;const select=document.getElementById('msCreateVersion');
@@ -759,9 +867,55 @@
     }
     function renderCreateProducts(){const root=document.getElementById('msCreateProducts');if(!root)return;const products=state.products.filter(a=>PRODUCT_TYPES.includes(a.type));root.innerHTML=products.length?'':'<div class="ms-empty">Temiz ürün PNG’si yok.</div>';products.forEach(asset=>{const card=document.createElement('button');card.className='ms-product-card'+(asset.id===state.createProductId?' is-selected':'');card.innerHTML=`<img src="${assetUrl(asset.storagePath)}" alt=""><span>${esc(asset.name)}</span>`;card.addEventListener('click',()=>{state.createProductId=asset.id;renderCreateProducts();updateDefaultOutputName();});root.appendChild(card);});}
     async function createProductUpload(event){const file=event.target.files[0];event.target.value='';if(!file)return;if(file.type!=='image/png')return setStatus('Ürün dosyası şeffaf PNG olmalıdır.',true);const type=document.getElementById('msCreateProductType').value;const asset=await uploadFile(file,type,null);if(!asset)return;state.products.unshift(asset);state.createProductId=asset.id;renderCreateProducts();updateDefaultOutputName();}
-    function updateDefaultOutputName(){const input=document.getElementById('msOutputName');if(!input||input.value.trim())return;const template=state.templates.find(t=>t.id===document.getElementById('msCreateTemplate').value);const product=state.products.find(p=>p.id===state.createProductId);if(template&&product)input.value=template.name+' – '+product.name.replace(/\.[^.]+$/,'');}
-    async function generateSelectedOutput(){const version=state.createVersions.find(v=>v.id===state.createVersionId),product=state.products.find(p=>p.id===state.createProductId),name=document.getElementById('msOutputName').value.trim();if(!version)return setStatus('Şablon sürümü seçin.',true);if(!product)return setStatus('Ürün PNG’si seçin.',true);if(!name)return setStatus('Çıktı adı zorunludur.',true);await generateOutput({name,templateId:version.template_id,templateName:version.template_name,templateVersion:version.version_number,snapshot:normalizeDocument(version.snapshot),product});}
-    async function generateOutput(config){setBusy(true);try{const blob=await renderSnapshot(config.snapshot,config.product);const exportAsset=await uploadBlob(blob,'output',safeName(config.name)+'.png',null,'image/png');if(!exportAsset)throw new Error('Çıktı dosyası yüklenemedi.');const data=await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create_output',id:uid(),name:config.name,export_asset_id:exportAsset.id,product_asset_id:config.product.id,template_id:config.templateId||null,template_name:config.templateName,template_version:config.templateVersion,template_snapshot:config.snapshot})});await loadOutputs();const preview=document.getElementById('msCreatePreview');if(preview)preview.innerHTML=`<img src="${assetUrl(exportAsset.storagePath)}" alt="${esc(config.name)}">`;setStatus('Çıktı kalıcı kütüphaneye kaydedildi.',false);return data.output;}catch(error){setStatus('Çıktı oluşturulamadı: '+error.message,true);return null;}finally{setBusy(false);}}
+    function updateDefaultOutputName(){const input=document.getElementById('msOutputName');if(!input||input.value.trim())return;const template=state.templates.find(t=>state.selectedTemplateIds.has(t.id));const product=state.products.find(p=>p.id===state.createProductId);if(template&&product)input.value=(state.selectedTemplateIds.size>1?'Mockup Paketi':template.name)+' – '+product.name.replace(/\.[^.]+$/,'');}
+    async function latestVersionFor(template){
+        if(state.selectedTemplateIds.size===1){const chosen=state.createVersions.find(v=>v.id===state.createVersionId);if(chosen)return chosen;}
+        const data=await api(API+'?resource=versions&template_id='+encodeURIComponent(template.id));
+        return (data.versions||[])[0]||null;
+    }
+    async function generateSelectedOutputs(){
+        const templates=state.templates.filter(template=>state.selectedTemplateIds.has(template.id));
+        const product=state.products.find(item=>item.id===state.createProductId);
+        const baseName=document.getElementById('msOutputName').value.trim();
+        if(!templates.length)return setStatus('En az bir şablon seçin.',true);
+        if(!product)return setStatus('Ürün PNG’si seçin.',true);
+        if(!baseName)return setStatus('Çıktı adı zorunludur.',true);
+        setBusy(true);
+        const created=[];
+        try{
+            for(const template of templates){
+                const version=await latestVersionFor(template);
+                if(!version)throw new Error(template.name+' için kayıtlı sürüm bulunamadı.');
+                const name=templates.length>1?baseName+' – '+template.name:baseName;
+                created.push(await generateOutput({name,templateId:version.template_id,templateName:version.template_name,templateVersion:version.version_number,snapshot:normalizeDocument(version.snapshot),product},{manageBusy:false,refresh:false,rethrow:true,status:false}));
+            }
+            await loadOutputs();
+            const preview=document.getElementById('msCreatePreview');
+            if(preview)preview.innerHTML=created.map(output=>`<img src="${assetUrl(output.export_path)}" alt="${esc(output.name)}">`).join('');
+            setStatus(created.length+' kalıcı çıktı oluşturuldu.',false);
+        }catch(error){
+            console.error('[Mockup Studio render]',error);
+            setStatus('Çıktı oluşturulamadı: '+error.message,true);
+        }finally{setBusy(false);}
+    }
+    async function generateOutput(config,options){
+        const opts=options||{};if(opts.manageBusy!==false)setBusy(true);
+        try{
+            const blob=await renderSnapshot(config.snapshot,config.product);
+            if(!blob||!blob.size)throw new Error('Tarayıcı boş bir PNG üretti.');
+            const exportAsset=await uploadBlob(blob,'output',safeName(config.name)+'.png',null,'image/png',true);
+            const data=await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create_output',id:uid(),name:config.name,export_asset_id:exportAsset.id,product_asset_id:config.product.id,template_id:config.templateId||null,template_name:config.templateName,template_version:config.templateVersion,template_snapshot:config.snapshot})});
+            const output=Object.assign({},data.output,{export_path:exportAsset.storagePath});
+            if(opts.refresh!==false)await loadOutputs();
+            const preview=document.getElementById('msCreatePreview');if(preview&&opts.status!==false)preview.innerHTML=`<img src="${assetUrl(exportAsset.storagePath)}" alt="${esc(config.name)}">`;
+            if(opts.status!==false)setStatus('Çıktı kalıcı kütüphaneye kaydedildi.',false);
+            return output;
+        }catch(error){
+            console.error('[Mockup Studio output]',{name:config.name,message:error.message});
+            if(opts.rethrow)throw error;
+            setStatus('Çıktı oluşturulamadı: '+error.message,true);return null;
+        }finally{if(opts.manageBusy!==false)setBusy(false);}
+    }
     async function renderSnapshot(snapshot,product){const host=document.getElementById('msRenderHost');host.innerHTML='';const stage=new Konva.Stage({container:host,width:SIZE,height:SIZE}),layerCanvas=new Konva.Layer();stage.add(layerCanvas);layerCanvas.add(new Konva.Rect({x:0,y:0,width:SIZE,height:SIZE,fill:'#fff',listening:false}));for(const item of snapshot.layers||[]){if(item.visible===false)continue;let asset=item.type==='product_slot'?product:(snapshot.assets||[]).find(a=>a.id===item.assetId);if(!asset||!asset.storagePath)continue;try{const image=await loadImage(assetUrl(asset.storagePath));const node=makeImageNode(image,{type:item.type,visible:true,locked:true},Object.assign(defaultFrame(),item.frame||{}));node.draggable(false);layerCanvas.add(node);}catch(error){throw new Error('Render varlığı yüklenemedi: '+(asset.name||asset.storagePath));}}layerCanvas.draw();try{return await stage.toBlob({mimeType:'image/png',pixelRatio:1});}finally{stage.destroy();host.innerHTML='';}}
 
     function renderOutputs(){const root=document.getElementById('msViewOutputs');if(!root)return;root.innerHTML=`<div class="ms-view-header"><div><h3>Çıktılar</h3><p>Şablonlardan bağımsız kalıcı mockup görselleri</p></div></div><div id="msOutputGrid" class="ms-card-grid"></div>`;const grid=document.getElementById('msOutputGrid');if(!state.outputs.length){grid.innerHTML='<div class="ms-empty-card">Henüz kayıtlı çıktı yok.</div>';return;}state.outputs.forEach(output=>{const card=document.createElement('article');card.className='ms-library-card';card.innerHTML=`<div class="ms-card-preview"><img src="${assetUrl(output.export_path)}" alt="${esc(output.name)}"></div><div class="ms-card-content"><h4>${esc(output.name)}</h4><p>${esc(output.template_name)} • v${output.template_version}</p><p>${esc(formatDate(output.created_at))}</p><div class="ms-card-actions"><a class="ms-btn ms-btn-primary ms-btn-small" href="${assetUrl(output.export_path)}" download="${safeName(output.name)}.png">İndir</a><button data-action="rename" class="ms-btn ms-btn-small">Adlandır</button><button data-action="rerun" class="ms-btn ms-btn-small">Tekrar Üret</button><button data-action="delete" class="ms-btn ms-btn-danger ms-btn-small">Sil</button></div></div>`;card.querySelector('[data-action="rename"]').addEventListener('click',()=>renameOutput(output));card.querySelector('[data-action="rerun"]').addEventListener('click',()=>rerunOutput(output));card.querySelector('[data-action="delete"]').addEventListener('click',()=>deleteOutput(output));grid.appendChild(card);});}

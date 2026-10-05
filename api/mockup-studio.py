@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import re
+import traceback
 import uuid
 
 try:
@@ -16,6 +17,8 @@ except (ImportError, AttributeError):
 
 BUCKET_NAME = "mockup-studio-assets"
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+MAX_CHUNK_BYTES = 2 * 1024 * 1024
+MAX_CHUNKS = 12
 ALLOWED_ASSET_TYPES = {
     "scene_background": {"image/png", "image/jpeg", "image/webp"},
     "product_box_clean": {"image/png"},
@@ -118,8 +121,12 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             query = parse_qs(urlparse(self.path).query)
-            if query.get("action", [""])[0] == "upload":
+            query_action = query.get("action", [""])[0]
+            if query_action == "upload":
                 self.upload_asset(query)
+                return
+            if query_action == "upload_chunk":
+                self.upload_chunk(query)
                 return
             payload = self.read_json()
             action = payload.get("action", "save_template")
@@ -128,6 +135,7 @@ class handler(BaseHTTPRequestHandler):
                 "duplicate_template": self.duplicate_template,
                 "rename_template": self.rename_template,
                 "set_thumbnail": self.set_thumbnail,
+                "finalize_upload": self.finalize_upload,
                 "create_output": self.create_output,
                 "rename_output": self.rename_output,
             }
@@ -138,6 +146,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_json(400, {"success": False, "error": str(error)})
         except Exception as error:
             self.log_error("Mockup Studio POST failed: %s", error)
+            traceback.print_exc()
             self.send_json(500, {"success": False, "error": str(error)})
 
     def do_DELETE(self):
@@ -383,13 +392,81 @@ class handler(BaseHTTPRequestHandler):
         template_id = None
         if query.get("template_id", [None])[0]:
             template_id = require_uuid(query["template_id"][0], "şablon kimliği")
-        asset_id = str(uuid.uuid4())
         original_filename = clean_filename(query.get("filename", ["image.png"])[0])
+        file_bytes = self.rfile.read(length)
+        asset = self.persist_asset(asset_type, mime_type, original_filename, file_bytes, template_id)
+        self.send_json(201, {"success": True, "asset": asset})
+
+    def upload_chunk(self, query):
+        upload_id = require_uuid(query.get("upload_id", [None])[0], "yükleme kimliği")
+        try:
+            chunk_index = int(query.get("chunk_index", ["-1"])[0])
+        except (TypeError, ValueError):
+            raise ValueError("Geçersiz parça sırası.")
+        if chunk_index < 0 or chunk_index >= MAX_CHUNKS:
+            raise ValueError("Geçersiz parça sırası.")
+        length = self.content_length()
+        if length <= 0:
+            raise ValueError("Yükleme parçası boş olamaz.")
+        if length > MAX_CHUNK_BYTES:
+            raise ValueError("Yükleme parçası en fazla 2 MB olabilir.")
+        body = self.rfile.read(length)
+        chunk_path = self.chunk_path(upload_id, chunk_index)
+        get_supabase().storage.from_(BUCKET_NAME).upload(
+            path=chunk_path,
+            file=body,
+            file_options={"content-type": "application/octet-stream", "upsert": "false"},
+        )
+        self.send_json(201, {"success": True, "chunk_index": chunk_index})
+
+    def finalize_upload(self, payload):
+        upload_id = require_uuid(payload.get("upload_id"), "yükleme kimliği")
+        asset_type = str(payload.get("asset_type") or "")
+        if asset_type != "output":
+            raise ValueError("Parçalı yükleme yalnızca çıktı PNG için kullanılabilir.")
+        mime_type = str(payload.get("mime_type") or "").lower()
+        if mime_type != "image/png":
+            raise ValueError("Çıktı dosyası PNG olmalıdır.")
+        try:
+            chunk_count = int(payload.get("chunk_count", 0))
+        except (TypeError, ValueError):
+            raise ValueError("Geçersiz parça sayısı.")
+        if chunk_count <= 0 or chunk_count > MAX_CHUNKS:
+            raise ValueError("Geçersiz parça sayısı.")
+        client = get_supabase()
+        chunk_paths = [self.chunk_path(upload_id, index) for index in range(chunk_count)]
+        try:
+            parts = []
+            total_size = 0
+            for chunk_path in chunk_paths:
+                downloaded = client.storage.from_(BUCKET_NAME).download(chunk_path)
+                part = downloaded if isinstance(downloaded, bytes) else downloaded.content
+                total_size += len(part)
+                if total_size > MAX_UPLOAD_BYTES:
+                    raise ValueError("Birleştirilmiş çıktı dosyası en fazla 20 MB olabilir.")
+                parts.append(part)
+            file_bytes = b"".join(parts)
+            if not file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+                raise ValueError("Birleştirilen çıktı geçerli bir PNG değil.")
+            filename = clean_filename(payload.get("filename") or "output.png")
+            asset = self.persist_asset("output", "image/png", filename, file_bytes, None)
+            self.send_json(201, {"success": True, "asset": asset})
+        finally:
+            try:
+                client.storage.from_(BUCKET_NAME).remove(chunk_paths)
+            except Exception as cleanup_error:
+                self.log_error("Mockup Studio chunk cleanup failed: %s", cleanup_error)
+
+    @staticmethod
+    def chunk_path(upload_id, chunk_index):
+        return f"_chunks/{upload_id}/{chunk_index:04d}.part"
+
+    def persist_asset(self, asset_type, mime_type, original_filename, file_bytes, template_id):
+        asset_id = str(uuid.uuid4())
         extension = os.path.splitext(original_filename)[1] or mimetypes.guess_extension(mime_type) or ".bin"
         scope = ASSET_SCOPE[asset_type]
         owner_folder = template_id or "library"
         storage_path = f"{scope}/{owner_folder}/{asset_id}{extension}"
-        file_bytes = self.rfile.read(length)
         client = get_supabase()
         client.storage.from_(BUCKET_NAME).upload(
             path=storage_path,
@@ -404,14 +481,14 @@ class handler(BaseHTTPRequestHandler):
             "storage_path": storage_path,
             "original_filename": original_filename,
             "mime_type": mime_type,
-            "size_bytes": length,
+            "size_bytes": len(file_bytes),
         }
         try:
             response = client.table("mockup_assets").insert(row).execute()
         except Exception:
             client.storage.from_(BUCKET_NAME).remove([storage_path])
             raise
-        self.send_json(201, {"success": True, "asset": (response.data or [row])[0]})
+        return (response.data or [row])[0]
 
     def send_asset(self, raw_path):
         storage_path = str(raw_path or "")

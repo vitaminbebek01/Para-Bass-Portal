@@ -39,8 +39,17 @@ async function mockApi(route) {
         if (type === 'product_box_clean' || type === 'product_only_clean') db.products.unshift(asset);
         return json(route, { asset }, 201);
     }
+    if (method === 'POST' && url.searchParams.get('action') === 'upload_chunk') {
+        return json(route, { success: true, chunk_index: Number(url.searchParams.get('chunk_index')) }, 201);
+    }
     if (method === 'POST') {
         const body = request.postDataJSON();
+        if (body.action === 'finalize_upload') {
+            const id = crypto.randomUUID();
+            const asset = { id, asset_type: 'output', original_filename: body.filename, mime_type: 'image/png', storage_path: `output/library/${id}.png` };
+            db.assets.push(asset);
+            return json(route, { asset }, 201);
+        }
         if (body.action === 'save_template') {
             let template = db.templates.find(t => t.id === body.id);
             if (!template) {
@@ -101,12 +110,16 @@ async function mockApi(route) {
         await productInput.setInputFiles({ name: 'product_box_clean.png', mimeType: 'image/png', buffer: png });
         await page.locator('.ms-layer').waitFor();
         let slotCount = await page.locator('.ms-layer').count();
-        while (slotCount < 10) {
-            await page.locator('#msAddSlotBtn').click();
+        while (slotCount < 3) {
+            await page.locator('#msNewSlotBtn').click();
             slotCount += 1;
             await page.waitForFunction((count) => document.querySelectorAll('.ms-layer').length === count, slotCount);
         }
-        assert.strictEqual(await page.locator('.ms-layer').count(), 10, '10 ürün slotu oluşmalı');
+        assert.strictEqual(await page.locator('.ms-layer').count(), 3, '3 ürün slotu oluşmalı');
+        await page.locator('.ms-layer').nth(1).click();
+        await page.locator('.ms-layer').nth(2).click();
+        await page.locator('#msAddSlotBtn').click();
+        await page.getByText('Ürün 3 slota yerleştirildi.').waitFor();
 
         const xInput = page.locator('[data-frame-key="x"]');
         const originalX = await xInput.inputValue();
@@ -120,17 +133,18 @@ async function mockApi(route) {
         assert.strictEqual(await page.locator('[data-frame-key="x"]').inputValue(), '1450', 'Redo tek slot değişikliğini yinelemeli');
 
         await page.locator('#msSceneInput').setInputFiles({ name: 'open_box_scene.png', mimeType: 'image/png', buffer: png });
-        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 11);
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 4);
         await page.locator('#msMaskInput').setInputFiles({ name: 'box_front_edge.png', mimeType: 'image/png', buffer: png });
-        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 12);
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 5);
 
         await page.locator('#msEditorName').fill('Test White Box Hero');
         await page.locator('#msEditorName').press('Tab');
         await page.locator('#msSaveBtn').click();
         await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
-        assert.strictEqual(db.templates[0].slot_count, 10, 'Kaydedilen şablonda 10 slot olmalı');
+        assert.strictEqual(db.templates[0].slot_count, 3, 'Kaydedilen şablonda 3 slot olmalı');
         assert.strictEqual(db.templates[0].document.layers[0].type, 'scene_background', 'Arka sahne en altta olmalı');
         assert(db.templates[0].document.layers.slice(1, -1).every(layer => layer.type === 'product_slot'), 'Ürün slotları sahne ile maskenin arasında olmalı');
+        assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => layer.assetId)).size, 1, 'Aynı ürün üç slota bağlanmalı');
         assert.strictEqual(db.templates[0].document.layers.at(-1).type, 'foreground_mask', 'Foreground mask ürünün önünde olmalı');
 
         await page.reload({ waitUntil: 'domcontentloaded' });
@@ -138,23 +152,36 @@ async function mockApi(route) {
         await page.locator('#tabMockupStudio').click();
         await page.getByText('Test White Box Hero', { exact: true }).waitFor();
         await page.getByRole('button', { name: 'Aç/Düzenle' }).click();
-        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 12);
-        assert.strictEqual(await page.locator('.ms-layer').count(), 12, 'Şablon yeniden açılınca açık kutu katmanları korunmalı');
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 5);
+        assert.strictEqual(await page.locator('.ms-layer').count(), 5, 'Şablon yeniden açılınca açık kutu katmanları korunmalı');
+
+        await page.locator('[data-view="templates"]').click();
+        await page.locator('#msNewTemplateBtn').click();
+        await page.locator('#msEditorProductInput').setInputFiles({ name: 'second_product.png', mimeType: 'image/png', buffer: png });
+        await page.locator('.ms-layer').waitFor();
+        await page.locator('#msEditorName').fill('Test Second Template');
+        await page.locator('#msEditorName').press('Tab');
+        await page.locator('#msSaveBtn').click();
+        await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
+
+        await page.locator('[data-view="templates"]').click();
+        const firstCard = page.locator('.ms-template-card').filter({ hasText: 'Test White Box Hero' });
+        const secondCard = page.locator('.ms-template-card').filter({ hasText: 'Test Second Template' });
+        if (!await firstCard.getAttribute('class').then(value => value.includes('is-selected'))) await firstCard.click();
+        if (!await secondCard.getAttribute('class').then(value => value.includes('is-selected'))) await secondCard.click();
 
         await page.locator('[data-view="create"]').click();
-        await page.locator('#msCreateTemplate').selectOption(db.templates[0].id);
-        await page.locator('#msCreateVersion').waitFor();
         await page.locator('.ms-product-card').first().click();
         await page.locator('#msOutputName').fill('Test Kalıcı Çıktı');
         await page.locator('#msGenerateBtn').click();
-        await page.getByText('Çıktı kalıcı kütüphaneye kaydedildi.').waitFor({ timeout: 30000 });
-        assert.strictEqual(db.outputs.length, 1, 'Çıktı kaydı oluşturulmalı');
+        await page.getByText('2 kalıcı çıktı oluşturuldu.').waitFor({ timeout: 30000 });
+        assert.strictEqual(db.outputs.length, 2, 'İki ayrı çıktı kaydı oluşturulmalı');
 
         await page.reload({ waitUntil: 'domcontentloaded' });
         await page.locator('#menuStudio').click();
         await page.locator('#tabMockupStudio').click();
         await page.locator('[data-view="outputs"]').click();
-        await page.getByText('Test Kalıcı Çıktı', { exact: true }).waitFor();
+        assert.strictEqual(await page.getByText(/Test Kalıcı Çıktı – Test/).count(), 2, 'İki çıktı yenileme sonrası kalmalı');
 
         await page.locator('#tabAiNew').click();
         assert(await page.locator('#aiNewSection').isVisible(), 'Yeni Görsel Üret görünür olmalı');

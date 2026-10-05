@@ -47,12 +47,21 @@
 }
 
 .ms-library-card {
+    position: relative;
     overflow: hidden;
     border: 1px solid var(--ms-border);
     border-radius: 9px;
     background: #fff;
     box-shadow: 0 3px 10px rgba(33, 49, 63, 0.06);
 }
+
+.ms-template-card { cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.ms-template-card:hover { transform: translateY(-1px); }
+.ms-template-card.is-selected { border: 3px solid var(--ms-accent); box-shadow: 0 0 0 3px rgba(142, 68, 173, .14); }
+.ms-template-check { position: absolute; top: 9px; right: 9px; display: grid; place-items: center; width: 25px; height: 25px; border-radius: 50%; background: rgba(255,255,255,.94); color: var(--ms-accent); font-size: 16px; font-weight: 900; box-shadow: 0 2px 8px rgba(0,0,0,.16); }
+.ms-template-card.is-selected .ms-template-check { background: var(--ms-accent); color: #fff; }
+.ms-template-header-actions { display: flex; align-items: center; gap: 9px; }
+.ms-selection-count, .ms-selection-summary { padding: 7px 9px; border-radius: 6px; background: #eee5f3; color: var(--ms-accent-dark); font-size: 11px; font-weight: 800; }
 
 .ms-card-preview { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: #edf1f4; overflow: hidden; }
 .ms-card-preview img { width: 100%; height: 100%; object-fit: cover; }
@@ -65,15 +74,22 @@
 .ms-empty-card { grid-column: 1 / -1; padding: 50px 20px; border: 1px dashed #bdc8d0; border-radius: 8px; color: var(--ms-muted); text-align: center; }
 
 .ms-create-grid { display: grid; grid-template-columns: 1fr 1fr 1.1fr; gap: 14px; align-items: start; }
+.ms-create-template-list { display: grid; gap: 6px; max-height: 285px; overflow-y: auto; }
+.ms-create-template { display: flex; align-items: center; gap: 7px; width: 100%; padding: 8px; border: 2px solid transparent; border-radius: 6px; background: #f1f5f7; color: #3d4e5b; cursor: pointer; text-align: left; font-weight: 700; }
+.ms-create-template small { margin-left: auto; color: var(--ms-muted); }
+.ms-create-template.is-selected { border-color: var(--ms-accent); background: #f7effb; color: var(--ms-accent-dark); }
 .ms-product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 8px; max-height: 300px; overflow-y: auto; }
 .ms-product-card { padding: 5px; border: 2px solid transparent; border-radius: 7px; background: #f3f6f8; cursor: pointer; overflow: hidden; }
 .ms-product-card.is-selected { border-color: var(--ms-accent); background: #f7effb; }
 .ms-product-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; border-radius: 5px; }
 .ms-product-card span { display: block; margin-top: 4px; overflow: hidden; color: #435464; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .ms-output-preview { display: flex; align-items: center; justify-content: center; margin-top: 10px; min-height: 180px; border: 1px dashed #bdc8d0; border-radius: 7px; color: var(--ms-muted); font-size: 11px; overflow: hidden; }
+.ms-output-preview { flex-wrap: wrap; gap: 6px; }
 .ms-output-preview img { width: 100%; height: auto; display: block; }
+.ms-output-preview img + img { width: calc(50% - 3px); }
 .ms-check { display: flex; align-items: center; gap: 6px; text-transform: none; }
 .ms-check input { width: auto; }
+.ms-help { display: block; margin-top: 6px; color: var(--ms-muted); font-size: 10px; line-height: 1.35; }
 
 .ms-toolbar {
     display: flex;
