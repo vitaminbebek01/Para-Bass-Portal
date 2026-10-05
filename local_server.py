@@ -8,6 +8,11 @@ from urllib.parse import urlparse
 PORT = 8000
 API_DIR = "api"
 
+
+class ThreadingLocalServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
 class LocalHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/api/'):
@@ -39,6 +44,19 @@ class LocalHandler(http.server.SimpleHTTPRequestHandler):
                 api_module = importlib.util.module_from_spec(spec)
                 sys.modules["api_module"] = api_module
                 spec.loader.exec_module(api_module)
+
+                # Mockup Studio handler'ı mevcut bağlantıyı doğrudan kullanır.
+                # BaseHTTPRequestHandler'ı aynı socket üzerinde ikinci kez başlatmak
+                # isteği kilitlediği için yalnızca bu yeni, izole endpoint'te bypass edilir.
+                if script_name == "mockup-studio":
+                    handler_instance = api_module.handler.__new__(api_module.handler)
+                    handler_instance.__dict__.update(self.__dict__)
+                    method = getattr(handler_instance, f"do_{self.command}", None)
+                    if method is None:
+                        self.send_error(405)
+                    else:
+                        method()
+                    return
                 
                 # Handler sınıfından instance oluştur (Bu sınıf BaseHTTPRequestHandler kullanıyor, ancak biz kendi handler'ımızı yönlendiriyoruz)
                 # Bu yüzden handler init edilirken bizim self (BaseHTTPRequestHandler) objemizi argüman veriyoruz
@@ -50,7 +68,7 @@ class LocalHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_error(404, "API endpoint not found")
 
-with socketserver.TCPServer(("", PORT), LocalHandler) as httpd:
+with ThreadingLocalServer(("", PORT), LocalHandler) as httpd:
     print(f"Lokal sunucu başlatıldı: http://localhost:{PORT}")
     print("Durdurmak için Ctrl+C'ye basın.")
     httpd.serve_forever()

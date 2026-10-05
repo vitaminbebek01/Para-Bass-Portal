@@ -6,6 +6,8 @@
     <title>Para Bass Pro - Patron Paneli</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+    <script src="https://unpkg.com/konva@10.7.0/konva.min.js"></script>
+    <link rel="stylesheet" href="mockup-studio.css">
     
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f4f8; margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -406,6 +408,7 @@
             <div style="display:flex; border-bottom:2px solid #ddd; margin-bottom:20px; gap:5px;">
                 <button id="tabAiNew" onclick="switchAiTab('new')" style="padding:10px 20px; border:none; background:#3498db; color:white; border-radius:6px 6px 0 0; cursor:pointer; font-weight:bold;">✨ Yeni Görsel Üret</button>
                 <button id="tabAiHistory" onclick="switchAiTab('history')" style="padding:10px 20px; border:none; background:#f0f4f8; color:#333; border-radius:6px 6px 0 0; cursor:pointer; font-weight:bold;">🕰️ Geçmiş Üretimler</button>
+                <button id="tabMockupStudio" onclick="switchAiTab('mockup')" style="padding:10px 20px; border:none; background:#f0f4f8; color:#333; border-radius:6px 6px 0 0; cursor:pointer; font-weight:bold;">🧩 Mockup Studio</button>
             </div>
 
             <!-- YENI GÖRSEL ÜRET ALANI -->
@@ -482,6 +485,11 @@
                 <div id="aiHistoryGallery" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:15px; min-height:200px; background:#fff; border:1px dashed #ccc; border-radius:8px; padding:20px;">
                     <p style="grid-column:1/-1; text-align:center; color:#999; margin-top:20px;">Henüz geçmişte kaydedilmiş bir görsel yok.</p>
                 </div>
+            </div>
+
+            <!-- MOCKUP STUDIO: Mevcut AI üretim akışından bağımsız çalışma alanı -->
+            <div id="mockupStudioSection" style="display:none;">
+                <div id="mockupStudioRoot"></div>
             </div>
         </div>
 
@@ -3416,5 +3424,6 @@
             badge.innerText = `SEO Gücü: %${Math.round(overallRatio*100)}`;
         }
     </script>
+    <script src="mockup-studio.js"></script>
 </body>
 </html>
