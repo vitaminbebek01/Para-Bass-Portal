@@ -9,7 +9,7 @@
 
 .ms-workspace-nav {
     display: grid;
-    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
     gap: 6px;
     margin-bottom: 14px;
     padding: 6px;
@@ -92,6 +92,11 @@
 .ms-check { display: flex; align-items: center; gap: 6px; text-transform: none; }
 .ms-check input { width: auto; }
 .ms-help { display: block; margin-top: 6px; color: var(--ms-muted); font-size: 10px; line-height: 1.35; }
+
+.ms-prompt-grid { display: grid; grid-template-columns: minmax(300px, .9fr) minmax(360px, 1.1fr); gap: 14px; align-items: start; }
+.ms-prompt-output { width: 100%; min-height: 190px; padding: 10px; box-sizing: border-box; border: 1px solid var(--ms-border); border-radius: 6px; resize: vertical; background: #fbfcfd; color: #334654; line-height: 1.5; }
+.ms-prompt-label { display: block; margin: 12px 0 5px; color: #405463; font-size: 12px; font-weight: 800; }
+.ms-prompt-label:first-child { margin-top: 0; }
 
 .ms-toolbar {
     display: flex;
@@ -291,6 +296,7 @@
     .ms-inspector-panel { grid-column: 1 / -1; }
     .ms-inspector-panel .ms-panel-body { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 10px; }
     .ms-create-grid { grid-template-columns: 1fr 1fr; }
+    .ms-prompt-grid { grid-template-columns: 1fr 1fr; }
     .ms-create-grid > :last-child { grid-column: 1 / -1; }
 }
 
@@ -302,5 +308,7 @@
     .ms-inspector-panel .ms-panel-body { display: block; }
     .ms-workspace-nav { grid-template-columns: 1fr 1fr; }
     .ms-create-grid { display: flex; flex-direction: column; }
+    .ms-prompt-grid { display: flex; flex-direction: column; }
     .ms-create-grid > .ms-panel { width: 100%; }
+    .ms-prompt-grid > .ms-panel { width: 100%; }
 }

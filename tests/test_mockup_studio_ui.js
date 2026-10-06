@@ -163,6 +163,15 @@ async function mockApi(route) {
         assert.strictEqual(await page.locator('[data-frame-key="brightness"]').inputValue(), '0', 'İkinci slotun parlaklığı bağımsız kalmalı');
         assert.strictEqual(await page.locator('[data-frame-key="contrast"]').inputValue(), '0', 'İkinci slotun kontrastı bağımsız kalmalı');
 
+        await page.locator('.ms-layer').nth(0).click();
+        await page.locator('#msPerspectiveToggle').check();
+        await page.getByText(/Perspektif modu açıldı/).waitFor();
+        await page.locator('[data-frame-key="smartPadding"]').fill('8');
+        await page.locator('[data-frame-key="smartPadding"]').press('Tab');
+        await page.locator('#msSmartPlaceBtn').click();
+        await page.getByText(/Şeffaf kenarlar algılandı/).waitFor();
+
+        await page.locator('.ms-layer').nth(1).click();
         const xInput = page.locator('[data-frame-key="x"]');
         const originalX = await xInput.inputValue();
         await xInput.fill('1450');
@@ -176,28 +185,71 @@ async function mockApi(route) {
 
         await page.locator('#msSceneInput').setInputFiles({ name: 'open_box_scene.png', mimeType: 'image/png', buffer: png });
         await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 4);
-        await page.locator('#msMaskInput').setInputFiles({ name: 'box_front_edge.png', mimeType: 'image/png', buffer: png });
+        await page.locator('#msPolygonMaskBtn').click();
         await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 5);
+        const uiCanvas = page.locator('#mockupCanvasHost canvas').last();
+        const canvasBox = await uiCanvas.boundingBox();
+        for (const [x, y] of [[canvasBox.width * .25, canvasBox.height * .25], [canvasBox.width * .7, canvasBox.height * .28], [canvasBox.width * .5, canvasBox.height * .7]]) await uiCanvas.click({ position: { x, y } });
+        await page.locator('#msPolygonCloseBtn').click();
+        await page.getByText('Foreground poligonu kapatıldı.').waitFor();
+        await page.locator('#msUndoBtn').click();
+        await page.getByText(/3 nokta • Çiziliyor/).waitFor();
+        await page.locator('#msRedoBtn').click();
+        await page.getByText(/3 nokta • Kapalı/).waitFor();
+        await page.locator('#msMaskInput').setInputFiles({ name: 'box_front_edge.png', mimeType: 'image/png', buffer: png });
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 6);
+
+        await page.locator('[data-view="prompt"]').click();
+        await page.locator('[data-prompt-key="product"]').fill('beyaz kozmetik kutusu');
+        await page.locator('[data-prompt-key="scene"]').fill('modern banyo tezgâhı');
+        await page.locator('[data-prompt-key="lighting"]').fill('yumuşak pencere');
+        assert.match(await page.locator('#msPromptTr').inputValue(), /beyaz kozmetik kutusu/, 'Türkçe prompt ürün bilgisini içermeli');
+        assert.match(await page.locator('#msPromptEn').inputValue(), /four-corner perspective/, 'İngilizce prompt perspektif bilgisini içermeli');
+        await page.locator('[data-view="editor"]').click();
 
         await page.locator('#msEditorName').fill('Test White Box Hero');
         await page.locator('#msEditorName').press('Tab');
         await page.locator('#msSaveBtn').click();
         await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
+        assert.strictEqual(db.templates[0].document.schemaVersion, 3, 'Yeni şablon belgesi schemaVersion 3 olmalı');
         assert.strictEqual(db.templates[0].slot_count, 3, 'Kaydedilen şablonda 3 slot olmalı');
         assert.strictEqual(db.templates[0].document.layers[0].type, 'scene_background', 'Arka sahne en altta olmalı');
-        assert(db.templates[0].document.layers.slice(1, -1).every(layer => layer.type === 'product_slot'), 'Ürün slotları sahne ile maskenin arasında olmalı');
+        assert(db.templates[0].document.layers.slice(1, -2).every(layer => layer.type === 'product_slot'), 'Ürün slotları sahne ile maskelerin arasında olmalı');
         assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => layer.assetId)).size, 1, 'Aynı ürün üç slota bağlanmalı');
         assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => `${layer.frame.x}:${layer.frame.rotation}`)).size, 3, 'Slot dönüşümleri bağımsız kalmalı');
         assert.strictEqual(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot' && layer.frame.brightness === 35 && layer.frame.contrast === 20).length, 1, 'Görsel ayarları yalnızca değiştirilen slota kaydedilmeli');
+        const perspectiveSlot = db.templates[0].document.layers.find(layer => layer.type === 'product_slot' && layer.frame.perspective?.enabled);
+        assert(perspectiveSlot && perspectiveSlot.frame.perspective.corners.length === 4, 'Perspektif slotu dört köşeyle kaydedilmeli');
+        assert.strictEqual(perspectiveSlot.frame.smartFit.padding, 8, 'Akıllı yerleştirme iç boşluğu kaydedilmeli');
+        const polygonLayer = db.templates[0].document.layers.find(layer => layer.type === 'foreground_polygon');
+        assert(polygonLayer && polygonLayer.geometry.closed && polygonLayer.geometry.points.length === 3, 'Kapalı foreground poligonu snapshot’a kaydedilmeli');
+        assert.match(db.templates[0].document.promptSpec.generatedTr, /beyaz kozmetik kutusu/, 'Prompt ayarları snapshot’a kaydedilmeli');
+        assert.strictEqual(db.templates[0].document.layers.at(-2).type, 'foreground_polygon', 'Poligon foreground ürünün önünde olmalı');
         assert.strictEqual(db.templates[0].document.layers.at(-1).type, 'foreground_mask', 'Foreground mask ürünün önünde olmalı');
+        const legacyDocument = JSON.parse(JSON.stringify(db.templates[0].document));
+        legacyDocument.schemaVersion = 2;
+        delete legacyDocument.promptSpec;
+        db.templates.push({ id: crypto.randomUUID(), name: 'Legacy V2 Template', current_version: 1, document: legacyDocument, layer_count: legacyDocument.layers.length, slot_count: 3, created_at: now(), updated_at: now() });
 
         await page.reload({ waitUntil: 'domcontentloaded' });
         await page.locator('#menuStudio').click();
         await page.locator('#tabMockupStudio').click();
         await page.getByText('Test White Box Hero', { exact: true }).waitFor();
-        await page.getByRole('button', { name: 'Aç/Düzenle' }).click();
-        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 5);
-        assert.strictEqual(await page.locator('.ms-layer').count(), 5, 'Şablon yeniden açılınca açık kutu katmanları korunmalı');
+        await page.locator('.ms-template-card').filter({ hasText: 'Test White Box Hero' }).getByRole('button', { name: 'Aç/Düzenle' }).click();
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 6);
+        assert.strictEqual(await page.locator('.ms-layer').count(), 6, 'Şablon yeniden açılınca perspektif ve maske katmanları korunmalı');
+        await page.locator('[data-view="prompt"]').click();
+        assert.match(await page.locator('#msPromptTr').inputValue(), /beyaz kozmetik kutusu/, 'Prompt yeniden açılınca korunmalı');
+
+        await page.locator('[data-view="templates"]').click();
+        const legacyCard = page.locator('.ms-template-card').filter({ hasText: 'Legacy V2 Template' });
+        await legacyCard.getByRole('button', { name: 'Aç/Düzenle' }).click();
+        await page.locator('[data-view="prompt"]').click();
+        assert.match(await page.locator('#msPromptEn').inputValue(), /3 product placement areas/, 'V2 şablon varsayılan prompt verisiyle açılmalı');
+        await page.locator('[data-view="editor"]').click();
+        await page.locator('#msSaveBtn').click();
+        await page.getByText(/Şablon v2 olarak kaydedildi/).waitFor();
+        assert.strictEqual(db.templates.find(template => template.name === 'Legacy V2 Template').document.schemaVersion, 3, 'V2 şablon kaydedilince v3 formatına yükselmeli');
 
         await page.locator('[data-view="templates"]').click();
         await page.locator('#msNewTemplateBtn').click();
@@ -211,6 +263,8 @@ async function mockApi(route) {
         await page.locator('[data-view="templates"]').click();
         const firstCard = page.locator('.ms-template-card').filter({ hasText: 'Test White Box Hero' });
         const secondCard = page.locator('.ms-template-card').filter({ hasText: 'Test Second Template' });
+        const savedLegacyCard = page.locator('.ms-template-card').filter({ hasText: 'Legacy V2 Template' });
+        if (await savedLegacyCard.getAttribute('class').then(value => value.includes('is-selected'))) await savedLegacyCard.click();
         if (!await firstCard.getAttribute('class').then(value => value.includes('is-selected'))) await firstCard.click();
         if (!await secondCard.getAttribute('class').then(value => value.includes('is-selected'))) await secondCard.click();
 
