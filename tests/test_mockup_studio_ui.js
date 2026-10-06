@@ -5,7 +5,7 @@ const assert = require('assert');
 const baseUrl = process.env.MOCKUP_TEST_URL || 'http://localhost:8000';
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69d9WQAAAABJRU5ErkJggg==', 'base64');
 
-const db = { templates: [], versions: [], products: [], outputs: [], assets: [] };
+const db = { templates: [], versions: [], products: [], outputs: [], assets: [], storage: new Set() };
 const now = () => new Date().toISOString();
 
 function json(route, body, status = 200) {
@@ -18,6 +18,7 @@ async function mockApi(route) {
     const method = request.method();
 
     if (method === 'GET' && url.searchParams.has('asset')) {
+        if (!db.storage.has(url.searchParams.get('asset'))) return json(route, { error: 'Dosya bulunamadı.' }, 404);
         return route.fulfill({ status: 200, contentType: 'image/png', body: png });
     }
     if (method === 'GET') {
@@ -25,7 +26,7 @@ async function mockApi(route) {
         if (resource === 'templates') return json(route, { templates: db.templates.filter(t => !t.deleted_at) });
         if (resource === 'template') return json(route, { template: db.templates.find(t => t.id === url.searchParams.get('id')) });
         if (resource === 'versions') return json(route, { versions: db.versions.filter(v => v.template_id === url.searchParams.get('template_id')).sort((a, b) => b.version_number - a.version_number) });
-        if (resource === 'products') return json(route, { products: db.products });
+        if (resource === 'products') return json(route, { products: db.products.filter(product => !product.deleted_at) });
         if (resource === 'outputs') return json(route, { outputs: db.outputs.filter(o => !o.deleted_at) });
     }
     if (method === 'POST' && url.searchParams.get('action') === 'upload') {
@@ -36,6 +37,7 @@ async function mockApi(route) {
             mime_type: request.headers()['content-type'], storage_path: `${type}/${id}.png`
         };
         db.assets.push(asset);
+        db.storage.add(asset.storage_path);
         if (type === 'product_box_clean' || type === 'product_only_clean') db.products.unshift(asset);
         return json(route, { asset }, 201);
     }
@@ -51,6 +53,7 @@ async function mockApi(route) {
             const id = crypto.randomUUID();
             const asset = { id, asset_type: 'output', original_filename: body.filename, mime_type: 'image/png', storage_path: `output/library/${id}.png` };
             db.assets.push(asset);
+            db.storage.add(asset.storage_path);
             return json(route, { asset }, 201);
         }
         if (body.action === 'save_template') {
@@ -83,6 +86,20 @@ async function mockApi(route) {
             db.outputs.unshift(output);
             return json(route, { output }, 201);
         }
+    }
+    if (method === 'DELETE' && url.searchParams.get('resource') === 'product') {
+        const id = url.searchParams.get('id');
+        const asset = db.assets.find(item => item.id === id);
+        if (!asset) return json(route, { error: 'Ürün varlığı bulunamadı.' }, 404);
+        const used = db.outputs.some(output => output.product_asset_id === id);
+        if (used) {
+            asset.deleted_at = now();
+            return json(route, { success: true, deleted_id: id, soft_deleted: true, physical_deleted: false, used_by_outputs: true });
+        }
+        db.assets = db.assets.filter(item => item.id !== id);
+        db.products = db.products.filter(item => item.id !== id);
+        db.storage.delete(asset.storage_path);
+        return json(route, { success: true, deleted_id: id, soft_deleted: false, physical_deleted: true, used_by_outputs: false });
     }
     return json(route, { error: 'Unhandled mock request' }, 400);
 }
@@ -137,6 +154,15 @@ async function mockApi(route) {
             await page.locator('[data-frame-key="rotation"]').press('Tab');
         }
 
+        await page.locator('.ms-layer').nth(0).click();
+        await page.locator('[data-frame-key="brightness"]').fill('35');
+        await page.locator('[data-frame-key="brightness"]').press('Tab');
+        await page.locator('[data-frame-key="contrast"]').fill('20');
+        await page.locator('[data-frame-key="contrast"]').press('Tab');
+        await page.locator('.ms-layer').nth(1).click();
+        assert.strictEqual(await page.locator('[data-frame-key="brightness"]').inputValue(), '0', 'İkinci slotun parlaklığı bağımsız kalmalı');
+        assert.strictEqual(await page.locator('[data-frame-key="contrast"]').inputValue(), '0', 'İkinci slotun kontrastı bağımsız kalmalı');
+
         const xInput = page.locator('[data-frame-key="x"]');
         const originalX = await xInput.inputValue();
         await xInput.fill('1450');
@@ -162,6 +188,7 @@ async function mockApi(route) {
         assert(db.templates[0].document.layers.slice(1, -1).every(layer => layer.type === 'product_slot'), 'Ürün slotları sahne ile maskenin arasında olmalı');
         assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => layer.assetId)).size, 1, 'Aynı ürün üç slota bağlanmalı');
         assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => `${layer.frame.x}:${layer.frame.rotation}`)).size, 3, 'Slot dönüşümleri bağımsız kalmalı');
+        assert.strictEqual(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot' && layer.frame.brightness === 35 && layer.frame.contrast === 20).length, 1, 'Görsel ayarları yalnızca değiştirilen slota kaydedilmeli');
         assert.strictEqual(db.templates[0].document.layers.at(-1).type, 'foreground_mask', 'Foreground mask ürünün önünde olmalı');
 
         await page.reload({ waitUntil: 'domcontentloaded' });
@@ -188,11 +215,29 @@ async function mockApi(route) {
         if (!await secondCard.getAttribute('class').then(value => value.includes('is-selected'))) await secondCard.click();
 
         await page.locator('[data-view="create"]').click();
-        await page.locator('.ms-product-card').first().click();
+        await page.locator('#msCreateProductInput').setInputFiles({ name: 'throwaway_product.png', mimeType: 'image/png', buffer: png });
+        await page.locator('.ms-product-card').filter({ hasText: 'throwaway_product.png' }).waitFor();
+        const throwaway = db.products.find(product => product.original_filename === 'throwaway_product.png');
+        assert(throwaway && db.storage.has(throwaway.storage_path), 'Deneme ürünü Storage mockuna yüklenmeli');
+        page.once('dialog', dialog => dialog.accept());
+        await page.locator('.ms-product-card').filter({ hasText: 'throwaway_product.png' }).locator('.ms-product-delete').click();
+        await page.getByText('Kullanılmamış ürün Storage ve ürün kütüphanesinden silindi.').waitFor();
+        assert(!db.assets.some(asset => asset.id === throwaway.id), 'Kullanılmamış ürün kaydı fiziksel silinmeli');
+        assert(!db.storage.has(throwaway.storage_path), 'Kullanılmamış ürün Storage dosyası silinmeli');
+
+        const usedProductCard = page.locator('.ms-product-card').filter({ hasText: 'second_product.png' });
+        await usedProductCard.locator('.ms-product-select').click();
+        const usedProduct = db.products.find(product => product.original_filename === 'second_product.png');
         await page.locator('#msOutputName').fill('Test Kalıcı Çıktı');
         await page.locator('#msGenerateBtn').click();
         await page.getByText('2 kalıcı çıktı oluşturuldu.').waitFor({ timeout: 30000 });
         assert.strictEqual(db.outputs.length, 2, 'İki ayrı çıktı kaydı oluşturulmalı');
+        page.once('dialog', dialog => dialog.accept());
+        await usedProductCard.locator('.ms-product-delete').click();
+        await page.getByText('Kullanılmış ürün aktif listeden kaldırıldı; eski çıktılar korundu.').waitFor();
+        assert(usedProduct.deleted_at, 'Kullanılmış ürün yumuşak silinmeli');
+        assert(db.storage.has(usedProduct.storage_path), 'Kullanılmış ürünün Storage dosyası korunmalı');
+        assert.strictEqual(await page.locator('.ms-product-card').filter({ hasText: 'second_product.png' }).count(), 0, 'Kullanılmış ürün aktif listeden kalkmalı');
 
         await page.reload({ waitUntil: 'domcontentloaded' });
         await page.locator('#menuStudio').click();

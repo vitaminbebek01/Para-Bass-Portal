@@ -79,10 +79,12 @@
 .ms-create-template small { margin-left: auto; color: var(--ms-muted); }
 .ms-create-template.is-selected { border-color: var(--ms-accent); background: #f7effb; color: var(--ms-accent-dark); }
 .ms-product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 8px; max-height: 300px; overflow-y: auto; }
-.ms-product-card { padding: 5px; border: 2px solid transparent; border-radius: 7px; background: #f3f6f8; cursor: pointer; overflow: hidden; }
+.ms-product-card { position: relative; padding: 5px; border: 2px solid transparent; border-radius: 7px; background: #f3f6f8; overflow: hidden; }
 .ms-product-card.is-selected { border-color: var(--ms-accent); background: #f7effb; }
+.ms-product-select { display: block; width: 100%; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .ms-product-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; border-radius: 5px; }
 .ms-product-card span { display: block; margin-top: 4px; overflow: hidden; color: #435464; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.ms-product-card .ms-product-delete { width: 100%; margin-top: 5px; }
 .ms-output-preview { display: flex; align-items: center; justify-content: center; margin-top: 10px; min-height: 180px; border: 1px dashed #bdc8d0; border-radius: 7px; color: var(--ms-muted); font-size: 11px; overflow: hidden; }
 .ms-output-preview { flex-wrap: wrap; gap: 6px; }
 .ms-output-preview img { width: 100%; height: auto; display: block; }
@@ -226,6 +228,8 @@
 .ms-layer.is-selected,
 .ms-template.is-selected,
 .ms-asset.is-selected { border-color: var(--ms-accent); background: #f7effb; }
+.ms-asset-select { display: flex; min-width: 0; flex: 1; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left; }
+.ms-asset .ms-product-delete { flex: 0 0 auto; }
 .ms-layer-name,
 .ms-template-name,
 .ms-asset-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

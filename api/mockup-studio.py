@@ -154,9 +154,12 @@ class handler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             resource = query.get("resource", ["template"])[0]
             item_id = require_uuid(query.get("id", [None])[0], "kayıt kimliği")
+            if resource == "product":
+                self.delete_product_asset(item_id)
+                return
             table = "mockup_templates" if resource == "template" else "mockup_outputs"
             if resource not in ("template", "output"):
-                raise ValueError("Yalnızca şablon veya çıktı silinebilir.")
+                raise ValueError("Yalnızca şablon, çıktı veya ürün silinebilir.")
             response = (
                 get_supabase().table(table)
                 .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
@@ -175,6 +178,56 @@ class handler(BaseHTTPRequestHandler):
         except Exception as error:
             self.log_error("Mockup Studio DELETE failed: %s", error)
             self.send_json(500, {"success": False, "error": str(error)})
+
+    def delete_product_asset(self, asset_id):
+        client = get_supabase()
+        response = (
+            client.table("mockup_assets")
+            .select("id,asset_scope,asset_type,storage_path,deleted_at")
+            .eq("id", asset_id)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        if not rows:
+            self.send_json(404, {"success": False, "error": "Ürün varlığı bulunamadı."})
+            return
+        asset = rows[0]
+        if asset.get("asset_scope") != "product":
+            raise ValueError("Yalnızca ürün varlıkları bu işlemle silinebilir.")
+
+        usage_response = (
+            client.table("mockup_outputs")
+            .select("id")
+            .eq("product_asset_id", asset_id)
+            .limit(1)
+            .execute()
+        )
+        used_by_outputs = bool(usage_response.data)
+        if used_by_outputs:
+            client.table("mockup_assets").update({
+                "deleted_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", asset_id).execute()
+            self.send_json(200, {
+                "success": True,
+                "deleted_id": asset_id,
+                "soft_deleted": True,
+                "physical_deleted": False,
+                "used_by_outputs": True,
+            })
+            return
+
+        # Önce veritabanı kaydını silmek, eşzamanlı bir çıktı referansı oluşursa
+        # foreign key'in işlemi durdurmasını ve Storage dosyasını korumasını sağlar.
+        client.table("mockup_assets").delete().eq("id", asset_id).execute()
+        client.storage.from_(BUCKET_NAME).remove([asset["storage_path"]])
+        self.send_json(200, {
+            "success": True,
+            "deleted_id": asset_id,
+            "soft_deleted": False,
+            "physical_deleted": True,
+            "used_by_outputs": False,
+        })
 
     def do_OPTIONS(self):
         self.send_response(204)

@@ -72,7 +72,8 @@
             storagePath: raw.storagePath || raw.storage_path,
             mimeType: raw.mimeType || raw.mime_type,
             width: raw.width || null,
-            height: raw.height || null
+            height: raw.height || null,
+            hidden: Boolean(raw.hidden)
         };
     }
 
@@ -86,6 +87,7 @@
             if (layer.type === 'slot') layer.type = 'product_slot';
             if (!layer.frame && layer.slot) layer.frame = layer.slot;
             layer.frame = Object.assign(defaultFrame(), layer.frame || {});
+            layer.frame.shadow = Object.assign(defaultFrame().shadow, layer.frame.shadow || {});
             layer.visible = layer.visible !== false;
             layer.locked = Boolean(layer.locked);
             return layer;
@@ -96,9 +98,29 @@
     function defaultFrame() {
         return {
             x: 1000, y: 1000, width: 700, height: 700, rotation: 0,
-            opacity: 1, blur: 0,
+            opacity: 1, blur: 0, brightness: 0, contrast: 0, saturation: 0, hue: 0, sharpen: 0,
             shadow: { enabled: false, color: '#000000', opacity: 0.35, blur: 24, offsetX: 12, offsetY: 18 }
         };
+    }
+
+    function subtleSharpen(imageData) {
+        const amount = Math.max(0, Math.min(0.2, Number(this.getAttr('mockupSharpen') || 0) / 100));
+        if (!amount) return;
+        const data = imageData.data;
+        const source = new Uint8ClampedArray(data);
+        const width = imageData.width;
+        const height = imageData.height;
+        for (let y = 1; y < height - 1; y += 1) {
+            for (let x = 1; x < width - 1; x += 1) {
+                const offset = (y * width + x) * 4;
+                for (let channel = 0; channel < 3; channel += 1) {
+                    const center = source[offset + channel] * (1 + 4 * amount);
+                    const neighbors = source[offset - 4 + channel] + source[offset + 4 + channel]
+                        + source[offset - width * 4 + channel] + source[offset + width * 4 + channel];
+                    data[offset + channel] = Math.max(0, Math.min(255, center - neighbors * amount));
+                }
+            }
+        }
     }
 
     function setStatus(message, error) {
@@ -563,9 +585,9 @@
     function preferredEditorProduct() {
         if (!state.editor) return null;
         const assets = state.editor.document.assets || [];
-        return assets.find((a) => a.id === state.selectedAssetId && PRODUCT_TYPES.includes(a.type))
-            || assets.find((a) => a.type === 'product_box_clean')
-            || assets.find((a) => a.type === 'product_only_clean') || null;
+        return assets.find((a) => !a.hidden && a.id === state.selectedAssetId && PRODUCT_TYPES.includes(a.type))
+            || assets.find((a) => !a.hidden && a.type === 'product_box_clean')
+            || assets.find((a) => !a.hidden && a.type === 'product_only_clean') || null;
     }
 
     async function addProductSlot(existingBefore) {
@@ -626,16 +648,56 @@
     function renderEditorAssets() {
         const list = document.getElementById('msEditorAssetList');
         if (!list || !state.editor) return;
-        const assets = state.editor.document.assets.filter((a) => PRODUCT_TYPES.includes(a.type));
+        const assets = state.editor.document.assets.filter((a) => PRODUCT_TYPES.includes(a.type) && !a.hidden);
         list.innerHTML = assets.length ? '' : '<div class="ms-empty">Ürün PNG’si yok.</div>';
         assets.forEach((asset) => {
-            const row = document.createElement('button');
+            const row = document.createElement('div');
             row.className = 'ms-asset' + (asset.id === state.selectedAssetId ? ' is-selected' : '');
-            row.innerHTML = `<span>📦</span><span class="ms-asset-name">${esc(asset.name)}</span>`;
-            row.addEventListener('click', () => { state.selectedAssetId = asset.id; renderEditorAssets(); updateSlotBindingButton(); });
+            row.innerHTML = `<button type="button" class="ms-asset-select"><span>📦</span><span class="ms-asset-name">${esc(asset.name)}</span></button><button type="button" class="ms-icon-btn ms-product-delete" title="Ürünü sil" aria-label="${esc(asset.name)} ürününü sil">🗑️</button>`;
+            row.querySelector('.ms-asset-select').addEventListener('click', () => { state.selectedAssetId = asset.id; renderEditorAssets(); updateSlotBindingButton(); });
+            row.querySelector('.ms-product-delete').addEventListener('click', () => deleteProductAsset(asset));
             list.appendChild(row);
         });
         updateSlotBindingButton();
+    }
+
+    async function deleteProductAsset(asset) {
+        if (!window.confirm(`“${asset.name}” aktif ürün kütüphanesinden silinsin mi? Daha önce kullanılmış çıktılar korunacaktır.`)) return;
+        setBusy(true);
+        try {
+            const result = await api(API + '?resource=product&id=' + encodeURIComponent(asset.id), { method: 'DELETE' });
+            state.products = state.products.filter((item) => item.id !== asset.id);
+            if (state.selectedAssetId === asset.id) state.selectedAssetId = null;
+            if (state.createProductId === asset.id) state.createProductId = null;
+            if (state.editor) {
+                const editorAsset = state.editor.document.assets.find((item) => item.id === asset.id);
+                if (editorAsset && result.physical_deleted) {
+                    state.editor.document.assets = state.editor.document.assets.filter((item) => item.id !== asset.id);
+                    state.editor.document.layers.forEach((layer) => {
+                        if (layer.assetId !== asset.id) return;
+                        layer.assetId = null;
+                        const node = state.nodes.get(layer.id);
+                        if (node) node.destroy();
+                        state.nodes.delete(layer.id);
+                    });
+                } else if (editorAsset) {
+                    editorAsset.hidden = true;
+                }
+            }
+            renderEditorAssets();
+            renderCreateProducts();
+            renderLayers();
+            renderInspector();
+            updateSlotBindingButton();
+            if (state.stage) state.stage.batchDraw();
+            setStatus(result.physical_deleted
+                ? 'Kullanılmamış ürün Storage ve ürün kütüphanesinden silindi.'
+                : 'Kullanılmış ürün aktif listeden kaldırıldı; eski çıktılar korundu.', false);
+        } catch (error) {
+            setStatus('Ürün silinemedi: ' + error.message, true);
+        } finally {
+            setBusy(false);
+        }
     }
 
     function renderLayers() {
@@ -743,19 +805,35 @@
     }
     function makeImageNode(image, layer, frame) {
         const node = new Konva.Image({ image, x: frame.x, y: frame.y, width: frame.width, height: frame.height, offsetX: frame.width / 2, offsetY: frame.height / 2, rotation: frame.rotation || 0, opacity: frame.opacity == null ? 1 : frame.opacity, visible: layer.visible !== false, draggable: !layer.locked && layer.type !== 'scene_background' });
-        applyEffects(node, frame); return node;
+        applyEffects(node, frame, layer.type); return node;
     }
-    function applyEffects(node, frame) {
+    function applyEffects(node, frame, layerType) {
         const shadow = frame.shadow || defaultFrame().shadow;
         node.opacity(frame.opacity == null ? 1 : frame.opacity); node.shadowEnabled(Boolean(shadow.enabled));
         node.shadowColor(shadow.color || '#000'); node.shadowOpacity(shadow.opacity == null ? .35 : shadow.opacity); node.shadowBlur(shadow.blur || 0); node.shadowOffset({ x: shadow.offsetX || 0, y: shadow.offsetY || 0 });
         node.clearCache();
-        if ((frame.blur || 0) > 0) { node.cache({ pixelRatio: 1 }); node.filters([Konva.Filters.Blur]); node.blurRadius(frame.blur); }
+        const filters = [];
+        if (layerType === 'product_slot') {
+            const brightness = Number(frame.brightness || 0);
+            const contrast = Number(frame.contrast || 0);
+            const saturation = Number(frame.saturation || 0);
+            const hue = Number(frame.hue || 0);
+            const sharpen = Number(frame.sharpen || 0);
+            if (brightness) { node.brightness(brightness / 100); filters.push(Konva.Filters.Brighten); }
+            if (contrast) { node.contrast(contrast); filters.push(Konva.Filters.Contrast); }
+            if (saturation || hue) {
+                node.hue(hue); node.saturation(saturation / 100); node.luminance(0);
+                filters.push(Konva.Filters.HSL);
+            }
+            if (sharpen) { node.setAttr('mockupSharpen', sharpen); filters.push(subtleSharpen); }
+        }
+        if ((frame.blur || 0) > 0) { node.blurRadius(frame.blur); filters.push(Konva.Filters.Blur); }
+        if (filters.length) { node.cache({ pixelRatio: 1 }); node.filters(filters); }
         else node.filters([]);
     }
     function updateFrameFromNode(layer, node, transformed) {
         const f = layer.frame; f.x = Math.round(node.x()); f.y = Math.round(node.y()); f.rotation = Math.round(node.rotation() * 10) / 10;
-        if (transformed) { f.width = Math.max(40, Math.round(node.width() * node.scaleX())); f.height = Math.max(40, Math.round(node.height() * node.scaleY())); node.scale({ x: 1, y: 1 }); node.size({ width: f.width, height: f.height }); node.offset({ x: f.width / 2, y: f.height / 2 }); applyEffects(node, f); }
+        if (transformed) { f.width = Math.max(40, Math.round(node.width() * node.scaleX())); f.height = Math.max(40, Math.round(node.height() * node.scaleY())); node.scale({ x: 1, y: 1 }); node.size({ width: f.width, height: f.height }); node.offset({ x: f.width / 2, y: f.height / 2 }); applyEffects(node, f, layer.type); }
     }
     function syncOrder() {
         state.baseRect.moveToBottom(); state.editor.document.layers.forEach((layer, i) => { const node = state.nodes.get(layer.id); if (node) node.zIndex(i + 1); }); state.contentLayer.batchDraw(); renderSelectionMarkers();
@@ -800,11 +878,19 @@
         const layer = state.editor.document.layers.find((l) => l.id === state.selectedLayerId);
         if (!layer) { root.innerHTML = '<div class="ms-empty">Bir katman seçin.</div>'; return; }
         const f = layer.frame;
+        const productAdjustments = layer.type === 'product_slot' ? `<div class="ms-section"><h4>ÜRÜN GÖRSEL AYARLARI</h4>${rangeField('Parlaklık','brightness',f.brightness||0,-100,100,'%')}${rangeField('Kontrast','contrast',f.contrast||0,-100,100,'%')}${rangeField('Doygunluk','saturation',f.saturation||0,-100,100,'%')}${rangeField('Hue','hue',f.hue||0,-180,180,'°')}${rangeField('Keskinlik','sharpen',f.sharpen||0,0,20,'%')}<button id="msResetProductVisuals" class="ms-btn ms-full">Görsel ayarları sıfırla</button><small class="ms-help">Kaynak ürün dosyası değişmez; ayarlar yalnızca bu slota uygulanır.</small></div>` : '';
         root.innerHTML = `<h4>${esc(layer.name)}</h4>${numberField('X','x',f.x,-2000,4000)}${numberField('Y','y',f.y,-2000,4000)}${numberField('Genişlik','width',f.width,40,4000)}${numberField('Yükseklik','height',f.height,40,4000)}${rangeField('Dönüş','rotation',f.rotation||0,-180,180,'°')}${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}
+            ${productAdjustments}
             <div class="ms-section"><h4>GÖLGE</h4><label class="ms-check"><input id="msShadowToggle" type="checkbox" ${f.shadow.enabled?'checked':''}> Gölgeyi aç</label>${rangeField('Gölge blur','shadowBlur',f.shadow.blur||0,0,120,' px')}${rangeField('Gölge opaklığı','shadowOpacity',Math.round((f.shadow.opacity==null?.35:f.shadow.opacity)*100),0,100,'%')}${numberField('Gölge X','shadowOffsetX',f.shadow.offsetX||0,-300,300)}${numberField('Gölge Y','shadowOffsetY',f.shadow.offsetY||0,-300,300)}</div>
             ${layer.type==='product_slot'?'<button id="msDuplicateLayer" class="ms-btn ms-btn-primary ms-full">Slotu çoğalt</button>':''}<button id="msRemoveLayer" class="ms-btn ms-btn-danger ms-full">Katmanı sil</button>`;
         root.querySelectorAll('[data-frame-key]').forEach(bindFrameInput);
         document.getElementById('msShadowToggle').addEventListener('change', (e) => { const before=editorSnapshot(); f.shadow.enabled=e.target.checked; updateNode(layer); recordHistory(before); });
+        const reset = document.getElementById('msResetProductVisuals');
+        if (reset) reset.addEventListener('click', () => {
+            const before = editorSnapshot();
+            Object.assign(f, { opacity: 1, blur: 0, brightness: 0, contrast: 0, saturation: 0, hue: 0, sharpen: 0, shadow: clone(defaultFrame().shadow) });
+            updateNode(layer); recordHistory(before); renderInspector();
+        });
         const dup = document.getElementById('msDuplicateLayer'); if (dup) dup.addEventListener('click', () => duplicateLayer(layer));
         document.getElementById('msRemoveLayer').addEventListener('click', () => removeLayer(layer));
     }
@@ -822,7 +908,7 @@
         });
         input.addEventListener('change', () => { recordHistory(before); before=null; });
     }
-    function updateNode(layer) { const node=state.nodes.get(layer.id); if(!node)return; const f=layer.frame; node.position({x:f.x,y:f.y}); node.size({width:f.width,height:f.height}); node.offset({x:f.width/2,y:f.height/2}); node.rotation(f.rotation||0); applyEffects(node,f); state.transformer.forceUpdate(); renderSelectionMarkers(); state.stage.batchDraw(); }
+    function updateNode(layer) { const node=state.nodes.get(layer.id); if(!node)return; const f=layer.frame; node.position({x:f.x,y:f.y}); node.size({width:f.width,height:f.height}); node.offset({x:f.width/2,y:f.height/2}); node.rotation(f.rotation||0); applyEffects(node,f,layer.type); state.transformer.forceUpdate(); renderSelectionMarkers(); state.stage.batchDraw(); }
     async function duplicateLayer(layer) { const before=editorSnapshot(), copy=clone(layer); copy.id=uid(); copy.name=layer.name+' Kopya'; copy.frame.x+=60; copy.frame.y+=60; state.editor.document.layers.push(copy); state.selectedLayerIds=new Set([copy.id]); recordHistory(before); await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); }
     function removeLayer(layer) { const before=editorSnapshot(), index=state.editor.document.layers.findIndex((l)=>l.id===layer.id); if(index<0)return; const node=state.nodes.get(layer.id); if(node)node.destroy(); state.nodes.delete(layer.id); state.editor.document.layers.splice(index,1); state.selectedLayerIds.delete(layer.id); state.selectedLayerId=[...state.selectedLayerIds].pop()||null; state.transformer.nodes([]); recordHistory(before); state.stage.batchDraw(); renderEditor(); }
 
@@ -898,7 +984,7 @@
         if(!templateId){select.innerHTML='<option value="">Önce şablon seçin</option>';return;}
         try{const data=await api(API+'?resource=versions&template_id='+encodeURIComponent(templateId));state.createVersions=data.versions||[];select.innerHTML=state.createVersions.map(v=>`<option value="${v.id}">v${v.version_number} — ${esc(formatDate(v.created_at))}</option>`).join('');state.createVersionId=state.createVersions[0]?state.createVersions[0].id:null;updateDefaultOutputName();}catch(error){setStatus('Sürümler alınamadı: '+error.message,true);}
     }
-    function renderCreateProducts(){const root=document.getElementById('msCreateProducts');if(!root)return;const products=state.products.filter(a=>PRODUCT_TYPES.includes(a.type));root.innerHTML=products.length?'':'<div class="ms-empty">Temiz ürün PNG’si yok.</div>';products.forEach(asset=>{const card=document.createElement('button');card.className='ms-product-card'+(asset.id===state.createProductId?' is-selected':'');card.innerHTML=`<img src="${assetUrl(asset.storagePath)}" alt=""><span>${esc(asset.name)}</span>`;card.addEventListener('click',()=>{state.createProductId=asset.id;renderCreateProducts();updateDefaultOutputName();});root.appendChild(card);});}
+    function renderCreateProducts(){const root=document.getElementById('msCreateProducts');if(!root)return;const products=state.products.filter(a=>PRODUCT_TYPES.includes(a.type));root.innerHTML=products.length?'':'<div class="ms-empty">Temiz ürün PNG’si yok.</div>';products.forEach(asset=>{const card=document.createElement('article');card.className='ms-product-card'+(asset.id===state.createProductId?' is-selected':'');card.innerHTML=`<button type="button" class="ms-product-select"><img src="${assetUrl(asset.storagePath)}" alt=""><span>${esc(asset.name)}</span></button><button type="button" class="ms-product-delete ms-btn ms-btn-danger ms-btn-small" aria-label="${esc(asset.name)} ürününü sil">Sil</button>`;card.querySelector('.ms-product-select').addEventListener('click',()=>{state.createProductId=asset.id;renderCreateProducts();updateDefaultOutputName();});card.querySelector('.ms-product-delete').addEventListener('click',()=>deleteProductAsset(asset));root.appendChild(card);});}
     async function createProductUpload(event){const file=event.target.files[0];event.target.value='';if(!file)return;if(file.type!=='image/png')return setStatus('Ürün dosyası şeffaf PNG olmalıdır.',true);const type=document.getElementById('msCreateProductType').value;const asset=await uploadFile(file,type,null);if(!asset)return;state.products.unshift(asset);state.createProductId=asset.id;renderCreateProducts();updateDefaultOutputName();}
     function updateDefaultOutputName(){const input=document.getElementById('msOutputName');if(!input||input.value.trim())return;const template=state.templates.find(t=>state.selectedTemplateIds.has(t.id));const product=state.products.find(p=>p.id===state.createProductId);if(template&&product)input.value=(state.selectedTemplateIds.size>1?'Mockup Paketi':template.name)+' – '+product.name.replace(/\.[^.]+$/,'');}
     async function latestVersionFor(template){
