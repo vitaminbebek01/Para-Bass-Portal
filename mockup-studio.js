@@ -10,6 +10,11 @@
         templates: [],
         products: [],
         outputs: [],
+        slotPresets: [],
+        editingPresetId: null,
+        selectedOutputIds: new Set(),
+        outputUrlCache: new Map(),
+        lightboxIndex: -1,
         editor: null,
         stage: null,
         contentLayer: null,
@@ -349,6 +354,7 @@
             <div id="msUploadProgress" class="ms-upload-progress" hidden><div class="ms-upload-progress-head"><span id="msUploadProgressLabel">Dosya hazırlanıyor…</span><strong id="msUploadProgressValue">0%</strong></div><div class="ms-upload-progress-track"><span id="msUploadProgressBar"></span></div></div>
             <nav class="ms-workspace-nav">
                 <button data-view="templates" class="ms-workspace-tab is-active">Şablonlar</button>
+                <button data-view="presets" class="ms-workspace-tab">Slot Dizilimleri</button>
                 <button data-view="editor" class="ms-workspace-tab">Şablon Editörü</button>
                 <button data-view="prompt" class="ms-workspace-tab">Prompt Oluşturucu</button>
                 <button data-view="create" class="ms-workspace-tab">Ürünle Oluştur</button>
@@ -356,6 +362,7 @@
             </nav>
 
             <section id="msViewTemplates" class="ms-view"></section>
+            <section id="msViewPresets" class="ms-view" hidden></section>
 
             <section id="msViewEditor" class="ms-view" hidden>
                 <div class="ms-toolbar">
@@ -377,6 +384,14 @@
                                 <small class="ms-tool-help">Hazır PNG yoksa sahnedeki alanı seçip ürünün önüne getirir; örneğin açık kutunun ön kenarı.</small>
                                 <label class="ms-upload-label">Graphic PNG <span class="ms-info" title="Ürünün üstünde görünecek dekoratif, logo veya yazı katmanıdır.">ⓘ</span><input id="msGraphicInput" type="file" accept="image/png,image/jpeg,image/webp"></label>
                                 <small class="ms-tool-help">Ürünün üstünde görünecek dekoratif, logo veya yazı katmanı.</small>
+                            </div>
+                            <div class="ms-section">
+                                <h4>SLOT DİZİLİMİ</h4>
+                                <select id="msPresetSelect" class="ms-select"><option value="">Dizilim seçin</option></select>
+                                <select id="msPresetMode" class="ms-select"><option value="replace">Mevcut slotları değiştir</option><option value="append">Mevcut slotlara ekle</option></select>
+                                <button id="msApplyPresetBtn" class="ms-btn ms-btn-primary ms-full">Slot Dizilimi Uygula</button>
+                                <button id="msSavePresetBtn" class="ms-btn ms-full">Slot Dizilimi Olarak Kaydet</button>
+                                <small class="ms-help">Yalnızca slot konumları, boyutları, dönüşleri ve perspektifleri kaydedilir.</small>
                             </div>
                             <div class="ms-section">
                                 <h4>ÖRNEK ÜRÜN ÖNİZLEMESİ</h4>
@@ -414,6 +429,7 @@
             <section id="msViewPrompt" class="ms-view" hidden></section>
             <section id="msViewCreate" class="ms-view" hidden></section>
             <section id="msViewOutputs" class="ms-view" hidden></section>
+            <div id="msOutputLightbox" class="ms-lightbox" hidden></div>
             <div id="msRenderHost" style="position:fixed; left:-10000px; top:0; width:2000px; height:2000px;"></div>
         `;
     }
@@ -431,6 +447,8 @@
         document.getElementById('msUndoBtn').addEventListener('click', undo);
         document.getElementById('msRedoBtn').addEventListener('click', redo);
         document.getElementById('msSaveBtn').addEventListener('click', saveEditor);
+        document.getElementById('msApplyPresetBtn').addEventListener('click', applySelectedPreset);
+        document.getElementById('msSavePresetBtn').addEventListener('click', saveCurrentSlotPreset);
         document.getElementById('msSceneInput').addEventListener('change', (e) => editorUpload(e, 'scene_background'));
         document.getElementById('msMaskInput').addEventListener('change', (e) => editorUpload(e, 'foreground_mask'));
         document.getElementById('msPolygonMaskBtn').addEventListener('click', addPolygonMask);
@@ -485,6 +503,7 @@
         createStage();
         newEditor(false);
         await loadTemplates();
+        await loadSlotPresets();
         await loadProducts();
         await loadOutputs();
         showView('templates');
@@ -492,11 +511,13 @@
 
     function showView(view) {
         state.view = view;
+        if (view !== 'outputs') closeOutputLightbox();
         document.querySelectorAll('.ms-workspace-tab').forEach((button) => button.classList.toggle('is-active', button.dataset.view === view));
-        ['templates', 'editor', 'prompt', 'create', 'outputs'].forEach((name) => {
+        ['templates', 'presets', 'editor', 'prompt', 'create', 'outputs'].forEach((name) => {
             document.getElementById('msView' + name[0].toUpperCase() + name.slice(1)).hidden = name !== view;
         });
         if (view === 'templates') renderTemplateLibrary();
+        if (view === 'presets') renderSlotPresetLibrary();
         if (view === 'editor') { renderEditor(); window.setTimeout(resizeStage, 0); }
         if (view === 'prompt') renderPromptView();
         if (view === 'create') renderCreateView();
@@ -531,6 +552,53 @@
         } catch (error) { setStatus('Çıktılar alınamadı: ' + error.message, true); }
         renderOutputs();
     }
+
+    function normalizePreset(raw) {
+        return { id: raw.id, name: raw.name || 'Slot Dizilimi', isSystem: Boolean(raw.is_system), slots: Array.isArray(raw.slots) ? raw.slots : [], createdAt: raw.created_at };
+    }
+
+    async function loadSlotPresets() {
+        try { const data = await api(API + '?resource=slot_presets'); state.slotPresets = (data.presets || []).map(normalizePreset); }
+        catch (error) { setStatus('Slot dizilimleri alınamadı: ' + error.message, true); }
+        renderPresetSelect(); renderSlotPresetLibrary();
+    }
+
+    function renderPresetSelect() {
+        const select = document.getElementById('msPresetSelect'); if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="">Dizilim seçin</option>' + state.slotPresets.map((preset) => `<option value="${preset.id}">${esc(preset.name)} • ${preset.slots.length} slot</option>`).join('');
+        if (state.slotPresets.some((preset) => preset.id === current)) select.value = current;
+    }
+
+    function presetPreview(preset) {
+        return `<div class="ms-preset-preview">${preset.slots.map((slot, index) => { const frame=slot.frame||slot;const left=Math.max(0,Math.min(92,(Number(frame.x)||1000)/SIZE*100));const top=Math.max(0,Math.min(92,(Number(frame.y)||1000)/SIZE*100));const width=Math.max(5,Math.min(80,(Number(frame.width)||400)/SIZE*100));const height=Math.max(5,Math.min(80,(Number(frame.height)||400)/SIZE*100));return `<span title="Slot ${index+1}" class="${frame.perspective&&frame.perspective.enabled?'is-perspective':''}" style="left:${left}%;top:${top}%;width:${width}%;height:${height}%;transform:translate(-50%,-50%) rotate(${Number(frame.rotation)||0}deg)">${index+1}</span>`;}).join('')}</div>`;
+    }
+
+    function renderSlotPresetLibrary() {
+        const root=document.getElementById('msViewPresets');if(!root)return;
+        root.innerHTML=`<div class="ms-view-header"><div><h3>Slot Dizilimleri</h3><p>Sahne ve ürünlerden bağımsız, tekrar kullanılabilir slot geometrileri.</p></div><button id="msPresetNewFromEditor" class="ms-btn ms-btn-primary">Editördeki Dizilimi Kaydet</button></div><div id="msPresetGrid" class="ms-card-grid"></div>`;
+        document.getElementById('msPresetNewFromEditor').addEventListener('click',saveCurrentSlotPreset);
+        const grid=document.getElementById('msPresetGrid');
+        if(!state.slotPresets.length){grid.innerHTML='<div class="ms-empty-card">Henüz slot dizilimi yok.</div>';return;}
+        state.slotPresets.forEach((preset)=>{const card=document.createElement('article');card.className='ms-library-card ms-preset-card';card.innerHTML=`${presetPreview(preset)}<div class="ms-card-content"><h4>${esc(preset.name)}</h4><p>${preset.slots.length} slot ${preset.isSystem?'• Hazır':''}</p><div class="ms-card-actions"><button data-action="open" class="ms-btn ms-btn-primary ms-btn-small">Aç/Düzenle</button><button data-action="duplicate" class="ms-btn ms-btn-small">Çoğalt</button><button data-action="rename" class="ms-btn ms-btn-small">Adlandır</button><button data-action="delete" class="ms-btn ms-btn-danger ms-btn-small">Sil</button></div></div>`;
+            card.querySelector('[data-action="open"]').addEventListener('click',()=>openSlotPreset(preset));card.querySelector('[data-action="duplicate"]').addEventListener('click',()=>duplicateSlotPreset(preset));card.querySelector('[data-action="rename"]').addEventListener('click',()=>renameSlotPreset(preset));card.querySelector('[data-action="delete"]').addEventListener('click',()=>deleteSlotPreset(preset));grid.appendChild(card);});
+    }
+
+    async function applySlotPreset(preset, mode) {
+        if(!preset||!preset.slots.length)return setStatus('Uygulanacak slot dizilimi bulunamadı.',true);
+        const before=editorSnapshot();
+        if(mode==='replace'){state.editor.document.layers=state.editor.document.layers.filter((layer)=>layer.type!=='product_slot');state.selectedLayerIds.clear();}
+        let insertAt=state.editor.document.layers.findIndex((layer)=>['foreground_mask','foreground_polygon','optional_graphic','optional_text_or_graphic'].includes(layer.type));if(insertAt<0)insertAt=state.editor.document.layers.length;
+        const added=preset.slots.map((slot,index)=>{const layer=makeLayer('product_slot',null,'Slot '+(state.editor.document.layers.filter((item)=>item.type==='product_slot').length+index+1));const source=slot.frame||slot;Object.assign(layer.frame,{x:Number(source.x),y:Number(source.y),width:Number(source.width),height:Number(source.height),rotation:Number(source.rotation)||0});if(source.perspective)layer.frame.perspective=normalizePerspective(source.perspective,layer.frame);return layer;});
+        state.editor.document.layers.splice(insertAt,0,...added);state.selectedLayerId=added[added.length-1].id;state.selectedLayerIds=new Set(added.map((layer)=>layer.id));recordHistory(before);await rebuildCanvas();renderEditor();setStatus(`${preset.name}: ${added.length} slot ${mode==='replace'?'uygulandı':'mevcut slotlara eklendi'}.`,false);
+    }
+
+    function applySelectedPreset(){const preset=state.slotPresets.find((item)=>item.id===document.getElementById('msPresetSelect').value);applySlotPreset(preset,document.getElementById('msPresetMode').value);}
+    async function openSlotPreset(preset){newEditor(false);state.editingPresetId=preset.id;await applySlotPreset(preset,'replace');showView('editor');setStatus(`${preset.name} düzenlemek için açıldı. Kaydet düğmesi dizilimi günceller.`,false);}
+    async function saveCurrentSlotPreset(){const slots=state.editor&&state.editor.document.layers.filter((layer)=>layer.type==='product_slot');if(!slots||!slots.length)return setStatus('Kaydedilecek en az bir slot olmalıdır.',true);const editing=state.slotPresets.find((preset)=>preset.id===state.editingPresetId);const name=window.prompt('Slot diziliminin adı:',editing?editing.name:'Yeni Slot Dizilimi');if(name===null)return;if(!name.trim())return setStatus('Slot dizilimi adı zorunludur.',true);const payloadSlots=slots.map((layer,index)=>({order:index,frame:{x:layer.frame.x,y:layer.frame.y,width:layer.frame.width,height:layer.frame.height,rotation:layer.frame.rotation||0,...(layer.frame.perspective?{perspective:clone(layer.frame.perspective)}:{})}}));try{const id=editing?editing.id:uid();await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save_slot_preset',id,name:name.trim(),slots:payloadSlots})});state.editingPresetId=id;await loadSlotPresets();setStatus('Slot dizilimi kalıcı olarak kaydedildi.',false);}catch(error){setStatus('Slot dizilimi kaydedilemedi: '+error.message,true);}}
+    async function duplicateSlotPreset(preset){const name=window.prompt('Kopya dizilimin adı:',preset.name+' Kopya');if(name===null)return;try{await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'duplicate_slot_preset',id:preset.id,name:name.trim()})});await loadSlotPresets();}catch(error){setStatus('Slot dizilimi çoğaltılamadı: '+error.message,true);}}
+    async function renameSlotPreset(preset){const name=window.prompt('Slot diziliminin yeni adı:',preset.name);if(name===null)return;try{await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'rename_slot_preset',id:preset.id,name:name.trim()})});await loadSlotPresets();}catch(error){setStatus('Slot dizilimi yeniden adlandırılamadı: '+error.message,true);}}
+    async function deleteSlotPreset(preset){if(!window.confirm(`“${preset.name}” slot dizilimi silinsin mi?`))return;try{await api(API+'?resource=slot_preset&id='+encodeURIComponent(preset.id),{method:'DELETE'});if(state.editingPresetId===preset.id)state.editingPresetId=null;await loadSlotPresets();setStatus('Slot dizilimi silindi.',false);}catch(error){setStatus('Slot dizilimi silinemedi: '+error.message,true);}}
 
     function renderTemplateLibrary() {
         const root = document.getElementById('msViewTemplates');
@@ -584,6 +652,7 @@
 
     function newEditor(openView) {
         state.editor = blankEditor();
+        state.editingPresetId = null;
         state.polygonDrawingLayerId = null;
         state.previewAssetId = null;
         state.slotPreviewAssetIds = new Map();
@@ -605,6 +674,7 @@
                 id: item.id, name: item.name, currentVersion: item.current_version,
                 persisted: true, document: normalizeDocument(item.document)
             };
+            state.editingPresetId = null;
             state.selectedLayerId = null;
             state.selectedLayerIds = new Set();
             state.polygonDrawingLayerId = null;
@@ -660,6 +730,7 @@
         renderEditorAssets();
         renderLayers();
         renderInspector();
+        renderPresetSelect();
         updateHistoryButtons();
     }
 
@@ -1233,7 +1304,7 @@
         const perspectiveEnabled = Boolean(isProduct && f.perspective && f.perspective.enabled);
         const transformFields = perspectiveEnabled || isPolygon ? '' : `${numberField('X','x',f.x,-2000,4000)}${numberField('Y','y',f.y,-2000,4000)}${numberField('Genişlik','width',f.width,40,4000)}${numberField('Yükseklik','height',f.height,40,4000)}${rangeField('Dönüş','rotation',f.rotation||0,-180,180,'°')}`;
         const previewAsset = isProduct ? resolveEditorLayerAsset(layer) : null;
-        const productAdjustments = isProduct ? `<div class="ms-product-controls"><h4>ÜRÜN GÖRSEL AYARLARI</h4><div class="ms-selected-product-preview">${previewAsset?`<img src="${assetUrl(previewAsset.storagePath)}" alt="${esc(previewAsset.name)}"><span>${esc(previewAsset.name)}</span>`:'<span>Örnek ürün seçilmedi</span>'}</div>${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}${rangeField('Parlaklık','brightness',f.brightness||0,-100,100,'%')}${rangeField('Kontrast','contrast',f.contrast||0,-100,100,'%')}${rangeField('Doygunluk','saturation',f.saturation||0,-100,100,'%')}${rangeField('Hue','hue',f.hue||0,-180,180,'°')}${rangeField('Keskinlik','sharpen',f.sharpen||0,0,20,'%')}<button id="msResetProductVisuals" class="ms-btn ms-full">Tüm ürün ayarlarını sıfırla</button><small class="ms-help">Slider veya sayı kutusunu kullanın. Shift + yön tuşu 0,1 hassasiyetle ayarlar.</small></div>` : '';
+        const productAdjustments = isProduct ? `<div class="ms-product-controls"><h4>ÜRÜN GÖRSEL AYARLARI</h4><div class="ms-selected-product-preview">${previewAsset?`<img src="${assetUrl(previewAsset.storagePath)}" alt="${esc(previewAsset.name)}"><span>${esc(previewAsset.name)}</span>`:'<span>Örnek ürün seçilmedi</span>'}</div>${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}${rangeField('Parlaklık','brightness',f.brightness||0,-100,100,'%')}${rangeField('Kontrast','contrast',f.contrast||0,-100,100,'%')}${rangeField('Doygunluk','saturation',f.saturation||0,-100,100,'%')}${rangeField('Hue','hue',f.hue||0,-180,180,'°')}${rangeField('Keskinlik','sharpen',f.sharpen||0,0,20,'%')}<button id="msResetProductVisuals" class="ms-btn ms-full">Tüm ürün ayarlarını sıfırla</button><small class="ms-help">Normal adım 0,5; dönüş ve yüzde opaklık 1’dir. Shift + yön tuşu 0,1 hassasiyetle ayarlar.</small></div>` : '';
         const perspectiveTools = isProduct ? `<div class="ms-section"><h4>PERSPEKTİF SLOTU</h4><label class="ms-check"><input id="msPerspectiveToggle" type="checkbox" ${perspectiveEnabled?'checked':''}> Dört köşeli perspektifi aç</label>${perspectiveEnabled ? `${rangeField('Güvenli iç boşluk','smartPadding',(f.smartFit&&f.smartFit.padding)||0,0,30,'%')}<button id="msSmartPlaceBtn" class="ms-btn ms-btn-primary ms-full">Akıllı yerleştir</button><button id="msResetPerspectiveBtn" class="ms-btn ms-full">Köşeleri sıfırla</button><small class="ms-help">Mor köşeleri tuval üzerinde sürükleyin. Akıllı yerleştirme şeffaf kenarları algılar.</small>` : '<small class="ms-help">Açıldığında mevcut konum ve dönüş dört düzenlenebilir köşeye çevrilir.</small>'}</div>` : '';
         const polygonTools = isPolygon ? `<div class="ms-section"><h4>POLİGON MASKESİ</h4><p class="ms-help">${layer.geometry.points.length} nokta • ${layer.geometry.closed?'Kapalı':'Çiziliyor'}</p><button id="msPolygonDrawBtn" class="ms-btn ms-full">Nokta eklemeye devam et</button><button id="msPolygonCloseBtn" class="ms-btn ms-btn-primary ms-full" ${layer.geometry.points.length<3?'disabled':''}>Poligonu kapat</button><button id="msPolygonUndoPointBtn" class="ms-btn ms-full" ${!layer.geometry.points.length?'disabled':''}>Son noktayı sil</button><button id="msPolygonResetBtn" class="ms-btn ms-btn-danger ms-full">Poligonu sıfırla</button></div>` : '';
         const commonVisuals = isProduct ? '' : `${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}`;
@@ -1316,8 +1387,9 @@
         refreshSpecialNode(layer); renderInspector(); renderSelectionMarkers(); setStatus('Poligon sıfırlandı; tuvale tıklayarak yeniden çizin.', false);
     }
     const CONTROL_DEFAULTS = { opacity:100, blur:0, brightness:0, contrast:0, saturation:0, hue:0, sharpen:0, rotation:0, smartPadding:0, shadowAngle:56, shadowDistance:22, shadowOffsetX:12, shadowOffsetY:18, shadowBlur:24, shadowOpacity:35, shadowColor:'#000000' };
-    function numberField(label,key,value,min,max) { return `<div class="ms-field"><label>${label}</label><div class="ms-control-inputs"><input data-frame-key="${key}" type="number" step="0.1" min="${min}" max="${max}" value="${Math.round(value*10)/10}"><button type="button" class="ms-control-reset" data-reset-frame-key="${key}">Sıfırla</button></div></div>`; }
-    function rangeField(label,key,value,min,max,suffix) { return `<div class="ms-field"><label><span>${label}</span><span class="ms-field-value">${Math.round(value*10)/10}${suffix}</span></label><div class="ms-control-inputs"><input data-frame-key="${key}" data-suffix="${suffix}" type="range" step="0.1" min="${min}" max="${max}" value="${value}"><input data-frame-key="${key}" data-suffix="${suffix}" class="ms-control-number" type="number" step="0.1" min="${min}" max="${max}" value="${Math.round(value*10)/10}"><button type="button" class="ms-control-reset" data-reset-frame-key="${key}">Sıfırla</button></div></div>`; }
+    function controlStep(key){return ['rotation','shadowAngle','hue','opacity','shadowOpacity'].includes(key)?1:.5;}
+    function numberField(label,key,value,min,max) { return `<div class="ms-field"><label>${label}</label><div class="ms-control-inputs"><input data-frame-key="${key}" type="number" step="${controlStep(key)}" min="${min}" max="${max}" value="${Math.round(value*10)/10}"><button type="button" class="ms-control-reset" data-reset-frame-key="${key}">Sıfırla</button></div></div>`; }
+    function rangeField(label,key,value,min,max,suffix) { const step=controlStep(key);return `<div class="ms-field"><label><span>${label}</span><span class="ms-field-value">${Math.round(value*10)/10}${suffix}</span></label><div class="ms-control-inputs"><input data-frame-key="${key}" data-suffix="${suffix}" type="range" step="${step}" min="${min}" max="${max}" value="${value}"><input data-frame-key="${key}" data-suffix="${suffix}" class="ms-control-number" type="number" step="${step}" min="${min}" max="${max}" value="${Math.round(value*10)/10}"><button type="button" class="ms-control-reset" data-reset-frame-key="${key}">Sıfırla</button></div></div>`; }
     function syncControlInputs(root,key,value) {
         root.querySelectorAll(`[data-frame-key="${key}"]`).forEach((field) => { if (document.activeElement!==field || Number(field.value)!==value) field.value=Math.round(value*10)/10; });
         const label=root.querySelector(`[data-frame-key="${key}"]`)?.closest('.ms-field')?.querySelector('.ms-field-value'); if(label)label.textContent=Math.round(value*10)/10+(root.querySelector(`[data-frame-key="${key}"]`)?.dataset.suffix||'');
@@ -1533,7 +1605,25 @@
     }
     async function renderSnapshot(snapshot,product){snapshot=normalizeDocument(snapshot);const host=document.getElementById('msRenderHost');host.innerHTML='';const stage=new Konva.Stage({container:host,width:SIZE,height:SIZE}),layerCanvas=new Konva.Layer();stage.add(layerCanvas);layerCanvas.add(new Konva.Rect({x:0,y:0,width:SIZE,height:SIZE,fill:'#fff',listening:false}));for(const item of snapshot.layers||[]){if(item.visible===false)continue;let asset=item.type==='product_slot'?product:(snapshot.assets||[]).find(a=>a.id===item.assetId);if(!asset||!asset.storagePath)continue;try{const image=await loadImage(assetUrl(asset.storagePath));const node=makeImageNode(image,{type:item.type,visible:true,locked:true,geometry:item.geometry},Object.assign(defaultFrame(),item.frame||{}));node.draggable(false);layerCanvas.add(node);}catch(error){throw new Error('Render varlığı yüklenemedi: '+(asset.name||asset.storagePath));}}layerCanvas.draw();try{return await ensurePngBlob(await stage.toBlob({mimeType:'image/png',pixelRatio:1}));}finally{stage.destroy();host.innerHTML='';}}
 
-    function renderOutputs(){const root=document.getElementById('msViewOutputs');if(!root)return;root.innerHTML=`<div class="ms-view-header"><div><h3>Çıktılar</h3><p>Şablonlardan bağımsız kalıcı mockup görselleri</p></div></div><div id="msOutputGrid" class="ms-card-grid"></div>`;const grid=document.getElementById('msOutputGrid');if(!state.outputs.length){grid.innerHTML='<div class="ms-empty-card">Henüz kayıtlı çıktı yok.</div>';return;}state.outputs.forEach(output=>{const card=document.createElement('article');card.className='ms-library-card';card.innerHTML=`<div class="ms-card-preview"><img src="${assetUrl(output.export_path)}" alt="${esc(output.name)}"></div><div class="ms-card-content"><h4>${esc(output.name)}</h4><p>${esc(output.template_name)} • v${output.template_version}</p><p>${esc(formatDate(output.created_at))}</p><div class="ms-card-actions"><a class="ms-btn ms-btn-primary ms-btn-small" href="${assetUrl(output.export_path)}" download="${safeName(output.name)}.png">İndir</a><button data-action="rename" class="ms-btn ms-btn-small">Adlandır</button><button data-action="rerun" class="ms-btn ms-btn-small">Tekrar Üret</button><button data-action="delete" class="ms-btn ms-btn-danger ms-btn-small">Sil</button></div></div>`;card.querySelector('[data-action="rename"]').addEventListener('click',()=>renameOutput(output));card.querySelector('[data-action="rerun"]').addEventListener('click',()=>rerunOutput(output));card.querySelector('[data-action="delete"]').addEventListener('click',()=>deleteOutput(output));grid.appendChild(card);});}
+    async function getOutputUrl(output, refresh) {
+        const cached=state.outputUrlCache.get(output.export_path);if(!refresh&&cached&&cached.expires>Date.now())return cached.url;
+        const data=await api(API+'?resource=asset_url&path='+encodeURIComponent(output.export_path));state.outputUrlCache.set(output.export_path,{url:data.url,expires:Date.now()+240000});return data.url;
+    }
+    function renderOutputs(){const root=document.getElementById('msViewOutputs');if(!root)return;const available=new Set(state.outputs.map((output)=>output.id));state.selectedOutputIds=new Set([...state.selectedOutputIds].filter((id)=>available.has(id)));root.innerHTML=`<div class="ms-view-header"><div><h3>Çıktılar</h3><p>Görsele tıklayarak 2000×2000 büyük önizlemeyi açın.</p></div><span class="ms-selection-count">${state.selectedOutputIds.size} seçili</span></div><div class="ms-output-toolbar"><button id="msSelectAllOutputs" class="ms-btn">Tümünü Seç</button><button id="msClearOutputSelection" class="ms-btn">Seçimi Kaldır</button><select id="msDownloadMode" class="ms-select"><option value="zip">Tek ZIP dosyası indir</option><option value="files">Dosyaları tek tek indir</option></select><button id="msDownloadSelected" class="ms-btn ms-btn-primary" ${state.selectedOutputIds.size?'':'disabled'}>Seçilenleri İndir</button><span id="msDownloadProgress" class="ms-download-progress"></span></div><div id="msOutputGrid" class="ms-card-grid"></div>`;
+        document.getElementById('msSelectAllOutputs').addEventListener('click',()=>{state.selectedOutputIds=new Set(state.outputs.map((output)=>output.id));renderOutputs();});document.getElementById('msClearOutputSelection').addEventListener('click',()=>{state.selectedOutputIds.clear();renderOutputs();});document.getElementById('msDownloadSelected').addEventListener('click',downloadSelectedOutputs);
+        const grid=document.getElementById('msOutputGrid');if(!state.outputs.length){grid.innerHTML='<div class="ms-empty-card">Henüz kayıtlı çıktı yok.</div>';return;}state.outputs.forEach((output,index)=>{const card=document.createElement('article');card.className='ms-library-card ms-output-card'+(state.selectedOutputIds.has(output.id)?' is-selected':'');card.innerHTML=`<label class="ms-output-check"><input type="checkbox" ${state.selectedOutputIds.has(output.id)?'checked':''} aria-label="${esc(output.name)} seç"><span>✓</span></label><button class="ms-card-preview ms-output-open" aria-label="${esc(output.name)} büyük önizleme"><span class="ms-card-placeholder">2000×2000</span><img data-output-image alt="${esc(output.name)}" hidden></button><div class="ms-card-content"><h4>${esc(output.name)}</h4><p>${esc(output.template_name)} • v${output.template_version}</p><p>${esc(formatDate(output.created_at))}</p><div class="ms-card-actions"><button data-action="download" class="ms-btn ms-btn-primary ms-btn-small">İndir</button><button data-action="rename" class="ms-btn ms-btn-small">Adlandır</button><button data-action="rerun" class="ms-btn ms-btn-small">Tekrar Üret</button><button data-action="delete" class="ms-btn ms-btn-danger ms-btn-small">Sil</button></div></div>`;
+            card.querySelector('.ms-output-check input').addEventListener('change',(event)=>{if(event.target.checked)state.selectedOutputIds.add(output.id);else state.selectedOutputIds.delete(output.id);renderOutputs();});card.querySelector('.ms-output-open').addEventListener('click',()=>openOutputLightbox(index));card.querySelector('[data-action="download"]').addEventListener('click',()=>downloadOutputFile(output));card.querySelector('[data-action="rename"]').addEventListener('click',()=>renameOutput(output));card.querySelector('[data-action="rerun"]').addEventListener('click',()=>rerunOutput(output));card.querySelector('[data-action="delete"]').addEventListener('click',()=>deleteOutput(output));grid.appendChild(card);getOutputUrl(output).then((url)=>{const image=card.querySelector('[data-output-image]');if(!image||!document.contains(image))return;image.src=url;image.hidden=false;card.querySelector('.ms-card-placeholder')?.remove();}).catch(()=>{});});}
+    async function openOutputLightbox(index){state.lightboxIndex=(index+state.outputs.length)%state.outputs.length;const output=state.outputs[state.lightboxIndex],root=document.getElementById('msOutputLightbox');if(!output||!root)return;root.hidden=false;root.innerHTML=`<div class="ms-lightbox-dialog" role="dialog" aria-modal="true" aria-label="Çıktı önizleme"><div class="ms-lightbox-head"><div><strong>${esc(output.name)}</strong><small>2000×2000 PNG</small></div><button data-lightbox="close" class="ms-btn">✕ Kapat</button></div><div class="ms-lightbox-stage"><div class="ms-lightbox-loading">Görsel yükleniyor…</div><img alt="${esc(output.name)}" hidden></div><div class="ms-lightbox-controls"><button data-lightbox="prev" class="ms-btn">← Önceki</button><button data-lightbox="next" class="ms-btn">Sonraki →</button><label>Yakınlaştır <input id="msLightboxZoom" type="range" min="25" max="300" step="25" value="100"></label><button data-lightbox="fit" class="ms-btn">Ekrana Sığdır</button><button data-lightbox="download" class="ms-btn ms-btn-primary">İndir</button><button data-lightbox="rename" class="ms-btn">Yeniden Adlandır</button></div></div>`;
+        root.querySelector('[data-lightbox="close"]').addEventListener('click',closeOutputLightbox);root.onclick=(event)=>{if(event.target===root)closeOutputLightbox();};root.querySelector('[data-lightbox="prev"]').addEventListener('click',()=>openOutputLightbox(state.lightboxIndex-1));root.querySelector('[data-lightbox="next"]').addEventListener('click',()=>openOutputLightbox(state.lightboxIndex+1));root.querySelector('[data-lightbox="download"]').addEventListener('click',()=>downloadOutputFile(output));root.querySelector('[data-lightbox="rename"]').addEventListener('click',async()=>{await renameOutput(output);const nextIndex=state.outputs.findIndex((item)=>item.id===output.id);if(nextIndex>=0)openOutputLightbox(nextIndex);});const image=root.querySelector('img'),zoom=root.querySelector('#msLightboxZoom');zoom.addEventListener('input',()=>{image.style.transform=`scale(${Number(zoom.value)/100})`;});root.querySelector('[data-lightbox="fit"]').addEventListener('click',()=>{zoom.value='100';image.style.transform='scale(1)';});try{image.src=await getOutputUrl(output);image.hidden=false;root.querySelector('.ms-lightbox-loading').remove();}catch(error){root.querySelector('.ms-lightbox-loading').textContent='Görsel açılamadı: '+error.message;}}
+    function closeOutputLightbox(){const root=document.getElementById('msOutputLightbox');if(root){root.hidden=true;root.innerHTML='';}state.lightboxIndex=-1;}
+    function setDownloadProgress(message){const el=document.getElementById('msDownloadProgress');if(el)el.textContent=message||'';}
+    async function fetchOutputBlob(output){const response=await fetch(await getOutputUrl(output));if(!response.ok)throw new Error(`${output.name} indirilemedi (${response.status}).`);return response.blob();}
+    function triggerDownload(blob,filename){const url=URL.createObjectURL(blob),anchor=document.createElement('a');anchor.href=url;anchor.download=filename;document.body.appendChild(anchor);anchor.click();anchor.remove();window.setTimeout(()=>URL.revokeObjectURL(url),30000);}
+    async function downloadOutputFile(output){try{setDownloadProgress('İndiriliyor…');triggerDownload(await fetchOutputBlob(output),safeName(output.name)+'.png');setDownloadProgress('İndirme hazır.');}catch(error){setStatus('Çıktı indirilemedi: '+error.message,true);setDownloadProgress('');}}
+    function crc32(bytes){let crc=-1;for(const byte of bytes){crc^=byte;for(let bit=0;bit<8;bit++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return(crc^-1)>>>0;}
+    function zipHeader(size,crc,nameLength,central,offset){const length=central?46:30,bytes=new Uint8Array(length),view=new DataView(bytes.buffer);view.setUint32(0,central?0x02014b50:0x04034b50,true);if(central){view.setUint16(4,20,true);view.setUint16(6,20,true);}else view.setUint16(4,20,true);const base=central?8:6;view.setUint16(base,0x0800,true);view.setUint16(base+2,0,true);view.setUint16(base+4,0,true);view.setUint16(base+6,0,true);view.setUint32(base+8,crc,true);view.setUint32(base+12,size,true);view.setUint32(base+16,size,true);view.setUint16(base+20,nameLength,true);if(central)view.setUint32(42,offset,true);return bytes;}
+    function makeZip(files){const encoder=new TextEncoder(),parts=[],central=[];let offset=0;for(const file of files){const name=encoder.encode(file.name),data=new Uint8Array(file.data),crc=crc32(data),local=zipHeader(data.length,crc,name.length,false,0);parts.push(local,name,data);const header=zipHeader(data.length,crc,name.length,true,offset);central.push(header,name);offset+=local.length+name.length+data.length;}const centralSize=central.reduce((sum,item)=>sum+item.length,0),end=new Uint8Array(22),view=new DataView(end.buffer);view.setUint32(0,0x06054b50,true);view.setUint16(8,files.length,true);view.setUint16(10,files.length,true);view.setUint32(12,centralSize,true);view.setUint32(16,offset,true);return new Blob([...parts,...central,end],{type:'application/zip'});}
+    async function downloadSelectedOutputs(){const selected=state.outputs.filter((output)=>state.selectedOutputIds.has(output.id));if(!selected.length)return;const mode=document.getElementById('msDownloadMode').value,used=new Map(),files=[];try{for(let index=0;index<selected.length;index++){const output=selected[index];setDownloadProgress(`${index+1}/${selected.length} hazırlanıyor…`);const blob=await fetchOutputBlob(output),base=safeName(output.name),count=(used.get(base)||0)+1;used.set(base,count);const name=base+(count>1?`-${count}`:'')+'.png';if(mode==='files')triggerDownload(blob,name);else files.push({name,data:await blob.arrayBuffer()});await new Promise((resolve)=>setTimeout(resolve,0));}if(mode==='zip')triggerDownload(makeZip(files),`mockup-ciktilari-${selected.length}.zip`);setDownloadProgress(`${selected.length} çıktı indirildi.`);}catch(error){setStatus('Toplu indirme tamamlanamadı: '+error.message,true);setDownloadProgress('');}}
     async function renameOutput(output){const name=window.prompt('Çıktının yeni adı:',output.name);if(name===null)return;if(!name.trim())return setStatus('Çıktı adı zorunludur.',true);try{await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'rename_output',id:output.id,name:name.trim()})});await loadOutputs();}catch(error){setStatus('Çıktı yeniden adlandırılamadı: '+error.message,true);}}
     async function deleteOutput(output){if(!window.confirm('“'+output.name+'” çıktısı kütüphaneden kaldırılsın mı? Dosya ilk aşamada fiziksel olarak silinmeyecektir.'))return;try{await api(API+'?resource=output&id='+encodeURIComponent(output.id),{method:'DELETE'});await loadOutputs();setStatus('Çıktı yumuşak silindi.',false);}catch(error){setStatus('Çıktı silinemedi: '+error.message,true);}}
     async function rerunOutput(output){const product={id:output.product_asset_id,type:'product_box_clean',name:output.product_name||'Ürün',storagePath:output.product_path};await generateOutput({name:output.name+' Tekrar',templateId:output.template_id,templateName:output.template_name,templateVersion:output.template_version,snapshot:normalizeDocument(output.template_snapshot),product});showView('outputs');}

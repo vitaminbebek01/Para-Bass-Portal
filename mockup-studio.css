@@ -9,7 +9,7 @@
 
 .ms-workspace-nav {
     display: grid;
-    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    grid-template-columns: repeat(6, minmax(110px, 1fr));
     gap: 6px;
     margin-bottom: 14px;
     padding: 6px;
@@ -72,6 +72,30 @@
 .ms-card-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
 .ms-card-actions a { display: inline-flex; align-items: center; text-decoration: none; }
 .ms-empty-card { grid-column: 1 / -1; padding: 50px 20px; border: 1px dashed #bdc8d0; border-radius: 8px; color: var(--ms-muted); text-align: center; }
+.ms-preset-preview { position: relative; aspect-ratio: 1; overflow: hidden; background: linear-gradient(145deg,#eef2f5,#dfe6eb); }
+.ms-preset-preview span { position: absolute; display: grid; place-items: center; box-sizing: border-box; border: 2px solid #516675; border-radius: 3px; background: rgba(255,255,255,.66); color: #405463; font-size: 9px; font-weight: 900; }
+.ms-preset-preview span.is-perspective { border-color: var(--ms-accent); clip-path: polygon(8% 0,100% 8%,92% 100%,0 92%); }
+.ms-output-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; padding: 10px; border: 1px solid var(--ms-border); border-radius: 8px; background: var(--ms-panel); }
+.ms-output-toolbar .ms-select { width: auto; min-width: 190px; }
+.ms-download-progress { color: var(--ms-accent-dark); font-size: 11px; font-weight: 800; }
+.ms-output-card.is-selected { border: 3px solid var(--ms-accent); box-shadow: 0 0 0 3px rgba(142,68,173,.14); }
+.ms-output-check { position: absolute; z-index: 2; top: 9px; right: 9px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,.95); box-shadow: 0 2px 8px rgba(0,0,0,.2); cursor: pointer; }
+.ms-output-check input { position: absolute; opacity: 0; }
+.ms-output-check span { color: #a5afb7; font-weight: 900; }
+.ms-output-check input:checked + span { color: var(--ms-accent); }
+.ms-output-open { width: 100%; padding: 0; border: 0; cursor: zoom-in; }
+.ms-lightbox { position: fixed; z-index: 10000; inset: 0; display: grid; place-items: center; padding: 24px; box-sizing: border-box; background: rgba(13,20,27,.9); }
+.ms-lightbox[hidden] { display: none; }
+.ms-lightbox-dialog { display: flex; flex-direction: column; width: min(94vw,1100px); height: min(94vh,980px); overflow: hidden; border-radius: 10px; background: #fff; box-shadow: 0 24px 70px rgba(0,0,0,.45); }
+.ms-lightbox-head,.ms-lightbox-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; background: #f7f9fb; }
+.ms-lightbox-head { justify-content: space-between; border-bottom: 1px solid var(--ms-border); }
+.ms-lightbox-head strong,.ms-lightbox-head small { display: block; }
+.ms-lightbox-head small { margin-top: 2px; color: var(--ms-muted); }
+.ms-lightbox-stage { position: relative; display: grid; flex: 1; place-items: center; min-height: 0; overflow: auto; background: #252d34; }
+.ms-lightbox-stage img { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; transform-origin: center; transition: transform .12s ease; }
+.ms-lightbox-loading { color: #fff; }
+.ms-lightbox-controls { justify-content: center; border-top: 1px solid var(--ms-border); }
+.ms-lightbox-controls label { display: flex; align-items: center; gap: 7px; color: #405463; font-size: 11px; font-weight: 800; }
 
 .ms-create-grid { display: grid; grid-template-columns: 1fr 1fr 1.1fr; gap: 14px; align-items: start; }
 .ms-create-template-list { display: grid; gap: 6px; max-height: 285px; overflow-y: auto; }

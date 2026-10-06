@@ -1,13 +1,17 @@
 const { chromium } = require('playwright');
 const crypto = require('crypto');
 const assert = require('assert');
+const fs = require('fs');
 
 const baseUrl = process.env.MOCKUP_TEST_URL || 'http://localhost:8000';
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69d9WQAAAABJRU5ErkJggg==', 'base64');
 const largePng = Buffer.concat([png, Buffer.alloc(20 * 1024 * 1024 - png.length)]);
-
-const db = { templates: [], versions: [], products: [], outputs: [], assets: [], storage: new Set(), signed: new Map(), directUploads: [], maxApiPayload: 0 };
 const now = () => new Date().toISOString();
+
+const presetFrame = (x, y, width, height, rotation = 0) => ({ x, y, width, height, rotation });
+const gridPreset = (id, name, cols, rows) => ({ id, name, is_system: true, created_at: now(), slots: Array.from({ length: cols * rows }, (_, index) => ({ order: index, frame: presetFrame(300 + (index % cols) * (1400 / Math.max(1, cols - 1)), 300 + Math.floor(index / cols) * (1400 / Math.max(1, rows - 1)), cols === 3 ? 430 : 620, cols === 3 ? 430 : 620) })) });
+const db = { templates: [], versions: [], products: [], outputs: [], assets: [], storage: new Set(), signed: new Map(), directUploads: [], maxApiPayload: 0, presets: [] };
+db.presets.push(gridPreset('10000000-0000-4000-8000-000000000001', '2×2 Düz Grid', 2, 2), gridPreset('10000000-0000-4000-8000-000000000002', '3×3 Düz Grid', 3, 3), { id: '10000000-0000-4000-8000-000000000008', name: 'Tek Büyük Hero Slot', is_system: true, created_at: now(), slots: [{ order: 0, frame: presetFrame(1000, 1000, 1250, 1250) }] });
 
 function json(route, body, status = 200) {
     return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -25,6 +29,8 @@ async function mockApi(route) {
     }
     if (method === 'GET') {
         const resource = url.searchParams.get('resource') || 'templates';
+        if (resource === 'asset_url') return json(route, { success: true, url: `${url.origin}/api/mockup-studio?asset=${encodeURIComponent(url.searchParams.get('path'))}`, expires_in: 300 });
+        if (resource === 'slot_presets') return json(route, { presets: db.presets.filter(preset => !preset.deleted_at) });
         if (resource === 'templates') return json(route, { templates: db.templates.filter(t => !t.deleted_at) });
         if (resource === 'template') return json(route, { template: db.templates.find(t => t.id === url.searchParams.get('id')) });
         if (resource === 'versions') return json(route, { versions: db.versions.filter(v => v.template_id === url.searchParams.get('template_id')).sort((a, b) => b.version_number - a.version_number) });
@@ -104,6 +110,19 @@ async function mockApi(route) {
             db.outputs.unshift(output);
             return json(route, { output }, 201);
         }
+        if (body.action === 'save_slot_preset') {
+            let preset = db.presets.find(item => item.id === body.id);
+            if (!preset) { preset = { id: body.id, created_at: now(), is_system: false }; db.presets.push(preset); }
+            Object.assign(preset, { name: body.name, slots: body.slots, deleted_at: null });
+            return json(route, { preset });
+        }
+        if (body.action === 'duplicate_slot_preset') {
+            const source = db.presets.find(item => item.id === body.id), preset = { ...JSON.parse(JSON.stringify(source)), id: crypto.randomUUID(), name: body.name, is_system: false, created_at: now() };
+            db.presets.push(preset); return json(route, { preset }, 201);
+        }
+        if (body.action === 'rename_slot_preset') {
+            const preset = db.presets.find(item => item.id === body.id); preset.name = body.name; return json(route, { preset });
+        }
     }
     if (method === 'DELETE' && url.searchParams.get('resource') === 'product') {
         const id = url.searchParams.get('id');
@@ -118,6 +137,9 @@ async function mockApi(route) {
         db.products = db.products.filter(item => item.id !== id);
         db.storage.delete(asset.storage_path);
         return json(route, { success: true, deleted_id: id, soft_deleted: false, physical_deleted: true, used_by_outputs: false });
+    }
+    if (method === 'DELETE' && url.searchParams.get('resource') === 'slot_preset') {
+        const preset = db.presets.find(item => item.id === url.searchParams.get('id')); preset.deleted_at = now(); return json(route, { success: true });
     }
     return json(route, { error: 'Unhandled mock request' }, 400);
 }
@@ -224,6 +246,13 @@ async function mockStorage(route) {
         await controlNumber('shadowDistance').fill('40'); await controlNumber('shadowDistance').press('Tab');
 
         await slotRows.nth(1).click();
+        await page.locator('#msShadowToggle').check();
+        await controlNumber('shadowOffsetX').press('ArrowUp');
+        await controlNumber('shadowOffsetX').press('Tab');
+        await controlNumber('shadowOffsetY').press('ArrowDown');
+        await controlNumber('shadowOffsetY').press('Tab');
+        assert.strictEqual(await controlNumber('shadowOffsetX').inputValue(), '12.5', 'Gölge X normal ok tuşuyla 0,5 artmalı');
+        assert.strictEqual(await controlNumber('shadowOffsetY').inputValue(), '17.5', 'Gölge Y normal ok tuşuyla 0,5 azalmalı');
         const xInput = controlNumber('x');
         const originalX = await xInput.inputValue();
         await xInput.fill('1450');
@@ -342,6 +371,7 @@ async function mockStorage(route) {
         await page.getByText('2 kalıcı çıktı oluşturuldu.').waitFor({ timeout: 30000 });
         assert.strictEqual(db.outputs.length, 2, 'İki ayrı çıktı kaydı oluşturulmalı');
         assert(db.outputs.every(output => output.template_snapshot.layers.every(layer => !String(layer.type).includes('helper'))), 'Nihai çıktı snapshotlarında yardımcı çizgi veya etiket bulunmamalı');
+        assert(db.outputs.some(output => output.template_snapshot.layers.some(layer => layer.type === 'product_slot' && layer.frame.shadow.enabled && layer.frame.shadow.offsetX === 12.5 && layer.frame.shadow.offsetY === 17.5)), '0,5 adımlı gölge X/Y değerleri 2000×2000 çıktı snapshotına taşınmalı');
         page.once('dialog', dialog => dialog.accept());
         await usedProductCard.locator('.ms-product-delete').click();
         await page.getByText('Kullanılmış ürün aktif listeden kaldırıldı; eski çıktılar korundu.').waitFor();
@@ -349,11 +379,52 @@ async function mockStorage(route) {
         assert(db.storage.has(usedProduct.storage_path), 'Kullanılmış ürünün Storage dosyası korunmalı');
         assert.strictEqual(await page.locator('.ms-product-card').filter({ hasText: 'second_product.png' }).count(), 0, 'Kullanılmış ürün aktif listeden kalkmalı');
 
+        for (let index = 3; index <= 10; index += 1) db.outputs.push({ ...JSON.parse(JSON.stringify(db.outputs[0])), id: crypto.randomUUID(), name: `Test Kalıcı Çıktı ${index}`, created_at: now() });
+
         await page.reload({ waitUntil: 'domcontentloaded' });
         await page.locator('#menuStudio').click();
         await page.locator('#tabMockupStudio').click();
         await page.locator('[data-view="outputs"]').click();
-        assert.strictEqual(await page.getByText(/Test Kalıcı Çıktı – Test/).count(), 2, 'İki çıktı yenileme sonrası kalmalı');
+        assert.strictEqual(await page.locator('.ms-output-card').count(), 10, 'On çıktı yenileme sonrası kalmalı');
+        await page.locator('.ms-output-open').first().click();
+        await page.locator('#msOutputLightbox').waitFor({ state: 'visible' });
+        await page.locator('#msOutputLightbox img').waitFor({ state: 'visible' });
+        assert(await page.locator('#msOutputLightbox').getByText('2000×2000 PNG').isVisible(), 'Çıktı büyük önizlemesi açılmalı');
+        await page.locator('[data-lightbox="close"]').click();
+        await page.locator('#msSelectAllOutputs').click();
+        assert.strictEqual(await page.locator('.ms-output-check input:checked').count(), 10, 'Tümünü seç ile 10 çıktı seçilmeli');
+        await page.locator('#msDownloadMode').selectOption('zip');
+        const downloadPromise = page.waitForEvent('download');
+        await page.locator('#msDownloadSelected').click();
+        const zipDownload = await downloadPromise;
+        assert.match(zipDownload.suggestedFilename(), /mockup-ciktilari-10\.zip$/, '10 çıktı tek ZIP olarak indirilmeli');
+        const zipBytes = fs.readFileSync(await zipDownload.path());
+        assert.strictEqual((zipBytes.toString('latin1').match(/PK\x03\x04/g) || []).length, 10, 'ZIP içinde 10 PNG dosya girdisi bulunmalı');
+        await page.getByText('10 çıktı indirildi.').waitFor();
+
+        await page.locator('[data-view="templates"]').click();
+        await page.locator('#msNewTemplateBtn').click();
+        await page.locator('#msSceneInput').setInputFiles({ name: 'preset-test-scene.png', mimeType: 'image/png', buffer: png });
+        await page.getByText(/kaydetmeden slot ekleyebilirsiniz/).waitFor();
+        await page.locator('#msPresetSelect').selectOption('10000000-0000-4000-8000-000000000002');
+        await page.locator('#msPresetMode').selectOption('replace');
+        await page.locator('#msApplyPresetBtn').click();
+        await page.getByText(/3×3 Düz Grid: 9 slot uygulandı/).waitFor();
+        await page.locator('#msPresetSelect').selectOption('10000000-0000-4000-8000-000000000008');
+        await page.locator('#msPresetMode').selectOption('append');
+        await page.locator('#msApplyPresetBtn').click();
+        await page.getByText(/Tek Büyük Hero Slot: 1 slot mevcut slotlara eklendi/).waitFor();
+        assert.strictEqual(await page.locator('.ms-layer').filter({ hasText: /Slot \d/ }).count(), 10, '3×3 dizilime Hero slot eklenince 10 slot olmalı');
+        page.once('dialog', dialog => dialog.accept('Test 3x3 + Hero'));
+        await page.locator('#msSavePresetBtn').click();
+        await page.getByText('Slot dizilimi kalıcı olarak kaydedildi.').waitFor();
+        assert(db.presets.some(preset => preset.name === 'Test 3x3 + Hero' && preset.slots.length === 10), 'Özel slot dizilimi kalıcı kaydedilmeli');
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await openMockup();
+        await page.locator('#msPresetSelect').selectOption(db.presets.find(preset => preset.name === 'Test 3x3 + Hero').id);
+        await page.locator('#msApplyPresetBtn').click();
+        await page.getByText(/Test 3x3 \+ Hero: 10 slot uygulandı/).waitFor();
+        assert.strictEqual(await page.locator('.ms-layer').filter({ hasText: /Slot \d/ }).count(), 10, 'Sayfa yenilendikten sonra özel dizilim tekrar uygulanmalı');
 
         await page.locator('#tabAiNew').click();
         assert(await page.locator('#aiNewSection').isVisible(), 'Yeni Görsel Üret görünür olmalı');

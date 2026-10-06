@@ -115,6 +115,10 @@ class handler(BaseHTTPRequestHandler):
                 self.send_product_assets()
             elif resource == "outputs":
                 self.send_output_list()
+            elif resource == "slot_presets":
+                self.send_slot_presets()
+            elif resource == "asset_url":
+                self.send_signed_asset_url(query.get("path", [None])[0])
             else:
                 raise ValueError("Geçersiz Mockup Studio kaynağı.")
         except ValueError as error:
@@ -145,6 +149,9 @@ class handler(BaseHTTPRequestHandler):
                 "finalize_upload": self.finalize_upload,
                 "create_output": self.create_output,
                 "rename_output": self.rename_output,
+                "save_slot_preset": self.save_slot_preset,
+                "duplicate_slot_preset": self.duplicate_slot_preset,
+                "rename_slot_preset": self.rename_slot_preset,
             }
             if action not in actions:
                 raise ValueError("Geçersiz Mockup Studio işlemi.")
@@ -163,6 +170,14 @@ class handler(BaseHTTPRequestHandler):
             item_id = require_uuid(query.get("id", [None])[0], "kayıt kimliği")
             if resource == "product":
                 self.delete_product_asset(item_id)
+                return
+            if resource == "slot_preset":
+                response = (
+                    get_supabase().table("mockup_slot_presets")
+                    .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
+                    .eq("id", item_id).is_("deleted_at", "null").execute()
+                )
+                self.send_json(200, {"success": True, "deleted_id": item_id, "record": (response.data or [None])[0]})
                 return
             table = "mockup_templates" if resource == "template" else "mockup_outputs"
             if resource not in ("template", "output"):
@@ -320,6 +335,31 @@ class handler(BaseHTTPRequestHandler):
         self.attach_asset_paths(rows, "product_asset_id", "product_path")
         self.send_json(200, {"success": True, "outputs": rows})
 
+    def send_slot_presets(self):
+        response = (
+            get_supabase().table("mockup_slot_presets")
+            .select("*").is_("deleted_at", "null")
+            .order("is_system", desc=True).order("created_at").execute()
+        )
+        self.send_json(200, {"success": True, "presets": response.data or []})
+
+    def send_signed_asset_url(self, raw_path):
+        storage_path = str(raw_path or "")
+        if not storage_path.startswith("output/") or ".." in storage_path or storage_path.startswith("/"):
+            raise ValueError("Yalnızca kayıtlı çıktı görselleri için signed URL oluşturulabilir.")
+        response = (
+            get_supabase().table("mockup_assets").select("id")
+            .eq("storage_path", storage_path).eq("asset_type", "output").limit(1).execute()
+        )
+        if not response.data:
+            self.send_json(404, {"success": False, "error": "Çıktı dosyası bulunamadı."})
+            return
+        signed = get_supabase().storage.from_(BUCKET_NAME).create_signed_url(storage_path, 300)
+        signed_url = signed.get("signedURL") or signed.get("signedUrl") or signed.get("signed_url") if isinstance(signed, dict) else None
+        if not signed_url:
+            raise RuntimeError("Çıktı için signed URL oluşturulamadı.")
+        self.send_json(200, {"success": True, "url": signed_url, "expires_in": 300})
+
     def save_template(self, payload):
         template_id = require_uuid(payload.get("id"), "şablon kimliği")
         name = require_name(payload.get("name"), "şablon adı", 120)
@@ -434,6 +474,60 @@ class handler(BaseHTTPRequestHandler):
             .eq("id", output_id).is_("deleted_at", "null").execute()
         )
         self.send_json(200, {"success": True, "output": (response.data or [None])[0]})
+
+    @staticmethod
+    def validate_preset_slots(raw_slots):
+        if not isinstance(raw_slots, list) or not raw_slots or len(raw_slots) > 64:
+            raise ValueError("Slot dizilimi 1–64 slot içermelidir.")
+        slots = []
+        for index, raw in enumerate(raw_slots):
+            if not isinstance(raw, dict):
+                raise ValueError("Slot dizilimi geometrisi geçersiz.")
+            frame = raw.get("frame") if isinstance(raw.get("frame"), dict) else raw
+            cleaned = {
+                "x": float(frame.get("x", 1000)), "y": float(frame.get("y", 1000)),
+                "width": float(frame.get("width", 700)), "height": float(frame.get("height", 700)),
+                "rotation": float(frame.get("rotation", 0)),
+            }
+            if cleaned["width"] < 40 or cleaned["height"] < 40 or cleaned["width"] > 4000 or cleaned["height"] > 4000:
+                raise ValueError("Slot boyutları geçersiz.")
+            perspective = frame.get("perspective")
+            if isinstance(perspective, dict) and perspective.get("enabled"):
+                corners = perspective.get("corners")
+                if not isinstance(corners, list) or len(corners) != 4:
+                    raise ValueError("Perspektif slotu dört köşe içermelidir.")
+                cleaned["perspective"] = {"enabled": True, "corners": [
+                    {"x": float(point.get("x", 0)), "y": float(point.get("y", 0))} for point in corners
+                ]}
+            slots.append({"order": index, "frame": cleaned})
+        return slots
+
+    def save_slot_preset(self, payload):
+        preset_id = require_uuid(payload.get("id"), "slot dizilimi kimliği")
+        name = require_name(payload.get("name"), "slot dizilimi adı", 120)
+        slots = self.validate_preset_slots(payload.get("slots"))
+        row = {"id": preset_id, "name": name, "slots": slots, "is_system": False, "deleted_at": None}
+        response = get_supabase().table("mockup_slot_presets").upsert(row, on_conflict="id").execute()
+        self.send_json(200, {"success": True, "preset": (response.data or [row])[0]})
+
+    def duplicate_slot_preset(self, payload):
+        source_id = require_uuid(payload.get("id"), "slot dizilimi kimliği")
+        source = get_supabase().table("mockup_slot_presets").select("*").eq("id", source_id).is_("deleted_at", "null").limit(1).execute()
+        if not source.data:
+            raise ValueError("Kopyalanacak slot dizilimi bulunamadı.")
+        row = {
+            "id": str(uuid.uuid4()),
+            "name": require_name(payload.get("name") or f"{source.data[0]['name']} Kopya", "slot dizilimi adı", 120),
+            "slots": source.data[0]["slots"], "is_system": False,
+        }
+        response = get_supabase().table("mockup_slot_presets").insert(row).execute()
+        self.send_json(201, {"success": True, "preset": (response.data or [row])[0]})
+
+    def rename_slot_preset(self, payload):
+        preset_id = require_uuid(payload.get("id"), "slot dizilimi kimliği")
+        name = require_name(payload.get("name"), "slot dizilimi adı", 120)
+        response = get_supabase().table("mockup_slot_presets").update({"name": name}).eq("id", preset_id).is_("deleted_at", "null").execute()
+        self.send_json(200, {"success": True, "preset": (response.data or [None])[0]})
 
     def upload_asset(self, query):
         asset_type = query.get("asset_type", [""])[0]
