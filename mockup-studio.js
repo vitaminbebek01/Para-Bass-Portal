@@ -21,6 +21,9 @@
         perspectiveHandles: new Map(),
         polygonHandles: new Map(),
         polygonDrawingLayerId: null,
+        clipboardLayer: null,
+        previewAssetId: null,
+        slotPreviewAssetIds: new Map(),
         selectedLayerId: null,
         selectedLayerIds: new Set(),
         selectedAssetId: null,
@@ -98,7 +101,7 @@
             if (layer.type === 'slot') layer.type = 'product_slot';
             if (!layer.frame && layer.slot) layer.frame = layer.slot;
             layer.frame = Object.assign(defaultFrame(), layer.frame || {});
-            layer.frame.shadow = Object.assign(defaultFrame().shadow, layer.frame.shadow || {});
+            layer.frame.shadow = normalizeShadow(layer.frame.shadow);
             if (layer.frame.perspective) {
                 layer.frame.perspective = normalizePerspective(layer.frame.perspective, layer.frame);
             }
@@ -119,8 +122,18 @@
         return {
             x: 1000, y: 1000, width: 700, height: 700, rotation: 0,
             opacity: 1, blur: 0, brightness: 0, contrast: 0, saturation: 0, hue: 0, sharpen: 0,
-            shadow: { enabled: false, color: '#000000', opacity: 0.35, blur: 24, offsetX: 12, offsetY: 18 }
+            shadow: { enabled: false, color: '#000000', opacity: 0.35, blur: 24, angle: 56, distance: 22, offsetX: 12, offsetY: 18 }
         };
+    }
+
+    function normalizeShadow(raw) {
+        const defaults = defaultFrame().shadow;
+        const shadow = Object.assign({}, defaults, raw || {});
+        if (raw && raw.angle == null) shadow.angle = (Math.atan2(Number(shadow.offsetY) || 0, Number(shadow.offsetX) || 0) * 180 / Math.PI + 360) % 360;
+        if (raw && raw.distance == null) shadow.distance = Math.hypot(Number(shadow.offsetX) || 0, Number(shadow.offsetY) || 0);
+        shadow.angle = Math.max(0, Math.min(360, Number(shadow.angle) || 0));
+        shadow.distance = Math.max(0, Math.min(500, Number(shadow.distance) || 0));
+        return shadow;
     }
 
     function normalizeSmartFit(raw) {
@@ -333,6 +346,7 @@
     function renderShell() {
         document.getElementById('mockupStudioRoot').innerHTML = `
             <div id="mockupStatus" class="ms-status" role="status"></div>
+            <div id="msUploadProgress" class="ms-upload-progress" hidden><div class="ms-upload-progress-head"><span id="msUploadProgressLabel">Dosya hazırlanıyor…</span><strong id="msUploadProgressValue">0%</strong></div><div class="ms-upload-progress-track"><span id="msUploadProgressBar"></span></div></div>
             <nav class="ms-workspace-nav">
                 <button data-view="templates" class="ms-workspace-tab is-active">Şablonlar</button>
                 <button data-view="editor" class="ms-workspace-tab">Şablon Editörü</button>
@@ -357,21 +371,26 @@
                         <div class="ms-panel-body">
                             <div class="ms-section ms-section-first">
                                 <label class="ms-upload-label">Boş sahne yükle<input id="msSceneInput" type="file" accept="image/png,image/jpeg,image/webp"></label>
-                                <label class="ms-upload-label">Foreground mask PNG yükle<input id="msMaskInput" type="file" accept="image/png"></label>
-                                <button id="msPolygonMaskBtn" class="ms-btn ms-full">+ Poligon foreground maskesi</button>
-                                <label class="ms-upload-label">Grafik/PNG yükle<input id="msGraphicInput" type="file" accept="image/png,image/jpeg,image/webp"></label>
+                                <label class="ms-upload-label">Foreground Mask PNG <span class="ms-info" title="Ürünün önüne gelecek hazır şeffaf PNG’dir. Örnek: kutunun ön kenarı, kurdele veya çiçek.">ⓘ</span><input id="msMaskInput" type="file" accept="image/png"></label>
+                                <small class="ms-tool-help">Ürünün önüne gelecek hazır şeffaf PNG. Örnek: kutunun ön kenarı, kurdele veya çiçek.</small>
+                                <button id="msPolygonMaskBtn" class="ms-btn ms-full">+ Polygon Foreground Mask <span class="ms-info" title="Sahne fotoğrafındaki seçilen alanı kesip ürünün önüne getirir.">ⓘ</span></button>
+                                <small class="ms-tool-help">Hazır PNG yoksa sahnedeki alanı seçip ürünün önüne getirir; örneğin açık kutunun ön kenarı.</small>
+                                <label class="ms-upload-label">Graphic PNG <span class="ms-info" title="Ürünün üstünde görünecek dekoratif, logo veya yazı katmanıdır.">ⓘ</span><input id="msGraphicInput" type="file" accept="image/png,image/jpeg,image/webp"></label>
+                                <small class="ms-tool-help">Ürünün üstünde görünecek dekoratif, logo veya yazı katmanı.</small>
                             </div>
                             <div class="ms-section">
-                                <h4>ÜRÜN ÖNİZLEMESİ</h4>
+                                <h4>ÖRNEK ÜRÜN ÖNİZLEMESİ</h4>
                                 <select id="msEditorProductType" class="ms-select">
                                     <option value="product_box_clean">Ürün + gerçek kutusu</option>
                                     <option value="product_only_clean">Kutusuz ürün</option>
                                     <option value="original_photo">Orijinal kaynak</option>
                                 </select>
-                                <label class="ms-upload-label">Ürün dosyası yükle<input id="msEditorProductInput" type="file" accept="image/png,image/jpeg"></label>
+                                <label class="ms-upload-label">Örnek Ürün Yükle / Seç<input id="msEditorProductInput" type="file" accept="image/png,image/jpeg"></label>
                                 <div id="msEditorAssetList" class="ms-asset-list"></div>
-                                <button id="msNewSlotBtn" class="ms-btn ms-full">+ Yeni ürün slotu</button>
-                                <button id="msAddSlotBtn" class="ms-btn ms-btn-primary ms-full" disabled>Seçili slotlara ürün ekle</button>
+                                <button id="msPreviewAllBtn" class="ms-btn ms-full" disabled>Tüm slotlarda önizle</button>
+                                <button id="msAddSlotBtn" class="ms-btn ms-btn-primary ms-full" disabled>Seçili slotlarda önizle</button>
+                                <button id="msRemovePreviewBtn" class="ms-btn ms-full">Örnek Ürünü Kaldır</button>
+                                <button id="msNewSlotBtn" class="ms-btn ms-full">+ Slot Ekle</button>
                                 <small id="msSlotSelectionHint" class="ms-help">Önce bir slot seçin. Çoklu seçim için Ctrl/Cmd basılı tutun.</small>
                             </div>
                             <div class="ms-section">
@@ -418,7 +437,9 @@
         document.getElementById('msGraphicInput').addEventListener('change', (e) => editorUpload(e, 'optional_graphic'));
         document.getElementById('msEditorProductInput').addEventListener('change', editorProductUpload);
         document.getElementById('msNewSlotBtn').addEventListener('click', () => addProductSlot());
-        document.getElementById('msAddSlotBtn').addEventListener('click', bindProductToSelectedSlots);
+        document.getElementById('msPreviewAllBtn').addEventListener('click', previewProductInAllSlots);
+        document.getElementById('msAddSlotBtn').addEventListener('click', previewProductInSelectedSlots);
+        document.getElementById('msRemovePreviewBtn').addEventListener('click', removePreviewProduct);
         window.addEventListener('resize', resizeStage);
         document.addEventListener('keydown', handleKeyboard);
     }
@@ -564,6 +585,8 @@
     function newEditor(openView) {
         state.editor = blankEditor();
         state.polygonDrawingLayerId = null;
+        state.previewAssetId = null;
+        state.slotPreviewAssetIds = new Map();
         state.selectedLayerId = null;
         state.selectedLayerIds = new Set();
         state.selectedAssetId = null;
@@ -585,6 +608,8 @@
             state.selectedLayerId = null;
             state.selectedLayerIds = new Set();
             state.polygonDrawingLayerId = null;
+            state.previewAssetId = null;
+            state.slotPreviewAssetIds = new Map();
             state.selectedAssetId = preferredEditorProduct() ? preferredEditorProduct().id : null;
             resetHistory();
             await rebuildCanvas();
@@ -684,10 +709,14 @@
     function handleKeyboard(event) {
         if (state.view !== 'editor' || !document.getElementById('mockupStudioSection') || document.getElementById('mockupStudioSection').style.display === 'none') return;
         if (!(event.ctrlKey || event.metaKey)) return;
+        if (event.target && event.target.closest && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
         const key = event.key.toLowerCase();
         if (key === 'z' && event.shiftKey) { event.preventDefault(); redo(); }
         else if (key === 'z') { event.preventDefault(); undo(); }
         else if (key === 'y') { event.preventDefault(); redo(); }
+        else if (key === 'c') { event.preventDefault(); copySelectedSlot(); }
+        else if (key === 'v') { event.preventDefault(); pasteCopiedSlot(); }
+        else if (key === 'd') { event.preventDefault(); duplicateSelectedSlot(); }
     }
 
     async function saveEditor() {
@@ -740,6 +769,7 @@
         recordHistory(before);
         await rebuildCanvas();
         renderEditor();
+        if(type==='scene_background')setStatus('Boş sahne draft çalışma belgesine eklendi; kaydetmeden slot ekleyebilirsiniz.',false);
     }
 
     async function addPolygonMask() {
@@ -770,7 +800,11 @@
         state.editor.document.assets.push(asset);
         state.selectedAssetId = asset.id;
         if (PRODUCT_TYPES.includes(type)) {
-            await addProductSlot(before);
+            state.previewAssetId = asset.id;
+            state.slotPreviewAssetIds.clear();
+            recordHistory(before);
+            await rebuildCanvas(); renderEditor();
+            setStatus('Örnek ürün yüklendi ve tüm slotlarda önizlemeye alındı.', false);
         } else {
             recordHistory(before);
             renderEditorAssets();
@@ -781,7 +815,7 @@
     function makeLayer(type, asset, name) {
         const frame = defaultFrame();
         if (type === 'scene_background' || type === 'foreground_mask') Object.assign(frame, { x: 1000, y: 1000, width: SIZE, height: SIZE });
-        return { id: uid(), type, name, assetId: asset.id, visible: true, locked: type === 'scene_background', frame };
+        return { id: uid(), type, name, assetId: asset ? asset.id : null, visible: true, locked: type === 'scene_background', frame };
     }
 
     function preferredEditorProduct() {
@@ -794,11 +828,10 @@
 
     async function addProductSlot(existingBefore) {
         const asset = preferredEditorProduct();
-        if (!asset) return setStatus('Önce temizlenmiş bir ürün PNG’si seçin.', true);
         const before = existingBefore || editorSnapshot();
-        const ratio = asset.width && asset.height ? asset.height / asset.width : 1;
+        const ratio = asset && asset.width && asset.height ? asset.height / asset.width : 1;
         const count = state.editor.document.layers.filter((l) => l.type === 'product_slot').length;
-        const layer = makeLayer('product_slot', asset, 'Ürün Slotu ' + (count + 1));
+        const layer = makeLayer('product_slot', null, 'Slot ' + (count + 1));
         layer.frame.width = 700;
         layer.frame.height = 700 * ratio;
         layer.frame.x += count * 35;
@@ -811,37 +844,50 @@
         syncOrder();
         selectLayer(layer.id);
         renderEditor();
+        setStatus(`${layer.name} sahnenin merkezine eklendi.`, false);
     }
 
-    async function bindProductToSelectedSlots() {
+    async function previewProductInSelectedSlots() {
         const asset = preferredEditorProduct();
         const slots = state.editor.document.layers.filter((layer) => layer.type === 'product_slot' && state.selectedLayerIds.has(layer.id));
-        if (!asset) return setStatus('Önce temizlenmiş bir ürün PNG’si seçin.', true);
-        if (!slots.length) return setStatus('Ürünü yerleştirmek için en az bir slot seçin.', true);
-        const before = editorSnapshot();
+        if (!asset) return setStatus('Önce bir örnek ürün seçin.', true);
+        if (!slots.length) return setStatus('Önizleme için en az bir slot seçin.', true);
         for (const slot of slots) {
-            slot.assetId = asset.id;
+            state.slotPreviewAssetIds.set(slot.id, asset.id);
             const oldNode = state.nodes.get(slot.id);
             if (oldNode) oldNode.destroy();
             state.nodes.delete(slot.id);
             await createNode(slot);
         }
-        recordHistory(before);
         syncOrder();
         selectLayer(state.selectedLayerId || slots[slots.length - 1].id, false, true);
         renderEditor();
-        setStatus(`Ürün ${slots.length} slota yerleştirildi.`, false);
+        setStatus(`Örnek ürün ${slots.length} slotta önizleniyor.`, false);
+    }
+
+    async function previewProductInAllSlots() {
+        const asset = preferredEditorProduct();
+        if (!asset) return setStatus('Önce bir örnek ürün seçin.', true);
+        state.previewAssetId = asset.id; state.slotPreviewAssetIds.clear();
+        await rebuildCanvas(); renderEditor(); setStatus('Örnek ürün tüm slotlarda önizleniyor.', false);
+    }
+
+    async function removePreviewProduct() {
+        state.previewAssetId = null; state.slotPreviewAssetIds.clear();
+        await rebuildCanvas(); renderEditor(); setStatus('Örnek ürün önizlemesi kaldırıldı.', false);
     }
 
     function updateSlotBindingButton() {
         const button = document.getElementById('msAddSlotBtn');
+        const allButton = document.getElementById('msPreviewAllBtn');
         const hint = document.getElementById('msSlotSelectionHint');
         if (!button || !state.editor) return;
         const slotCount = state.editor.document.layers.filter((layer) => layer.type === 'product_slot' && state.selectedLayerIds.has(layer.id)).length;
         button.disabled = !preferredEditorProduct() || slotCount === 0;
+        if (allButton) allButton.disabled = !preferredEditorProduct();
         button.textContent = slotCount > 0
-            ? `Seçili slotlara ürün ekle (${slotCount})`
-            : 'Seçili slotlara ürün ekle';
+            ? `Seçili slotlarda önizle (${slotCount})`
+            : 'Seçili slotlarda önizle';
         if (hint) hint.textContent = slotCount > 0
             ? `${slotCount} slot seçili. Ctrl/Cmd+tıklama ile seçime ekleyip çıkarabilirsiniz.`
             : 'Önce bir slot seçin. Çoklu seçim için Ctrl/Cmd basılı tutun.';
@@ -871,6 +917,8 @@
             state.products = state.products.filter((item) => item.id !== asset.id);
             if (state.selectedAssetId === asset.id) state.selectedAssetId = null;
             if (state.createProductId === asset.id) state.createProductId = null;
+            if (state.previewAssetId === asset.id) state.previewAssetId = null;
+            state.slotPreviewAssetIds.forEach((value, key) => { if (value === asset.id) state.slotPreviewAssetIds.delete(key); });
             if (state.editor) {
                 const editorAsset = state.editor.document.assets.find((item) => item.id === asset.id);
                 if (editorAsset && result.physical_deleted) {
@@ -988,16 +1036,21 @@
         syncOrder();
     }
     function getEditorAsset(id) { return state.editor.document.assets.find((asset) => asset.id === id); }
+    function resolveEditorLayerAsset(layer) {
+        if (layer.type !== 'product_slot') return getEditorAsset(layer.assetId);
+        return getEditorAsset(state.slotPreviewAssetIds.get(layer.id)) || getEditorAsset(state.previewAssetId) || getEditorAsset(layer.assetId);
+    }
     function loadImage(url) {
         return new Promise((resolve, reject) => {
             const image = new Image(); image.crossOrigin = 'anonymous'; image.onload = () => resolve(image); image.onerror = reject; image.src = url;
         });
     }
     async function createNode(layer) {
-        const asset = getEditorAsset(layer.assetId); if (!asset) return null;
+        const asset = resolveEditorLayerAsset(layer);
+        if (!asset && layer.type !== 'product_slot') return null;
         try {
-            const image = await loadImage(assetUrl(asset.storagePath));
-            const node = makeImageNode(image, layer, layer.frame);
+            const image = asset ? await loadImage(assetUrl(asset.storagePath)) : null;
+            const node = image ? makeImageNode(image, layer, layer.frame) : new Konva.Rect({ x: layer.frame.x, y: layer.frame.y, width: layer.frame.width, height: layer.frame.height, offsetX: layer.frame.width/2, offsetY: layer.frame.height/2, rotation: layer.frame.rotation||0, fill:'rgba(0,0,0,0)', draggable:!layer.locked });
             node.setAttr('mockupLayerId', layer.id);
             node.on('click tap', (event) => { event.cancelBubble = true; selectLayer(layer.id, Boolean(event.evt && (event.evt.ctrlKey || event.evt.metaKey))); });
             node.on('dragstart', () => node.setAttr('historyBefore', editorSnapshot()));
@@ -1006,7 +1059,7 @@
             node.on('transformstart', () => node.setAttr('historyBefore', editorSnapshot()));
             node.on('transformend', () => { updateFrameFromNode(layer, node, true); recordHistory(node.getAttr('historyBefore')); renderInspector(); renderSelectionMarkers(); });
             state.contentLayer.add(node); state.nodes.set(layer.id, node); return node;
-        } catch (error) { setStatus('Görsel yüklenemedi: ' + asset.name, true); return null; }
+        } catch (error) { setStatus('Görsel yüklenemedi: ' + (asset ? asset.name : layer.name), true); return null; }
     }
     function makeImageNode(image, layer, frame) {
         const perspective = layer.type === 'product_slot' && frame.perspective && frame.perspective.enabled;
@@ -1060,10 +1113,11 @@
     }
     function renderPerspectiveControls(layer) {
         const corners = layer.frame.perspective.corners;
-        const line = new Konva.Line({ points: corners.flatMap((point) => [point.x, point.y]), closed: true, stroke: '#8e44ad', strokeWidth: 6, dash: [18, 10], fill: 'rgba(142,68,173,.05)', listening: false });
+        const line = new Konva.Line({ points: corners.flatMap((point) => [point.x, point.y]), closed: true, stroke: '#8e44ad', strokeWidth: 7, dash: [18, 10], fill: 'rgba(142,68,173,.05)', listening: false });
         state.uiLayer.add(line); state.perspectiveHandles.set(layer.id + '-line', line);
+        renderSlotLabel(layer, corners[0], true);
         corners.forEach((point, index) => {
-            const handle = new Konva.Circle({ x: point.x, y: point.y, radius: 18, fill: '#fff', stroke: '#8e44ad', strokeWidth: 7, draggable: !layer.locked, name: 'ms-perspective-handle' });
+            const handle = new Konva.Circle({ x: point.x, y: point.y, radius: 12, fill: '#fff', stroke: '#8e44ad', strokeWidth: 6, hitStrokeWidth: 22, draggable: !layer.locked, name: 'ms-perspective-handle' });
             handle.on('dragstart', () => handle.setAttr('historyBefore', editorSnapshot()));
             handle.on('dragmove', () => {
                 point.x = Math.round(handle.x()); point.y = Math.round(handle.y());
@@ -1073,6 +1127,13 @@
             handle.on('dragend', () => { recordHistory(handle.getAttr('historyBefore')); renderInspector(); });
             state.uiLayer.add(handle); state.perspectiveHandles.set(layer.id + '-' + index, handle);
         });
+    }
+
+    function renderSlotLabel(layer, point, selected) {
+        const label = new Konva.Label({ x: point.x + 8, y: point.y - 30, listening: false });
+        label.add(new Konva.Tag({ fill: selected ? '#8e44ad' : '#243746', cornerRadius: 5, opacity: .92 }));
+        label.add(new Konva.Text({ text: layer.name, fontSize: 28, fontStyle: 'bold', padding: 8, fill: '#fff' }));
+        state.uiLayer.add(label); state.selectionMarkers.set(layer.id + '-label', label);
     }
 
     function renderPolygonControls(layer) {
@@ -1118,25 +1179,29 @@
         state.perspectiveHandles.forEach((marker) => marker.destroy()); state.perspectiveHandles.clear();
         state.polygonHandles.forEach((marker) => marker.destroy()); state.polygonHandles.clear();
         state.editor.document.layers.forEach((layer) => {
-            if (!state.selectedLayerIds.has(layer.id) || layer.visible === false) return;
+            if (layer.type !== 'product_slot' || layer.visible === false) return;
             const node = state.nodes.get(layer.id);
             if (!node) return;
+            const selected = state.selectedLayerIds.has(layer.id);
             if (layer.type === 'product_slot' && layer.frame.perspective && layer.frame.perspective.enabled) {
-                renderPerspectiveControls(layer);
+                if (selected) renderPerspectiveControls(layer);
+                else {
+                    const corners = layer.frame.perspective.corners;
+                    const marker = new Konva.Line({ points: corners.flatMap((point) => [point.x, point.y]), closed: true, stroke: '#263746', strokeWidth: 4, dash: [14, 9], listening: false });
+                    state.uiLayer.add(marker); state.selectionMarkers.set(layer.id, marker); renderSlotLabel(layer, corners[0], false);
+                }
                 return;
             }
-            if (layer.type === 'foreground_polygon') {
-                renderPolygonControls(layer);
-                return;
-            }
-            if (layer.type !== 'product_slot') return;
             const marker = new Konva.Rect({
                 x: node.x(), y: node.y(), width: node.width() * node.scaleX(), height: node.height() * node.scaleY(),
                 offsetX: node.width() * node.scaleX() / 2, offsetY: node.height() * node.scaleY() / 2,
-                rotation: node.rotation(), stroke: '#16a085', strokeWidth: 5, dash: [18, 10], listening: false
+                rotation: node.rotation(), stroke: selected ? '#8e44ad' : '#263746', strokeWidth: selected ? 7 : 4, dash: selected ? [18, 10] : [13, 8], listening: false
             });
             state.uiLayer.add(marker); marker.moveToBottom(); state.selectionMarkers.set(layer.id, marker);
+            renderSlotLabel(layer, { x: node.x() - node.width()/2, y: node.y() - node.height()/2 }, selected);
         });
+        const selectedPolygon = state.editor.document.layers.find((layer) => layer.id === state.selectedLayerId && layer.type === 'foreground_polygon' && layer.visible !== false);
+        if (selectedPolygon && state.nodes.get(selectedPolygon.id)) renderPolygonControls(selectedPolygon);
         state.transformer.moveToTop(); state.uiLayer.batchDraw();
     }
     function selectLayer(id, toggle, preserveSet) {
@@ -1167,16 +1232,20 @@
         const isPolygon = layer.type === 'foreground_polygon';
         const perspectiveEnabled = Boolean(isProduct && f.perspective && f.perspective.enabled);
         const transformFields = perspectiveEnabled || isPolygon ? '' : `${numberField('X','x',f.x,-2000,4000)}${numberField('Y','y',f.y,-2000,4000)}${numberField('Genişlik','width',f.width,40,4000)}${numberField('Yükseklik','height',f.height,40,4000)}${rangeField('Dönüş','rotation',f.rotation||0,-180,180,'°')}`;
-        const productAdjustments = layer.type === 'product_slot' ? `<div class="ms-section"><h4>ÜRÜN GÖRSEL AYARLARI</h4>${rangeField('Parlaklık','brightness',f.brightness||0,-100,100,'%')}${rangeField('Kontrast','contrast',f.contrast||0,-100,100,'%')}${rangeField('Doygunluk','saturation',f.saturation||0,-100,100,'%')}${rangeField('Hue','hue',f.hue||0,-180,180,'°')}${rangeField('Keskinlik','sharpen',f.sharpen||0,0,20,'%')}<button id="msResetProductVisuals" class="ms-btn ms-full">Görsel ayarları sıfırla</button><small class="ms-help">Kaynak ürün dosyası değişmez; ayarlar yalnızca bu slota uygulanır.</small></div>` : '';
+        const previewAsset = isProduct ? resolveEditorLayerAsset(layer) : null;
+        const productAdjustments = isProduct ? `<div class="ms-product-controls"><h4>ÜRÜN GÖRSEL AYARLARI</h4><div class="ms-selected-product-preview">${previewAsset?`<img src="${assetUrl(previewAsset.storagePath)}" alt="${esc(previewAsset.name)}"><span>${esc(previewAsset.name)}</span>`:'<span>Örnek ürün seçilmedi</span>'}</div>${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}${rangeField('Parlaklık','brightness',f.brightness||0,-100,100,'%')}${rangeField('Kontrast','contrast',f.contrast||0,-100,100,'%')}${rangeField('Doygunluk','saturation',f.saturation||0,-100,100,'%')}${rangeField('Hue','hue',f.hue||0,-180,180,'°')}${rangeField('Keskinlik','sharpen',f.sharpen||0,0,20,'%')}<button id="msResetProductVisuals" class="ms-btn ms-full">Tüm ürün ayarlarını sıfırla</button><small class="ms-help">Slider veya sayı kutusunu kullanın. Shift + yön tuşu 0,1 hassasiyetle ayarlar.</small></div>` : '';
         const perspectiveTools = isProduct ? `<div class="ms-section"><h4>PERSPEKTİF SLOTU</h4><label class="ms-check"><input id="msPerspectiveToggle" type="checkbox" ${perspectiveEnabled?'checked':''}> Dört köşeli perspektifi aç</label>${perspectiveEnabled ? `${rangeField('Güvenli iç boşluk','smartPadding',(f.smartFit&&f.smartFit.padding)||0,0,30,'%')}<button id="msSmartPlaceBtn" class="ms-btn ms-btn-primary ms-full">Akıllı yerleştir</button><button id="msResetPerspectiveBtn" class="ms-btn ms-full">Köşeleri sıfırla</button><small class="ms-help">Mor köşeleri tuval üzerinde sürükleyin. Akıllı yerleştirme şeffaf kenarları algılar.</small>` : '<small class="ms-help">Açıldığında mevcut konum ve dönüş dört düzenlenebilir köşeye çevrilir.</small>'}</div>` : '';
         const polygonTools = isPolygon ? `<div class="ms-section"><h4>POLİGON MASKESİ</h4><p class="ms-help">${layer.geometry.points.length} nokta • ${layer.geometry.closed?'Kapalı':'Çiziliyor'}</p><button id="msPolygonDrawBtn" class="ms-btn ms-full">Nokta eklemeye devam et</button><button id="msPolygonCloseBtn" class="ms-btn ms-btn-primary ms-full" ${layer.geometry.points.length<3?'disabled':''}>Poligonu kapat</button><button id="msPolygonUndoPointBtn" class="ms-btn ms-full" ${!layer.geometry.points.length?'disabled':''}>Son noktayı sil</button><button id="msPolygonResetBtn" class="ms-btn ms-btn-danger ms-full">Poligonu sıfırla</button></div>` : '';
-        root.innerHTML = `<h4>${esc(layer.name)}</h4>${transformFields}${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}
-            ${perspectiveTools}${polygonTools}
-            ${productAdjustments}
-            <div class="ms-section"><h4>GÖLGE</h4><label class="ms-check"><input id="msShadowToggle" type="checkbox" ${f.shadow.enabled?'checked':''}> Gölgeyi aç</label>${rangeField('Gölge blur','shadowBlur',f.shadow.blur||0,0,120,' px')}${rangeField('Gölge opaklığı','shadowOpacity',Math.round((f.shadow.opacity==null?.35:f.shadow.opacity)*100),0,100,'%')}${numberField('Gölge X','shadowOffsetX',f.shadow.offsetX||0,-300,300)}${numberField('Gölge Y','shadowOffsetY',f.shadow.offsetY||0,-300,300)}</div>
+        const commonVisuals = isProduct ? '' : `${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}`;
+        const shadowTools = `<div class="ms-section"><h4>GÖLGE</h4><label class="ms-check"><input id="msShadowToggle" type="checkbox" ${f.shadow.enabled?'checked':''}> Gölgeyi aç</label>${rangeField('Açı','shadowAngle',f.shadow.angle||0,0,360,'°')}${rangeField('Mesafe','shadowDistance',f.shadow.distance||0,0,300,' px')}${numberField('X ofset','shadowOffsetX',f.shadow.offsetX||0,-300,300)}${numberField('Y ofset','shadowOffsetY',f.shadow.offsetY||0,-300,300)}${rangeField('Blur / yumuşaklık','shadowBlur',f.shadow.blur||0,0,120,' px')}${rangeField('Opaklık','shadowOpacity',Math.round((f.shadow.opacity==null?.35:f.shadow.opacity)*100),0,100,'%')}<div class="ms-field"><label for="msShadowColor">Renk</label><div class="ms-control-inputs"><input id="msShadowColor" type="color" value="${esc(f.shadow.color||'#000000')}"><button type="button" class="ms-control-reset" data-reset-frame-key="shadowColor">Sıfırla</button></div></div></div>`;
+        root.innerHTML = `<h4>${esc(layer.name)}</h4>${productAdjustments}${transformFields}${commonVisuals}
+            ${perspectiveTools}${polygonTools}${shadowTools}
             ${layer.type==='product_slot'?'<button id="msDuplicateLayer" class="ms-btn ms-btn-primary ms-full">Slotu çoğalt</button>':''}<button id="msRemoveLayer" class="ms-btn ms-btn-danger ms-full">Katmanı sil</button>`;
         root.querySelectorAll('[data-frame-key]').forEach(bindFrameInput);
+        root.querySelectorAll('[data-reset-frame-key]').forEach((button) => button.addEventListener('click', () => resetFrameControl(layer, button.dataset.resetFrameKey)));
         document.getElementById('msShadowToggle').addEventListener('change', (e) => { const before=editorSnapshot(); f.shadow.enabled=e.target.checked; updateNode(layer); recordHistory(before); });
+        const shadowColor = document.getElementById('msShadowColor'); let shadowColorBefore = null;
+        if (shadowColor) { const rememberColor=()=>{shadowColorBefore=shadowColorBefore||editorSnapshot();};shadowColor.addEventListener('pointerdown',rememberColor);shadowColor.addEventListener('focus',rememberColor);shadowColor.addEventListener('input', () => { f.shadow.color=shadowColor.value; updateNode(layer); });shadowColor.addEventListener('change', () => {recordHistory(shadowColorBefore);shadowColorBefore=null;}); }
         const reset = document.getElementById('msResetProductVisuals');
         if (reset) reset.addEventListener('click', () => {
             const before = editorSnapshot();
@@ -1246,22 +1315,65 @@
         const before = editorSnapshot(); layer.geometry.points = []; layer.geometry.closed = false; state.polygonDrawingLayerId = layer.id; recordHistory(before);
         refreshSpecialNode(layer); renderInspector(); renderSelectionMarkers(); setStatus('Poligon sıfırlandı; tuvale tıklayarak yeniden çizin.', false);
     }
-    function numberField(label,key,value,min,max) { return `<div class="ms-field"><label>${label}</label><input data-frame-key="${key}" type="number" min="${min}" max="${max}" value="${Math.round(value*10)/10}"></div>`; }
-    function rangeField(label,key,value,min,max,suffix) { return `<div class="ms-field"><label><span>${label}</span><span class="ms-field-value">${Math.round(value)}${suffix}</span></label><input data-frame-key="${key}" data-suffix="${suffix}" type="range" min="${min}" max="${max}" value="${value}"></div>`; }
+    const CONTROL_DEFAULTS = { opacity:100, blur:0, brightness:0, contrast:0, saturation:0, hue:0, sharpen:0, rotation:0, smartPadding:0, shadowAngle:56, shadowDistance:22, shadowOffsetX:12, shadowOffsetY:18, shadowBlur:24, shadowOpacity:35, shadowColor:'#000000' };
+    function numberField(label,key,value,min,max) { return `<div class="ms-field"><label>${label}</label><div class="ms-control-inputs"><input data-frame-key="${key}" type="number" step="0.1" min="${min}" max="${max}" value="${Math.round(value*10)/10}"><button type="button" class="ms-control-reset" data-reset-frame-key="${key}">Sıfırla</button></div></div>`; }
+    function rangeField(label,key,value,min,max,suffix) { return `<div class="ms-field"><label><span>${label}</span><span class="ms-field-value">${Math.round(value*10)/10}${suffix}</span></label><div class="ms-control-inputs"><input data-frame-key="${key}" data-suffix="${suffix}" type="range" step="0.1" min="${min}" max="${max}" value="${value}"><input data-frame-key="${key}" data-suffix="${suffix}" class="ms-control-number" type="number" step="0.1" min="${min}" max="${max}" value="${Math.round(value*10)/10}"><button type="button" class="ms-control-reset" data-reset-frame-key="${key}">Sıfırla</button></div></div>`; }
+    function syncControlInputs(root,key,value) {
+        root.querySelectorAll(`[data-frame-key="${key}"]`).forEach((field) => { if (document.activeElement!==field || Number(field.value)!==value) field.value=Math.round(value*10)/10; });
+        const label=root.querySelector(`[data-frame-key="${key}"]`)?.closest('.ms-field')?.querySelector('.ms-field-value'); if(label)label.textContent=Math.round(value*10)/10+(root.querySelector(`[data-frame-key="${key}"]`)?.dataset.suffix||'');
+    }
+    function setFrameControlValue(layer,key,value) {
+        const f=layer.frame; f.shadow=normalizeShadow(f.shadow);
+        if(key==='opacity') f.opacity=value/100;
+        else if(key==='shadowOpacity') f.shadow.opacity=value/100;
+        else if(key==='shadowBlur') f.shadow.blur=value;
+        else if(key==='shadowAngle'||key==='shadowDistance') { if(key==='shadowAngle')f.shadow.angle=value;else f.shadow.distance=value;const radians=f.shadow.angle*Math.PI/180;f.shadow.offsetX=Math.round(Math.cos(radians)*f.shadow.distance*10)/10;f.shadow.offsetY=Math.round(Math.sin(radians)*f.shadow.distance*10)/10; }
+        else if(key==='shadowOffsetX'||key==='shadowOffsetY') { if(key==='shadowOffsetX')f.shadow.offsetX=value;else f.shadow.offsetY=value;f.shadow.distance=Math.round(Math.hypot(f.shadow.offsetX,f.shadow.offsetY)*10)/10;f.shadow.angle=Math.round((((Math.atan2(f.shadow.offsetY,f.shadow.offsetX)*180/Math.PI)+360)%360)*10)/10; }
+        else if(key==='smartPadding') { f.smartFit=normalizeSmartFit(f.smartFit||{});f.smartFit.padding=value; }
+        else f[key]=value;
+    }
     function bindFrameInput(input) {
         let before = null;
         const remember = () => { if (!before) before = editorSnapshot(); };
         input.addEventListener('pointerdown', remember); input.addEventListener('focus', remember);
+        input.addEventListener('keydown', (event) => { if(input.type==='range'&&event.shiftKey&&(event.key==='ArrowLeft'||event.key==='ArrowRight'||event.key==='ArrowUp'||event.key==='ArrowDown')){event.preventDefault();remember();const direction=(event.key==='ArrowRight'||event.key==='ArrowUp')?1:-1;input.value=String(Math.max(Number(input.min),Math.min(Number(input.max),Number(input.value)+direction*.1)));input.dispatchEvent(new Event('input',{bubbles:true}));} });
         input.addEventListener('input', () => {
             const layer = state.editor.document.layers.find((l) => l.id === state.selectedLayerId); if (!layer) return;
-            const key=input.dataset.frameKey, value=Number(input.value), f=layer.frame;
-            if(key==='opacity') f.opacity=value/100; else if(key==='shadowOpacity') f.shadow.opacity=value/100; else if(key==='shadowBlur') f.shadow.blur=value; else if(key==='shadowOffsetX') f.shadow.offsetX=value; else if(key==='shadowOffsetY') f.shadow.offsetY=value; else if(key==='smartPadding') { f.smartFit=normalizeSmartFit(f.smartFit||{}); f.smartFit.padding=value; } else f[key]=value;
-            const label=input.parentElement.querySelector('.ms-field-value'); if(label) label.textContent=Math.round(value)+(input.dataset.suffix||''); updateNode(layer);
+            const key=input.dataset.frameKey, value=Number(input.value); setFrameControlValue(layer,key,value); syncControlInputs(document.getElementById('msInspector'),key,value);
+            if(key.startsWith('shadow')) { syncControlInputs(document.getElementById('msInspector'),'shadowAngle',layer.frame.shadow.angle);syncControlInputs(document.getElementById('msInspector'),'shadowDistance',layer.frame.shadow.distance);syncControlInputs(document.getElementById('msInspector'),'shadowOffsetX',layer.frame.shadow.offsetX);syncControlInputs(document.getElementById('msInspector'),'shadowOffsetY',layer.frame.shadow.offsetY); }
+            updateNode(layer);
         });
         input.addEventListener('change', () => { recordHistory(before); before=null; });
     }
+    function resetFrameControl(layer,key) { const before=editorSnapshot(); if(key==='shadowColor')layer.frame.shadow.color=CONTROL_DEFAULTS.shadowColor;else setFrameControlValue(layer,key,CONTROL_DEFAULTS[key]??0);recordHistory(before);updateNode(layer);renderInspector(); }
     function updateNode(layer) { const node=state.nodes.get(layer.id); if(!node)return; const f=layer.frame; if((layer.type==='product_slot'&&f.perspective&&f.perspective.enabled)||layer.type==='foreground_polygon'){refreshSpecialNode(layer);}else{node.position({x:f.x,y:f.y});node.size({width:f.width,height:f.height});node.offset({x:f.width/2,y:f.height/2});node.rotation(f.rotation||0);applyEffects(node,f,layer.type);} state.transformer.forceUpdate(); renderSelectionMarkers(); state.stage.batchDraw(); }
-    async function duplicateLayer(layer) { const before=editorSnapshot(), copy=clone(layer); copy.id=uid(); copy.name=layer.name+' Kopya'; copy.frame.x+=60; copy.frame.y+=60; state.editor.document.layers.push(copy); state.selectedLayerIds=new Set([copy.id]); recordHistory(before); await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); }
+    function nextSlotName() { return 'Slot ' + (state.editor.document.layers.filter((layer) => layer.type === 'product_slot').length + 1); }
+    function offsetSlotCopy(source) {
+        const copy = clone(source); copy.id = uid(); copy.name = nextSlotName(); copy.frame.x += 25; copy.frame.y += 25;
+        if (copy.frame.perspective && copy.frame.perspective.corners) copy.frame.perspective.corners.forEach((point) => { point.x += 25; point.y += 25; });
+        return copy;
+    }
+    function copySelectedSlot() {
+        const layer = state.editor.document.layers.find((item) => item.id === state.selectedLayerId && item.type === 'product_slot');
+        if (!layer) return setStatus('Kopyalamak için bir slot seçin.', true);
+        state.clipboardLayer = clone(layer); setStatus(`${layer.name} kopyalandı. Ctrl/Cmd+V ile yapıştırabilirsiniz.`, false);
+    }
+    async function pasteCopiedSlot() {
+        if (!state.clipboardLayer) return setStatus('Yapıştırılacak bir slot yok. Önce Ctrl/Cmd+C kullanın.', true);
+        const before = editorSnapshot(), copy = offsetSlotCopy(state.clipboardLayer);
+        state.editor.document.layers.push(copy); state.selectedLayerId = copy.id; state.selectedLayerIds = new Set([copy.id]); recordHistory(before);
+        await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); setStatus(`${copy.name} yapıştırıldı.`, false);
+    }
+    async function duplicateSelectedSlot() {
+        const layer = state.editor.document.layers.find((item) => item.id === state.selectedLayerId && item.type === 'product_slot');
+        if (!layer) return setStatus('Çoğaltmak için bir slot seçin.', true);
+        await duplicateLayer(layer);
+    }
+    async function duplicateLayer(layer) {
+        const before=editorSnapshot(), copy=offsetSlotCopy(layer); state.editor.document.layers.push(copy);
+        const previewId = state.slotPreviewAssetIds.get(layer.id); if (previewId) state.slotPreviewAssetIds.set(copy.id, previewId);
+        state.selectedLayerId=copy.id; state.selectedLayerIds=new Set([copy.id]); recordHistory(before); await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); setStatus(`${copy.name} çoğaltıldı.`,false);
+    }
     function removeLayer(layer) { const before=editorSnapshot(), index=state.editor.document.layers.findIndex((l)=>l.id===layer.id); if(index<0)return; const node=state.nodes.get(layer.id); if(node)node.destroy(); state.nodes.delete(layer.id); state.editor.document.layers.splice(index,1); state.selectedLayerIds.delete(layer.id); state.selectedLayerId=[...state.selectedLayerIds].pop()||null; if(state.polygonDrawingLayerId===layer.id)state.polygonDrawingLayerId=null; state.transformer.nodes([]); recordHistory(before); state.stage.batchDraw(); renderEditor(); }
 
     async function exportEditorBlob(targetSize) {
@@ -1282,30 +1394,29 @@
     }
     async function uploadBlob(blob, type, filename, templateId, mimeType, throwOnError) {
         try {
-            if (type === 'output') return await uploadBlobChunked(blob, filename, mimeType || 'image/png');
-            const query = new URLSearchParams({ action:'upload', asset_type:type, filename }); if(templateId)query.set('template_id',templateId);
-            const data = await api(API+'?'+query.toString(),{method:'POST',headers:{'Content-Type':mimeType||blob.type||'application/octet-stream'},body:blob}); return normalizeAsset(data.asset);
+            if (!blob || !blob.size) throw new Error('Yüklenecek dosya boş olamaz.');
+            if (blob.size > 20*1024*1024) throw new Error('Dosya boyutu en fazla 20 MB olabilir.');
+            const contentType=mimeType||blob.type||'application/octet-stream';
+            setUploadProgress(true,0,`${filename} • ${formatFileSize(blob.size)}`);
+            const signed=await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create_signed_upload',asset_type:type,filename,mime_type:contentType,size_bytes:blob.size,template_id:templateId||null})});
+            await uploadDirectToSignedUrl(signed.upload_url,blob,filename,(percent)=>setUploadProgress(true,percent,`${filename} • ${formatFileSize(blob.size)}`));
+            setUploadProgress(true,100,`${filename} • metadata kaydediliyor`);
+            const data=await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'complete_signed_upload',upload_ticket:signed.upload_ticket})});
+            setUploadProgress(false,100,'');
+            return normalizeAsset(data.asset);
         } catch(error) {
+            setUploadProgress(false,0,'');
             console.error('[Mockup Studio upload]', { type, size: blob && blob.size, message: error.message });
             if (throwOnError) throw error;
-            setStatus('Dosya yüklenemedi: '+error.message,true);
+            setStatus(`Dosya yüklenemedi (${formatFileSize(blob&&blob.size||0)}): ${error.message}`,true);
             return null;
         }
     }
-    async function uploadBlobChunked(blob, filename, mimeType) {
-        const pngBlob = await ensurePngBlob(blob);
-        const chunkSize = 2 * 1024 * 1024;
-        const chunkCount = Math.ceil(pngBlob.size / chunkSize);
-        const uploadId = uid();
-        for (let index = 0; index < chunkCount; index += 1) {
-            const query = new URLSearchParams({ action:'upload_chunk', upload_id:uploadId, chunk_index:String(index) });
-            const slice = pngBlob.slice(index * chunkSize, Math.min(pngBlob.size, (index + 1) * chunkSize));
-            const pngChunk = new Blob([await slice.arrayBuffer()], { type: 'image/png' });
-            await api(API+'?'+query.toString(), { method:'POST', headers:{'Content-Type':'image/png'}, body:pngChunk });
-        }
-        const data = await api(API, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'finalize_upload', upload_id:uploadId, asset_type:'output', filename:filename.endsWith('.png')?filename:filename+'.png', mime_type:'image/png', chunk_count:chunkCount }) });
-        return normalizeAsset(data.asset);
+    function uploadDirectToSignedUrl(url,blob,filename,onProgress) {
+        return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open('PUT',url,true);xhr.setRequestHeader('x-upsert','false');xhr.upload.onprogress=(event)=>{if(event.lengthComputable&&onProgress)onProgress(Math.round(event.loaded/event.total*100));};xhr.onerror=()=>reject(new Error('Storage bağlantısı kurulamadı.'));xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)return resolve();let message=xhr.responseText||`Storage HTTP ${xhr.status}`;try{const parsed=JSON.parse(message);message=parsed.message||parsed.error||message;}catch(ignore){}reject(new Error(message));};const form=new FormData();form.append('cacheControl','3600');form.append('',blob,filename);xhr.send(form);});
     }
+    function setUploadProgress(visible,percent,label){const root=document.getElementById('msUploadProgress');if(!root)return;root.hidden=!visible;document.getElementById('msUploadProgressLabel').textContent=label||'Dosya yükleniyor';document.getElementById('msUploadProgressValue').textContent=`${Math.round(percent||0)}%`;document.getElementById('msUploadProgressBar').style.width=`${Math.max(0,Math.min(100,percent||0))}%`;}
+    function formatFileSize(bytes){if(!bytes)return '0 B';const units=['B','KB','MB','GB'];const index=Math.min(units.length-1,Math.floor(Math.log(bytes)/Math.log(1024)));return `${(bytes/Math.pow(1024,index)).toFixed(index?1:0)} ${units[index]}`;}
     function readDimensions(file) { return new Promise((resolve)=>{ const url=URL.createObjectURL(file),img=new Image(); img.onload=()=>{resolve({width:img.naturalWidth,height:img.naturalHeight});URL.revokeObjectURL(url);};img.onerror=()=>{resolve({width:null,height:null});URL.revokeObjectURL(url);};img.src=url; }); }
 
     function promptTemplateFacts() {

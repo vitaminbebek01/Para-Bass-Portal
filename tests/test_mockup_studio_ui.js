@@ -4,8 +4,9 @@ const assert = require('assert');
 
 const baseUrl = process.env.MOCKUP_TEST_URL || 'http://localhost:8000';
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69d9WQAAAABJRU5ErkJggg==', 'base64');
+const largePng = Buffer.concat([png, Buffer.alloc(20 * 1024 * 1024 - png.length)]);
 
-const db = { templates: [], versions: [], products: [], outputs: [], assets: [], storage: new Set() };
+const db = { templates: [], versions: [], products: [], outputs: [], assets: [], storage: new Set(), signed: new Map(), directUploads: [], maxApiPayload: 0 };
 const now = () => new Date().toISOString();
 
 function json(route, body, status = 200) {
@@ -16,6 +17,7 @@ async function mockApi(route) {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
+    db.maxApiPayload = Math.max(db.maxApiPayload, request.postDataBuffer()?.length || 0);
 
     if (method === 'GET' && url.searchParams.has('asset')) {
         if (!db.storage.has(url.searchParams.get('asset'))) return json(route, { error: 'Dosya bulunamadı.' }, 404);
@@ -47,6 +49,22 @@ async function mockApi(route) {
     }
     if (method === 'POST') {
         const body = request.postDataJSON();
+        if (body.action === 'create_signed_upload') {
+            const id = crypto.randomUUID();
+            const ticket = crypto.randomUUID();
+            const scope = body.asset_type === 'output' ? 'output' : (body.asset_type.startsWith('product_') ? 'product' : 'template');
+            const path = `${scope}/${body.template_id || 'library'}/${id}.png`;
+            db.signed.set(ticket, { id, path, body, uploaded: false });
+            return json(route, { success: true, upload_url: `https://mock-storage.local/${ticket}`, upload_ticket: ticket, storage_path: path, expires_in: 900 }, 201);
+        }
+        if (body.action === 'complete_signed_upload') {
+            const pending = db.signed.get(body.upload_ticket);
+            assert(pending?.uploaded, 'Metadata kaydından önce doğrudan Storage yüklemesi tamamlanmalı');
+            const asset = { id: pending.id, asset_type: pending.body.asset_type, original_filename: pending.body.filename, mime_type: pending.body.mime_type, size_bytes: pending.body.size_bytes, storage_path: pending.path };
+            db.assets.push(asset); db.storage.add(asset.storage_path);
+            if (asset.asset_type === 'product_box_clean' || asset.asset_type === 'product_only_clean') db.products.unshift(asset);
+            return json(route, { success: true, asset }, 201);
+        }
         if (body.action === 'finalize_upload') {
             assert.strictEqual(body.mime_type, 'image/png', 'Finalize işlemi PNG MIME türünü zorlamalı');
             assert(body.filename.endsWith('.png'), 'Çıktı dosya adı .png olmalı');
@@ -104,6 +122,18 @@ async function mockApi(route) {
     return json(route, { error: 'Unhandled mock request' }, 400);
 }
 
+async function mockStorage(route) {
+    const request = route.request();
+    assert.strictEqual(request.method(), 'PUT', 'Dosya signed URL ile doğrudan PUT edilmelidir');
+    const ticket = new URL(request.url()).pathname.slice(1);
+    const pending = db.signed.get(ticket);
+    assert(pending, 'Signed upload bileti bulunmalı');
+    const transferred = request.postDataBuffer()?.length || 0;
+    pending.uploaded = true;
+    db.directUploads.push({ type: pending.body.asset_type, declaredSize: pending.body.size_bytes, transferred });
+    return json(route, { Key: pending.path }, 200);
+}
+
 (async () => {
     const browser = await chromium.launch({
         headless: true,
@@ -115,31 +145,50 @@ async function mockApi(route) {
         localStorage.setItem('paraBassRole', 'patron');
     });
     await page.route('**/api/mockup-studio**', mockApi);
+    await page.route('https://mock-storage.local/**', mockStorage);
 
     const openMockup = async () => {
         await page.locator('#menuStudio').click();
         await page.locator('#tabMockupStudio').click();
         await page.locator('[data-view="editor"]').click();
     };
+    const controlNumber = (key) => page.locator(`[data-frame-key="${key}"][type="number"]`).last();
 
     try {
         await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
         await openMockup();
 
+        await page.locator('#msSceneInput').setInputFiles({ name: 'large_open_box_scene.png', mimeType: 'image/png', buffer: largePng });
+        await page.getByText(/kaydetmeden slot ekleyebilirsiniz/).waitFor();
+        await page.locator('#msNewSlotBtn').click();
+        await page.getByText(/Slot 1 sahnenin merkezine eklendi/).waitFor();
+        assert.strictEqual(await page.locator('.ms-layer').filter({ hasText: 'Slot 1' }).count(), 1, 'Kaydedilmemiş yeni şablona slot eklenmeli');
+
         const productInput = page.locator('#msEditorProductInput');
-        await productInput.setInputFiles({ name: 'product_box_clean.png', mimeType: 'image/png', buffer: png });
-        await page.locator('.ms-layer').waitFor();
-        let slotCount = await page.locator('.ms-layer').count();
-        while (slotCount < 3) {
-            await page.locator('#msNewSlotBtn').click();
-            slotCount += 1;
-            await page.waitForFunction((count) => document.querySelectorAll('.ms-layer').length === count, slotCount);
-        }
-        assert.strictEqual(await page.locator('.ms-layer').count(), 3, '3 ürün slotu oluşmalı');
-        await page.locator('.ms-layer').nth(1).click({ modifiers: ['Control'] });
-        await page.locator('.ms-layer').nth(2).click({ modifiers: ['Control'] });
-        await page.locator('#msAddSlotBtn').click();
-        await page.getByText('Ürün 3 slota yerleştirildi.').waitFor();
+        await productInput.setInputFiles({ name: 'large_product_box_clean.png', mimeType: 'image/png', buffer: largePng });
+        await page.getByText(/tüm slotlarda önizlemeye alındı/).waitFor();
+        assert(await page.locator('.ms-selected-product-preview img').isVisible(), 'Örnek ürün seçili slot panelinde görünmeli');
+        await page.locator('#msRemovePreviewBtn').click();
+        await page.getByText('Örnek ürün önizlemesi kaldırıldı.').waitFor();
+        assert.strictEqual(await page.locator('.ms-selected-product-preview img').count(), 0, 'Örnek ürün kaldırılabilmeli');
+        await page.locator('.ms-asset-select').filter({ hasText: 'large_product_box_clean.png' }).click();
+        await page.locator('#msPreviewAllBtn').click();
+        await page.getByText('Örnek ürün tüm slotlarda önizleniyor.').waitFor();
+
+        await page.locator('.ms-layer').filter({ hasText: 'Slot 1' }).click();
+        await controlNumber('brightness').fill('15'); await controlNumber('brightness').press('Tab');
+        await controlNumber('blur').fill('3'); await controlNumber('blur').press('Tab');
+        await controlNumber('opacity').fill('90'); await controlNumber('opacity').press('Tab');
+        await page.locator('body').press('Control+c');
+        await page.locator('body').press('Control+v');
+        await page.getByText('Slot 2 yapıştırıldı.').waitFor();
+        await page.locator('body').press('Control+d');
+        await page.getByText('Slot 3 çoğaltıldı.').waitFor();
+        const slotRows = page.locator('.ms-layer').filter({ hasText: /Slot \d/ });
+        assert.strictEqual(await slotRows.count(), 3, 'Kopyala/yapıştır ve çoğalt ile 3 slot oluşmalı');
+        assert.strictEqual(db.directUploads.filter(item => item.declaredSize === largePng.length).length, 2, '20 MB ürün ve sahne doğrudan Storage’a yüklenmeli');
+        assert(db.directUploads.filter(item => item.declaredSize === largePng.length).every(item => item.transferred > item.declaredSize), 'Signed upload multipart gövdesi doğrudan Storage endpointine gitmeli');
+        assert(db.maxApiPayload < 100000, '20 MB dosya Vercel API payload’una girmemeli');
 
         const frames = [
             { x: '400', rotation: '-12' },
@@ -147,44 +196,45 @@ async function mockApi(route) {
             { x: '1600', rotation: '18' }
         ];
         for (let index = 0; index < frames.length; index += 1) {
-            await page.locator('.ms-layer').nth(index).click();
-            await page.locator('[data-frame-key="x"]').fill(frames[index].x);
-            await page.locator('[data-frame-key="x"]').press('Tab');
-            await page.locator('[data-frame-key="rotation"]').fill(frames[index].rotation);
-            await page.locator('[data-frame-key="rotation"]').press('Tab');
+            await slotRows.nth(index).click();
+            await controlNumber('x').fill(frames[index].x);
+            await controlNumber('x').press('Tab');
+            await controlNumber('rotation').fill(frames[index].rotation);
+            await controlNumber('rotation').press('Tab');
         }
 
-        await page.locator('.ms-layer').nth(0).click();
-        await page.locator('[data-frame-key="brightness"]').fill('35');
-        await page.locator('[data-frame-key="brightness"]').press('Tab');
-        await page.locator('[data-frame-key="contrast"]').fill('20');
-        await page.locator('[data-frame-key="contrast"]').press('Tab');
-        await page.locator('.ms-layer').nth(1).click();
-        assert.strictEqual(await page.locator('[data-frame-key="brightness"]').inputValue(), '0', 'İkinci slotun parlaklığı bağımsız kalmalı');
-        assert.strictEqual(await page.locator('[data-frame-key="contrast"]').inputValue(), '0', 'İkinci slotun kontrastı bağımsız kalmalı');
+        await slotRows.nth(0).click();
+        await controlNumber('brightness').fill('35');
+        await controlNumber('brightness').press('Tab');
+        await controlNumber('contrast').fill('20');
+        await controlNumber('contrast').press('Tab');
+        await slotRows.nth(1).click();
+        assert.strictEqual(await controlNumber('brightness').inputValue(), '15', 'Kopyalanan slot ürün ayarlarını taşımalı');
+        assert.strictEqual(await controlNumber('contrast').inputValue(), '0', 'İkinci slotun kontrastı bağımsız kalmalı');
 
-        await page.locator('.ms-layer').nth(0).click();
+        await slotRows.nth(0).click();
         await page.locator('#msPerspectiveToggle').check();
         await page.getByText(/Perspektif modu açıldı/).waitFor();
-        await page.locator('[data-frame-key="smartPadding"]').fill('8');
-        await page.locator('[data-frame-key="smartPadding"]').press('Tab');
+        await controlNumber('smartPadding').fill('8');
+        await controlNumber('smartPadding').press('Tab');
         await page.locator('#msSmartPlaceBtn').click();
         await page.getByText(/Şeffaf kenarlar algılandı/).waitFor();
+        await page.locator('#msShadowToggle').check();
+        await controlNumber('shadowAngle').fill('135'); await controlNumber('shadowAngle').press('Tab');
+        await controlNumber('shadowDistance').fill('40'); await controlNumber('shadowDistance').press('Tab');
 
-        await page.locator('.ms-layer').nth(1).click();
-        const xInput = page.locator('[data-frame-key="x"]');
+        await slotRows.nth(1).click();
+        const xInput = controlNumber('x');
         const originalX = await xInput.inputValue();
         await xInput.fill('1450');
         await xInput.press('Tab');
         await page.locator('#msUndoBtn').click();
-        await page.waitForFunction(() => document.querySelector('[data-frame-key="x"]')?.value !== '1450');
-        assert.strictEqual(await page.locator('[data-frame-key="x"]').inputValue(), originalX, 'Undo tek slot değişikliğini geri almalı');
+        await page.waitForFunction(() => document.querySelector('[data-frame-key="x"][type="number"]')?.value !== '1450');
+        assert.strictEqual(await controlNumber('x').inputValue(), originalX, 'Undo tek slot değişikliğini geri almalı');
         await page.locator('#msRedoBtn').click();
-        await page.waitForFunction(() => document.querySelector('[data-frame-key="x"]')?.value === '1450');
-        assert.strictEqual(await page.locator('[data-frame-key="x"]').inputValue(), '1450', 'Redo tek slot değişikliğini yinelemeli');
+        await page.waitForFunction(() => document.querySelector('[data-frame-key="x"][type="number"]')?.value === '1450');
+        assert.strictEqual(await controlNumber('x').inputValue(), '1450', 'Redo tek slot değişikliğini yinelemeli');
 
-        await page.locator('#msSceneInput').setInputFiles({ name: 'open_box_scene.png', mimeType: 'image/png', buffer: png });
-        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 4);
         await page.locator('#msPolygonMaskBtn').click();
         await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 5);
         const uiCanvas = page.locator('#mockupCanvasHost canvas').last();
@@ -215,12 +265,16 @@ async function mockApi(route) {
         assert.strictEqual(db.templates[0].slot_count, 3, 'Kaydedilen şablonda 3 slot olmalı');
         assert.strictEqual(db.templates[0].document.layers[0].type, 'scene_background', 'Arka sahne en altta olmalı');
         assert(db.templates[0].document.layers.slice(1, -2).every(layer => layer.type === 'product_slot'), 'Ürün slotları sahne ile maskelerin arasında olmalı');
-        assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => layer.assetId)).size, 1, 'Aynı ürün üç slota bağlanmalı');
+        assert(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').every(layer => layer.assetId === null), 'Geçici örnek ürün nihai slot bağı olarak kaydedilmemeli');
         assert.strictEqual(new Set(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').map(layer => `${layer.frame.x}:${layer.frame.rotation}`)).size, 3, 'Slot dönüşümleri bağımsız kalmalı');
         assert.strictEqual(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot' && layer.frame.brightness === 35 && layer.frame.contrast === 20).length, 1, 'Görsel ayarları yalnızca değiştirilen slota kaydedilmeli');
+        assert(db.templates[0].document.layers.filter(layer => layer.type === 'product_slot').every(layer => layer.frame.blur === 3 && layer.frame.opacity === .9), 'Kopyalanan slot blur ve opaklık ayarlarını taşımalı');
         const perspectiveSlot = db.templates[0].document.layers.find(layer => layer.type === 'product_slot' && layer.frame.perspective?.enabled);
         assert(perspectiveSlot && perspectiveSlot.frame.perspective.corners.length === 4, 'Perspektif slotu dört köşeyle kaydedilmeli');
         assert.strictEqual(perspectiveSlot.frame.smartFit.padding, 8, 'Akıllı yerleştirme iç boşluğu kaydedilmeli');
+        assert.strictEqual(perspectiveSlot.frame.shadow.angle, 135, 'Gölge açısı slotta kaydedilmeli');
+        assert.strictEqual(perspectiveSlot.frame.shadow.distance, 40, 'Gölge mesafesi slotta kaydedilmeli');
+        assert(Math.abs(perspectiveSlot.frame.shadow.offsetX + 28.3) < .2 && Math.abs(perspectiveSlot.frame.shadow.offsetY - 28.3) < .2, 'Açı ve mesafe X/Y ofsetine çevrilmeli');
         const polygonLayer = db.templates[0].document.layers.find(layer => layer.type === 'foreground_polygon');
         assert(polygonLayer && polygonLayer.geometry.closed && polygonLayer.geometry.points.length === 3, 'Kapalı foreground poligonu snapshot’a kaydedilmeli');
         assert.match(db.templates[0].document.promptSpec.generatedTr, /beyaz kozmetik kutusu/, 'Prompt ayarları snapshot’a kaydedilmeli');
@@ -254,7 +308,8 @@ async function mockApi(route) {
         await page.locator('[data-view="templates"]').click();
         await page.locator('#msNewTemplateBtn').click();
         await page.locator('#msEditorProductInput').setInputFiles({ name: 'second_product.png', mimeType: 'image/png', buffer: png });
-        await page.locator('.ms-layer').waitFor();
+        await page.locator('#msNewSlotBtn').click();
+        await page.locator('.ms-layer').filter({ hasText: 'Slot 1' }).waitFor();
         await page.locator('#msEditorName').fill('Test Second Template');
         await page.locator('#msEditorName').press('Tab');
         await page.locator('#msSaveBtn').click();
@@ -286,6 +341,7 @@ async function mockApi(route) {
         await page.locator('#msGenerateBtn').click();
         await page.getByText('2 kalıcı çıktı oluşturuldu.').waitFor({ timeout: 30000 });
         assert.strictEqual(db.outputs.length, 2, 'İki ayrı çıktı kaydı oluşturulmalı');
+        assert(db.outputs.every(output => output.template_snapshot.layers.every(layer => !String(layer.type).includes('helper'))), 'Nihai çıktı snapshotlarında yardımcı çizgi veya etiket bulunmamalı');
         page.once('dialog', dialog => dialog.accept());
         await usedProductCard.locator('.ms-product-delete').click();
         await page.getByText('Kullanılmış ürün aktif listeden kaldırıldı; eski çıktılar korundu.').waitFor();

@@ -1,12 +1,16 @@
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
+import base64
 import copy
 from datetime import datetime, timezone
+import hashlib
+import hmac
 import json
 import mimetypes
 import os
 import re
 import traceback
+import time
 import uuid
 
 try:
@@ -19,6 +23,7 @@ BUCKET_NAME = "mockup-studio-assets"
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_CHUNK_BYTES = 2 * 1024 * 1024
 MAX_CHUNKS = 12
+UPLOAD_TICKET_SECONDS = 15 * 60
 ALLOWED_ASSET_TYPES = {
     "scene_background": {"image/png", "image/jpeg", "image/webp"},
     "product_box_clean": {"image/png"},
@@ -131,6 +136,8 @@ class handler(BaseHTTPRequestHandler):
             payload = self.read_json()
             action = payload.get("action", "save_template")
             actions = {
+                "create_signed_upload": self.create_signed_upload,
+                "complete_signed_upload": self.complete_signed_upload,
                 "save_template": self.save_template,
                 "duplicate_template": self.duplicate_template,
                 "rename_template": self.rename_template,
@@ -453,6 +460,148 @@ class handler(BaseHTTPRequestHandler):
         file_bytes = self.rfile.read(length)
         asset = self.persist_asset(asset_type, mime_type, original_filename, file_bytes, template_id)
         self.send_json(201, {"success": True, "asset": asset})
+
+    def create_signed_upload(self, payload):
+        asset_type = str(payload.get("asset_type") or "")
+        if asset_type not in ALLOWED_ASSET_TYPES:
+            raise ValueError("Geçersiz Mockup Studio varlık türü.")
+        mime_type = str(payload.get("mime_type") or "").split(";", 1)[0].strip().lower()
+        if asset_type == "output":
+            mime_type = "image/png"
+        if mime_type not in ALLOWED_ASSET_TYPES[asset_type]:
+            allowed = ", ".join(sorted(ALLOWED_ASSET_TYPES[asset_type]))
+            raise ValueError(f"Bu varlık türü için izin verilen formatlar: {allowed}")
+        try:
+            size_bytes = int(payload.get("size_bytes", 0))
+        except (TypeError, ValueError):
+            raise ValueError("Dosya boyutu geçersiz.")
+        if size_bytes <= 0:
+            raise ValueError("Yüklenecek dosya boş olamaz.")
+        if size_bytes > MAX_UPLOAD_BYTES:
+            raise ValueError("Dosya boyutu en fazla 20 MB olabilir.")
+
+        template_id = None
+        if payload.get("template_id"):
+            template_id = require_uuid(payload.get("template_id"), "şablon kimliği")
+        original_filename = clean_filename(payload.get("filename") or "image.png")
+        if asset_type == "output" and not original_filename.endswith(".png"):
+            original_filename = f"{os.path.splitext(original_filename)[0]}.png"
+        asset_id = str(uuid.uuid4())
+        extension = os.path.splitext(original_filename)[1] or mimetypes.guess_extension(mime_type) or ".bin"
+        scope = ASSET_SCOPE[asset_type]
+        owner_folder = template_id or "library"
+        storage_path = f"{scope}/{owner_folder}/{asset_id}{extension}"
+        signed = get_supabase().storage.from_(BUCKET_NAME).create_signed_upload_url(
+            storage_path, options={"upsert": False}
+        )
+        if not isinstance(signed, dict):
+            raise RuntimeError("Storage signed upload yanıtı geçersiz.")
+        upload_url = signed.get("signed_url") or signed.get("signedUrl")
+        if not upload_url:
+            raise RuntimeError("Storage signed upload URL oluşturmadı.")
+        claims = {
+            "asset_id": asset_id,
+            "asset_type": asset_type,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "filename": original_filename,
+            "template_id": template_id,
+            "storage_path": storage_path,
+            "expires_at": int(time.time()) + UPLOAD_TICKET_SECONDS,
+        }
+        self.send_json(201, {
+            "success": True,
+            "upload_url": upload_url,
+            "upload_ticket": self.sign_upload_ticket(claims),
+            "storage_path": storage_path,
+            "expires_in": UPLOAD_TICKET_SECONDS,
+        })
+
+    def complete_signed_upload(self, payload):
+        claims = self.verify_upload_ticket(payload.get("upload_ticket"))
+        storage_path = claims["storage_path"]
+        client = get_supabase()
+        try:
+            info = client.storage.from_(BUCKET_NAME).info(storage_path)
+            if hasattr(info, "model_dump"):
+                info = info.model_dump()
+            elif hasattr(info, "dict"):
+                info = info.dict()
+            metadata = info.get("metadata") if isinstance(info, dict) else None
+            metadata = metadata if isinstance(metadata, dict) else {}
+            actual_size = int(metadata.get("size") or (info.get("size") if isinstance(info, dict) else 0) or 0)
+            actual_mime = str(
+                metadata.get("mimetype") or metadata.get("contentType")
+                or (info.get("content_type") if isinstance(info, dict) else "") or ""
+            ).split(";", 1)[0].lower()
+        except Exception as error:
+            raise ValueError(f"Yüklenen Storage dosyası doğrulanamadı: {error}")
+        if actual_size != int(claims["size_bytes"]):
+            client.storage.from_(BUCKET_NAME).remove([storage_path])
+            raise ValueError("Storage dosya boyutu doğrulaması başarısız oldu.")
+        if actual_mime and actual_mime not in ALLOWED_ASSET_TYPES[claims["asset_type"]]:
+            client.storage.from_(BUCKET_NAME).remove([storage_path])
+            raise ValueError("Storage dosya türü doğrulaması başarısız oldu.")
+        existing = (
+            client.table("mockup_assets").select("*")
+            .eq("storage_path", storage_path).limit(1).execute()
+        )
+        if existing.data:
+            self.send_json(200, {"success": True, "asset": existing.data[0]})
+            return
+        row = {
+            "id": claims["asset_id"],
+            "template_id": claims.get("template_id"),
+            "asset_scope": ASSET_SCOPE[claims["asset_type"]],
+            "asset_type": claims["asset_type"],
+            "storage_path": storage_path,
+            "original_filename": claims["filename"],
+            "mime_type": claims["mime_type"],
+            "size_bytes": actual_size,
+        }
+        try:
+            response = client.table("mockup_assets").insert(row).execute()
+        except Exception:
+            client.storage.from_(BUCKET_NAME).remove([storage_path])
+            raise
+        self.send_json(201, {"success": True, "asset": (response.data or [row])[0]})
+
+    @staticmethod
+    def upload_ticket_secret():
+        secret = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or "").strip()
+        if not secret:
+            raise RuntimeError("Signed upload bileti için service role key bulunamadı.")
+        return secret.encode("utf-8")
+
+    def sign_upload_ticket(self, claims):
+        body = json.dumps(claims, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        encoded = base64.urlsafe_b64encode(body).rstrip(b"=")
+        signature = hmac.new(self.upload_ticket_secret(), encoded, hashlib.sha256).hexdigest().encode("ascii")
+        return (encoded + b"." + signature).decode("ascii")
+
+    def verify_upload_ticket(self, raw_ticket):
+        try:
+            encoded, supplied_signature = str(raw_ticket or "").encode("ascii").split(b".", 1)
+            expected_signature = hmac.new(self.upload_ticket_secret(), encoded, hashlib.sha256).hexdigest().encode("ascii")
+            if not hmac.compare_digest(supplied_signature, expected_signature):
+                raise ValueError("Signed upload bileti geçersiz.")
+            padded = encoded + b"=" * (-len(encoded) % 4)
+            claims = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+        except ValueError:
+            raise
+        except Exception:
+            raise ValueError("Signed upload bileti okunamadı.")
+        if int(claims.get("expires_at", 0)) < int(time.time()):
+            raise ValueError("Signed upload bileti süresi doldu; dosyayı yeniden seçin.")
+        if claims.get("asset_type") not in ALLOWED_ASSET_TYPES:
+            raise ValueError("Signed upload bileti varlık türü geçersiz.")
+        require_uuid(claims.get("asset_id"), "varlık kimliği")
+        if claims.get("template_id"):
+            require_uuid(claims.get("template_id"), "şablon kimliği")
+        expected_prefix = f"{ASSET_SCOPE[claims['asset_type']]}/{claims.get('template_id') or 'library'}/"
+        if not str(claims.get("storage_path") or "").startswith(expected_prefix):
+            raise ValueError("Signed upload yolu geçersiz.")
+        return claims
 
     def upload_chunk(self, query):
         upload_id = require_uuid(query.get("upload_id", [None])[0], "yükleme kimliği")
