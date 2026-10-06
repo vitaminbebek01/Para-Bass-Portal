@@ -491,9 +491,7 @@ class handler(BaseHTTPRequestHandler):
         scope = ASSET_SCOPE[asset_type]
         owner_folder = template_id or "library"
         storage_path = f"{scope}/{owner_folder}/{asset_id}{extension}"
-        signed = get_supabase().storage.from_(BUCKET_NAME).create_signed_upload_url(
-            storage_path, options={"upsert": False}
-        )
+        signed = get_supabase().storage.from_(BUCKET_NAME).create_signed_upload_url(storage_path)
         if not isinstance(signed, dict):
             raise RuntimeError("Storage signed upload yanıtı geçersiz.")
         upload_url = signed.get("signed_url") or signed.get("signedUrl")
