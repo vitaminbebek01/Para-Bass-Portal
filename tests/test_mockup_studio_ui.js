@@ -253,23 +253,23 @@ async function mockStorage(route) {
             { x: '1600', rotation: '18' }
         ];
         for (let index = 0; index < frames.length; index += 1) {
-            await slotRows.nth(index).click();
+            await slotRows.nth(index).locator('.ms-layer-name').click();
             await controlNumber('x').fill(frames[index].x);
             await controlNumber('x').press('Tab');
             await controlNumber('rotation').fill(frames[index].rotation);
             await controlNumber('rotation').press('Tab');
         }
 
-        await slotRows.nth(0).click();
+        await slotRows.nth(0).locator('.ms-layer-name').click();
         await controlNumber('brightness').fill('35');
         await controlNumber('brightness').press('Tab');
         await controlNumber('contrast').fill('20');
         await controlNumber('contrast').press('Tab');
-        await slotRows.nth(1).click();
+        await slotRows.nth(1).locator('.ms-layer-name').click();
         assert.strictEqual(await controlNumber('brightness').inputValue(), '15', 'Kopyalanan slot ürün ayarlarını taşımalı');
         assert.strictEqual(await controlNumber('contrast').inputValue(), '0', 'İkinci slotun kontrastı bağımsız kalmalı');
 
-        await slotRows.nth(0).click();
+        await slotRows.nth(0).locator('.ms-layer-name').click();
         await page.locator('#msPerspectiveToggle').check();
         await page.getByText(/Perspektif modu açıldı/).waitFor();
         await controlNumber('smartPadding').fill('8');
@@ -281,7 +281,7 @@ async function mockStorage(route) {
         await controlNumber('shadowAngle').fill('135'); await controlNumber('shadowAngle').press('Tab');
         await controlNumber('shadowDistance').fill('40'); await controlNumber('shadowDistance').press('Tab');
 
-        await slotRows.nth(1).click();
+        await slotRows.nth(1).locator('.ms-layer-name').click();
         await page.locator('#msShadowToggle').check();
         await controlNumber('shadowOffsetX').press('ArrowUp');
         await controlNumber('shadowOffsetX').press('Tab');
@@ -304,6 +304,9 @@ async function mockStorage(route) {
         await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 5);
         const uiCanvas = page.locator('#mockupCanvasHost canvas').last();
         const canvasBox = await uiCanvas.boundingBox();
+        await page.mouse.move(canvasBox.x+canvasBox.width*.05,canvasBox.y+canvasBox.height*.05);await page.mouse.down();await page.mouse.move(canvasBox.x+canvasBox.width*.3,canvasBox.y+canvasBox.height*.3,{steps:4});await page.mouse.up();
+        assert.match(await page.locator('#msInspector').textContent(),/POLİGON MASKESİ/,'Polygon düzenleme modunda marquee seçimi başlamamalı');
+        await page.locator('#msPolygonResetBtn').click();
         for (const [x, y] of [[canvasBox.width * .25, canvasBox.height * .25], [canvasBox.width * .7, canvasBox.height * .28], [canvasBox.width * .5, canvasBox.height * .7]]) await uiCanvas.click({ position: { x, y } });
         await page.locator('#msPolygonCloseBtn').click();
         await page.getByText('Foreground poligonu kapatıldı.').waitFor();
@@ -471,9 +474,23 @@ async function mockStorage(route) {
         await page.locator('#msApplyPresetBtn').click();
         await page.getByText(/Test 3x3 \+ Hero: 10 slot uygulandı/).waitFor();
         assert.strictEqual(await page.locator('.ms-layer').filter({ hasText: /Slot \d/ }).count(), 10, 'Sayfa yenilendikten sonra özel dizilim tekrar uygulanmalı');
+        const marqueeCanvas=page.locator('#mockupCanvasHost canvas').last(),marqueeBox=await marqueeCanvas.boundingBox();
+        await page.mouse.move(marqueeBox.x+marqueeBox.width*.99,marqueeBox.y+marqueeBox.height*.99);await page.mouse.down();await page.mouse.move(marqueeBox.x+marqueeBox.width*.45,marqueeBox.y+marqueeBox.height*.45,{steps:6});
+        const marqueeImage=await page.locator('#mockupCanvasHost').screenshot();const marqueePixel=await readPngPixel(marqueeImage,1800,1800);assert(marqueePixel[2]>marqueePixel[0],'Boş canvas sürüklenirken görünür mavi seçim dikdörtgeni çizilmeli');await page.mouse.up();
+        const marqueeCount=await page.locator('.ms-layer.is-selected').count();assert(marqueeCount>1&&marqueeCount<10,`Marquee dinamik sayıdaki kesişen slotları seçmeli (seçilen: ${marqueeCount}, durum: ${await page.locator('#mockupStatus').textContent()})`);
+        await page.keyboard.down('Shift');await page.mouse.move(marqueeBox.x+marqueeBox.width*.01,marqueeBox.y+marqueeBox.height*.01);await page.mouse.down();await page.mouse.move(marqueeBox.x+marqueeBox.width*.35,marqueeBox.y+marqueeBox.height*.35,{steps:5});await page.mouse.up();await page.keyboard.up('Shift');
+        const shiftCount=await page.locator('.ms-layer.is-selected').count();assert(shiftCount>=marqueeCount,'Shift marquee bulunan slotları mevcut seçime eklemeli');
+        await page.keyboard.down('Control');await page.mouse.move(marqueeBox.x+marqueeBox.width*.99,marqueeBox.y+marqueeBox.height*.99);await page.mouse.down();await page.mouse.move(marqueeBox.x+marqueeBox.width*.45,marqueeBox.y+marqueeBox.height*.45,{steps:5});await page.mouse.up();await page.keyboard.up('Control');
+        assert((await page.locator('.ms-layer.is-selected').count())<shiftCount,'Ctrl/Cmd marquee kesişen slotların seçim durumunu değiştirmeli');
+        const deleteRows=page.locator('.ms-layer').filter({hasText:/Slot \d/});
+        await deleteRows.nth(0).locator('.ms-layer-name').click();const countBeforeTextBackspace=await deleteRows.count();await page.locator('#msEditorName').click();await page.locator('#msEditorName').press('End');await page.locator('#msEditorName').press('Backspace');assert.strictEqual(await deleteRows.count(),countBeforeTextBackspace,'Input içinde Backspace katman silmemeli');
+        await deleteRows.nth(0).locator('.ms-layer-name').click();await deleteRows.nth(0).locator('[data-action="lock"]').click();await page.locator('body').press('Delete');assert.strictEqual(await deleteRows.count(),10,'Kilitli slot Delete ile silinmemeli');assert.match(await page.locator('#mockupStatus').textContent(),/önce katman kilidini açın/);assert(await deleteRows.nth(0).locator('[data-action="delete"]').isDisabled(),'Kilitli katmanın çöp kutusu pasif olmalı');await deleteRows.nth(0).locator('[data-action="lock"]').click();
+        await deleteRows.nth(0).locator('[data-action="delete"]').click();await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===9);assert.strictEqual(await deleteRows.count(),9,'Katman çöp kutusu doğru slotu silmeli');await page.locator('#msUndoBtn').click();await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===10);
+        await deleteRows.nth(0).locator('.ms-layer-name').click();await deleteRows.nth(1).locator('.ms-layer-name').click({modifiers:['Control']});await page.locator('body').press('Delete');await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===8);assert.strictEqual(await deleteRows.count(),8,'Delete çoklu seçili slotları tek işlemde silmeli');await page.locator('#msUndoBtn').click();await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===10);assert.strictEqual(await deleteRows.count(),10,'Tek Undo çoklu silinen slotları geri getirmeli');
+        await deleteRows.nth(0).locator('.ms-layer-name').click();await page.locator('body').press('Backspace');await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===9);assert.strictEqual(await deleteRows.count(),9,'Backspace seçili slotu silmeli');await page.locator('#msUndoBtn').click();await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===10);
         const multiSlots = page.locator('.ms-layer').filter({ hasText: /Slot \d/ });
-        await multiSlots.nth(0).click();
-        for (let index = 1; index < 6; index += 1) await multiSlots.nth(index).click({ modifiers: ['Control'] });
+        await multiSlots.nth(0).locator('.ms-layer-name').click();
+        for (let index = 1; index < 6; index += 1) await multiSlots.nth(index).locator('.ms-layer-name').click({ modifiers: ['Control'] });
         await page.getByText('Seçili 6 Slot').waitFor();
         const bulkBlur = page.locator('[data-bulk-key="blur"][type="number"]');
         await bulkBlur.fill('4'); await bulkBlur.press('Tab');
@@ -504,7 +521,7 @@ async function mockStorage(route) {
         await page.locator('[data-view="templates"]').click();
         await page.locator('#msNewTemplateBtn').click();
         const redScenePng = await makeSolidPng('#dc1e1e');
-        const blueProductPng = await makeSolidPng('#1450e6');
+        const blueProductPng = Buffer.from(await page.evaluate(() => {const canvas=document.createElement('canvas');canvas.width=100;canvas.height=100;const context=canvas.getContext('2d');context.clearRect(0,0,100,100);context.fillStyle='#1450e6';context.fillRect(40,10,20,80);return canvas.toDataURL('image/png').split(',')[1];}), 'base64');
         db.fixtureBodies.set('json-import-scene.png', redScenePng);
         db.fixtureBodies.set('json-blue-product.png', blueProductPng);
         await page.locator('#msSceneInput').setInputFiles({ name: 'json-import-scene.png', mimeType: 'image/png', buffer: redScenePng });
@@ -525,13 +542,20 @@ async function mockStorage(route) {
         await page.locator('#msJsonValidateBtn').click();
         assert.match(await page.locator('#msJsonValidation').textContent(), /0–1000 aralığında/, 'Canvas dışındaki aşırı clipPolygon koordinatı reddedilmeli');
         assert.strictEqual(await page.locator('.ms-layer').count(), initialJsonLayerCount, 'Aşırı clipPolygon koordinatı mevcut şablonu değiştirmemeli');
+        const foldedQuad=importedSlot('folded_quad');delete foldedQuad.perspectiveCorners;foldedQuad.derivePerspectiveFromClip=true;foldedQuad.fitMode='contain';foldedQuad.clipPolygon=[[200,200],[800,800],[800,200],[200,800]];
+        await page.locator('#msJsonInput').fill(slotImportDocument([foldedQuad]));
+        await page.locator('#msJsonValidateBtn').click();
+        assert.match(await page.locator('#msJsonValidation').textContent(),/dışbükey ve kesişmeyen/,'Kendi kendini kesen veya ters perspektif dörtgeni reddedilmeli');
+        assert(await page.locator('#msJsonCreateBtn').isDisabled(),'Geçersiz perspektif dörtgeni render için içe aktarılmamalı');
         await page.locator('#msJsonCancelBtn').click();
 
         const singleJson = JSON.parse(slotImportDocument([importedSlot('slot_01')]));
         singleJson.sceneLighting = { temperature: 15, tint: 3, exposure: 0.5, contrast: 1.1, saturation: 1.2, highlights: -10, shadows: 8 };
         Object.assign(singleJson.slots[0], {
-            perspectiveCorners: { topLeft: [100, 100], topRight: [900, 100], bottomRight: [900, 900], bottomLeft: [100, 900] },
             clipPolygon: [[300, 300], [700, 300], [700, 700], [300, 700]],
+            derivePerspectiveFromClip: true,
+            fitPaddingPercent: 5,
+            fitMode: 'contain',
             foregroundPolygons: [{ label: 'front_box_edge', points: [[300, 500], [700, 500], [700, 600], [300, 600]] }],
             effects: { blur: 0, opacity: 1, brightness: 0, temperature: 4200 },
             relighting: { temperature: 18, exposure: -0.1 },
@@ -553,12 +577,21 @@ async function mockStorage(route) {
         const previewImage = await page.locator('#mockupCanvasHost').screenshot();
         const previewInside = await readPngPixel(previewImage, 1000, 800);
         const previewOutside = await readPngPixel(previewImage, 500, 800);
+        const previewContainGap = await readPngPixel(previewImage, 800, 800);
         const previewShadowOutside = await readPngPixel(previewImage, 1460, 800);
         const previewForeground = await readPngPixel(previewImage, 1000, 1100);
         assert(previewInside[2] > previewInside[0], 'Ürün önizlemede clipPolygon içinde görünmeli');
         assert(previewOutside[0] > previewOutside[2], 'Ürün önizlemede clipPolygon dışına taşmamalı');
+        assert(previewContainGap[0] > previewContainGap[2], 'Contain modu şeffaf PNG alfa sınırını kullanıp ürünü yatay ezmemeli');
         assert(previewShadowOutside[0] > previewShadowOutside[2], 'Ürün gölgesi önizlemede clipPolygon dışına taşmamalı');
         assert(previewForeground[0] > previewForeground[2], 'Foreground poligonu clipPolygon’dan bağımsız olarak ürünün önünde görünmeli');
+        await page.locator('.ms-layer').filter({hasText:'Sahne Arka Planı'}).click();
+        await controlNumber('width').fill('100');await controlNumber('width').press('Tab');await page.waitForTimeout(200);
+        const narrowBackgroundImage=await page.locator('#mockupCanvasHost').screenshot();
+        const outsideBackground=await readPngPixel(narrowBackgroundImage,920,800);
+        assert(outsideBackground[0]>240&&outsideBackground[1]>240&&outsideBackground[2]>240,'Ürün ve gölge background görünür sınırı dışında çizilmemeli');
+        await page.locator('#msUndoBtn').click();
+        await page.waitForFunction(()=>document.querySelector('[data-frame-key="width"][type="number"]')?.value==='2000');
         await page.locator('#msToggleGuides').click();
         await page.locator('#msUndoBtn').click();
         await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 1);
@@ -572,8 +605,11 @@ async function mockStorage(route) {
         const importedV1 = db.versions.find(version => version.template_name === 'Test JSON Import Template' && version.version_number === 1).snapshot;
         const importedV1Slot = importedV1.layers.find(layer => layer.type === 'product_slot');
         assert.strictEqual(importedV1Slot.id, 'slot_01', 'Çakışmayan JSON slot ID korunmalı');
-        assert.deepStrictEqual(importedV1Slot.frame.perspective.corners[0], { x: 200, y: 200 }, 'Normalize perspektif koordinatları 2000×2000 tuvale çevrilmeli');
-        assert.deepStrictEqual(importedV1Slot.frame.perspective.corners[2], { x: 1800, y: 1800 }, 'Dört perspektif köşesi doğru sırada aktarılmalı');
+        assert.deepStrictEqual(importedV1Slot.frame.perspective.corners[0], { x: 600, y: 600 }, 'derivePerspectiveFromClip perspektifi clipPolygon köşelerinden üretmeli');
+        assert.deepStrictEqual(importedV1Slot.frame.perspective.corners[2], { x: 1400, y: 1400 }, 'Türetilmiş dört perspektif köşesi doğru sırada aktarılmalı');
+        assert.strictEqual(importedV1Slot.frame.smartFit.padding,5,'fitPaddingPercent türetilmiş perspektife aktarılmalı');
+        assert.strictEqual((importedV1Slot.frame.perspective.corners[0].x+importedV1Slot.frame.perspective.corners[2].x)/2,1000,'Padding perspektif merkezini kaydırmamalı');
+        assert.strictEqual(importedV1Slot.frame.fitMode,'contain','Contain modu snapshotta korunmalı');
         assert.deepStrictEqual(importedV1Slot.clipPolygon.points[0], { x: 600, y: 600 }, 'Normalize clipPolygon koordinatları piksel koordinatlarına çevrilmeli');
         assert.deepStrictEqual(importedV1Slot.clipPolygon.points[2], { x: 1400, y: 1400 }, 'clipPolygon doğru slota ve doğru sırayla aktarılmalı');
         assert(importedV1Slot.clipPolygon.closed, 'İçe aktarılan clipPolygon kapalı olmalı');
@@ -601,7 +637,7 @@ async function mockStorage(route) {
         if ((await page.locator('#msToggleGuides').textContent()).includes('Açık')) await page.locator('#msToggleGuides').click();
         await page.waitForTimeout(300);
         const lightingPreviewImage = await page.locator('#mockupCanvasHost').screenshot();
-        const lightingPreviewDark = await readPngPixel(lightingPreviewImage, 800, 800);
+        const lightingPreviewDark = await readPngPixel(lightingPreviewImage, 900, 800);
         const lightingPreviewLight = await readPngPixel(lightingPreviewImage, 1200, 800);
         const lightingPreviewAlpha = await readPngPixel(lightingPreviewImage, 650, 650);
         await page.locator('#msToggleGuides').click();
@@ -635,7 +671,7 @@ async function mockStorage(route) {
         const lightingOutput = db.outputs.find(output => output.name === 'Lighting Render Test');
         assert(lightingOutput,'Işık ayarlı kalıcı çıktı oluşturulmalı');
         const lightingOutputBytes = db.storageBodies.get(lightingOutput.export_path);
-        const lightingOutputDark = await readPngPixel(lightingOutputBytes, 800, 800);
+        const lightingOutputDark = await readPngPixel(lightingOutputBytes, 900, 800);
         const lightingOutputLight = await readPngPixel(lightingOutputBytes, 1200, 800);
         const lightingOutputAlpha = await readPngPixel(lightingOutputBytes, 650, 650);
         const channelDistance=(left,right)=>Math.max(...left.slice(0,3).map((value,index)=>Math.abs(value-right[index])));
@@ -654,7 +690,7 @@ async function mockStorage(route) {
         await page.locator('#msEditorProductInput').setInputFiles({ name: 'lighting-manual-product.png', mimeType: 'image/png', buffer: lightingProductPng });
         await page.getByText(/tüm slotlarda önizlemeye alındı/).waitFor();
         if ((await page.locator('#msToggleGuides').textContent()).includes('Açık')) await page.locator('#msToggleGuides').click();
-        const captureLightingPixels=async()=>{await page.waitForTimeout(220);const image=await page.locator('#mockupCanvasHost').screenshot();return {dark:await readPngPixel(image,800,800),light:await readPngPixel(image,1200,800),alpha:await readPngPixel(image,650,650)};};
+        const captureLightingPixels=async()=>{await page.waitForTimeout(220);const image=await page.locator('#mockupCanvasHost').screenshot();return {dark:await readPngPixel(image,900,800),light:await readPngPixel(image,1200,800),alpha:await readPngPixel(image,650,650)};};
         const rgbSum=(pixel)=>pixel[0]+pixel[1]+pixel[2];
         const colorSpread=(pixel)=>Math.max(...pixel.slice(0,3))-Math.min(...pixel.slice(0,3));
         const setLighting=async(key,value)=>{await lightingNumber(key).fill(String(value));await lightingNumber(key).press('Tab');};
@@ -724,7 +760,8 @@ async function mockStorage(route) {
         assert.strictEqual(new Set(duplicateIds).size, duplicateIds.length, 'Mevcut ID ile çakışan slot için benzersiz ID üretilmeli');
         const editedImportedSlot = duplicateSaved.document.layers.find(layer => layer.id === 'slot_01');
         assert.strictEqual(editedImportedSlot.frame.blur, 7, 'İçe aktarılan slotun ayar paneli değişikliği snapshotta korunmalı');
-        assert.deepStrictEqual(editedImportedSlot.frame.perspective.corners[0], { x: 200, y: 200 }, 'İçe aktarılan slot mevcut perspektif aracıyla düzenlenebilmeli');
+        assert.deepStrictEqual(editedImportedSlot.frame.perspective.corners[0], { x: 600, y: 600 }, 'İçe aktarılan slot mevcut perspektif aracıyla düzenlenebilmeli');
+        assert.strictEqual(editedImportedSlot.frame.perspective.derivedFromClip,false,'Manuel perspektif sıfırlaması türetilmiş perspektifi normal düzenlenebilir perspektife çevirmeli');
         const copiedClipSlot = duplicateSaved.document.layers.find(layer => layer.type === 'product_slot' && layer.name === 'Slot 2');
         const legacyJsonSlot = duplicateSaved.document.layers.find(layer => layer.type === 'product_slot' && layer.id !== 'slot_01' && layer.id !== copiedClipSlot.id);
         assert.strictEqual(editedImportedSlot.clipPolygon.points.length, 4, 'Kopyadaki düzenleme kaynak clipPolygon referansını değiştirmemeli');
@@ -810,6 +847,10 @@ async function mockStorage(route) {
         assert(await page.locator('#msApplyGroupProduct').isVisible(),'Gruplu slotta Ürünü Gruba Uygula görünmeli');
         assert(await page.locator('#msChangeGroupProduct').isVisible(),'Gruplu slotta Grup Ürününü Değiştir görünmeli');
         assert(await page.locator('#msDetachFromGroup').isVisible(),'Gruplu slotta gruptan ayırma kontrolü görünmeli');
+        await page.locator('.ms-layer[data-id="smart_group_3"]').click();await page.locator('body').press('Delete');await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===3);
+        await page.locator('.ms-layer[data-id="smart_group_1"]').click();await page.locator('#msApplyGroupProduct').click();await page.getByText(/Ürün gruba uygulandı: 2 slot/).waitFor();
+        await page.locator('#msUndoBtn').click();await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===4);
+        await page.locator('.ms-layer[data-id="smart_group_1"]').click();
         await page.locator('#msApplyGroupProduct').click();
         await page.getByText(/Ürün gruba uygulandı: 3 slot/).waitFor();
         for(const id of ['smart_group_1','smart_group_2','smart_group_3']){await page.locator(`.ms-layer[data-id="${id}"]`).click();assert.match(await page.locator('.ms-selected-product-preview').textContent(),/group-product-a\.png/,`${id} aynı grup ürününü göstermeli`);}

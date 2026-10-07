@@ -270,6 +270,7 @@
 .ms-template-date { display: block; color: var(--ms-muted); font-size: 10px; margin-top: 2px; }
 .ms-layer-icon { width: 18px; text-align: center; }
 .ms-icon-btn { border: 0; background: transparent; cursor: pointer; padding: 2px; line-height: 1; }
+.ms-layer .ms-icon-btn { width: 16px; flex: 0 0 16px; padding: 1px; font-size: 11px; }
 
 .ms-upload-label {
     display: block;
@@ -343,6 +344,8 @@
 .ms-lighting-panel .ms-field label[title] span:first-child { cursor: help; }
 .ms-group-tools { border-left: 3px solid #2f80b7; padding-left: 9px; background: #f4faff; }
 .ms-group-tools .ms-help { overflow-wrap: anywhere; }
+.ms-layer-delete { color: #b3261e; }
+.ms-layer-delete:disabled { cursor: not-allowed; opacity: .35; }
 
 .ms-json-modal { position: fixed; z-index: 10020; inset: 0; display: grid; place-items: center; padding: 20px; box-sizing: border-box; background: rgba(20,28,35,.72); }
 .ms-json-modal[hidden] { display: none; }

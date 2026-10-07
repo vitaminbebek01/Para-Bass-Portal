@@ -10,8 +10,8 @@
         sceneLighting: { temperature: 15, tint: 0, exposure: 0, contrast: 1, saturation: 1, highlights: -10, shadows: 8 },
         slots: [{
             id: 'slot_01', name: 'Ön Hero', groupId: 'hero_group',
-            perspectiveCorners: { topLeft: [220, 180], topRight: [520, 210], bottomRight: [500, 520], bottomLeft: [200, 490] },
             clipPolygon: [[235, 225], [530, 250], [510, 540], [215, 505]],
+            derivePerspectiveFromClip: true, fitPaddingPercent: 5, fitMode: 'contain',
             foregroundPolygons: [{ label: 'front_box_edge', points: [[200, 490], [500, 520], [495, 570], [195, 540]] }],
             effects: { blur: 0, opacity: 1, brightness: 1 },
             relighting: { temperature: 18, tint: -2, exposure: -0.1, contrast: 1.04, saturation: 0.96, highlights: -12, shadows: 10 },
@@ -61,7 +61,10 @@
         gridSize: 25,
         drawerOpen: true,
         groupDrag: null,
+        marquee: null,
+        marqueeRect: null,
         relightCache: new WeakMap(),
+        alphaBoundsCache: new WeakMap(),
         busy: false
     };
 
@@ -223,6 +226,7 @@
         const corners = Array.isArray(raw && raw.corners) && raw.corners.length === 4 ? raw.corners : fallback;
         return {
             enabled: Boolean(raw && raw.enabled),
+            derivedFromClip: Boolean(raw && raw.derivedFromClip),
             corners: corners.map((point, index) => ({
                 x: Number.isFinite(Number(point.x)) ? Number(point.x) : fallback[index].x,
                 y: Number.isFinite(Number(point.y)) ? Number(point.y) : fallback[index].y
@@ -270,7 +274,7 @@
     function relightingCacheKey(frame) {
         const values=normalizeRelighting(frame.relighting);return [Number(frame.brightness)||0,values.temperature,values.tint,values.exposure,values.contrast,values.saturation,values.highlights,values.shadows].join('|');
     }
-    function resetRelightCache() { state.relightCache = new WeakMap(); }
+    function resetRelightCache() { state.relightCache = new WeakMap(); state.alphaBoundsCache = new WeakMap(); }
     function invalidateLayerRelight(layer) { const node=state.nodes.get(layer.id),source=node&&node.getAttr('mockupSourceImage');if(source)state.relightCache.delete(source); }
     function renderRelitSource(image, frame) {
         const settings=normalizeRelighting(frame.relighting),brightness=Number(frame.brightness)||0;
@@ -302,6 +306,25 @@
         if (!ratio) return corners.map((point) => ({ x: point.x, y: point.y }));
         const center = corners.reduce((sum, point) => ({ x: sum.x + point.x / 4, y: sum.y + point.y / 4 }), { x: 0, y: 0 });
         return corners.map((point) => ({ x: point.x + (center.x - point.x) * ratio, y: point.y + (center.y - point.y) * ratio }));
+    }
+
+    function signedPolygonArea(points) {
+        return points.reduce((sum, point, index) => { const next=points[(index+1)%points.length];return sum+point.x*next.y-next.x*point.y; },0)/2;
+    }
+
+    function crossProduct(a,b,c) { return (b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x); }
+    function validPerspectiveQuad(corners) {
+        if(!Array.isArray(corners)||corners.length!==4||corners.some((point)=>!point||!Number.isFinite(point.x)||!Number.isFinite(point.y)))return false;
+        if(signedPolygonArea(corners)<=1)return false;
+        const crosses=corners.map((point,index)=>crossProduct(point,corners[(index+1)%4],corners[(index+2)%4]));
+        return crosses.every((value)=>value>1e-6);
+    }
+
+    function quadAspect(corners) {
+        const distance=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y);
+        const width=(distance(corners[0],corners[1])+distance(corners[3],corners[2]))/2;
+        const height=(distance(corners[0],corners[3])+distance(corners[1],corners[2]))/2;
+        return Math.max(.001,width)/Math.max(.001,height);
     }
 
     function solveLinearSystem(matrix, values) {
@@ -367,11 +390,18 @@
         const perspective = normalizePerspective(frame.perspective, frame);
         const smartFit = normalizeSmartFit(frame.smartFit || {});
         const corners = insetQuad(perspective.corners, smartFit.padding);
+        if(!validPerspectiveQuad(corners)){setStatus('Perspektif dörtgeni ters, kesişen veya geçersiz; ürün render edilmedi.',true);return canvas;}
         const homography = homographyForQuad(corners);
-        const crop = smartFit.crop;
+        const crop = frame.fitMode==='contain' ? alphaBounds(image) : smartFit.crop;
         const sourceWidth=image.naturalWidth||image.width,sourceHeight=image.naturalHeight||image.height;
         const left = crop.x * sourceWidth, top = crop.y * sourceHeight;
         const width = crop.width * sourceWidth, height = crop.height * sourceHeight;
+        const sourceAspect=Math.max(.001,width)/Math.max(.001,height),targetAspect=quadAspect(corners);
+        const placement={x:0,y:0,width:1,height:1};
+        if(frame.fitMode==='contain'){
+            if(sourceAspect>targetAspect){placement.height=targetAspect/sourceAspect;placement.y=(1-placement.height)/2;}
+            else{placement.width=sourceAspect/targetAspect;placement.x=(1-placement.width)/2;}
+        }
         const divisions = 14;
         for (let row = 0; row < divisions; row += 1) {
             for (let column = 0; column < divisions; column += 1) {
@@ -380,7 +410,8 @@
                     tl: { x: left + u0 * width, y: top + v0 * height }, tr: { x: left + u1 * width, y: top + v0 * height },
                     br: { x: left + u1 * width, y: top + v1 * height }, bl: { x: left + u0 * width, y: top + v1 * height }
                 };
-                const target = { tl: mapHomography(homography, u0, v0), tr: mapHomography(homography, u1, v0), br: mapHomography(homography, u1, v1), bl: mapHomography(homography, u0, v1) };
+                const du0=placement.x+u0*placement.width,dv0=placement.y+v0*placement.height,du1=placement.x+u1*placement.width,dv1=placement.y+v1*placement.height;
+                const target = { tl: mapHomography(homography, du0, dv0), tr: mapHomography(homography, du1, dv0), br: mapHomography(homography, du1, dv1), bl: mapHomography(homography, du0, dv1) };
                 drawImageTriangle(context, image, [source.tl, source.tr, source.br], [target.tl, target.tr, target.br]);
                 drawImageTriangle(context, image, [source.tl, source.br, source.bl], [target.tl, target.br, target.bl]);
             }
@@ -932,7 +963,7 @@
                 result.invalidSlots.push({ index, errors: [`${prefix}: bir nesne olmalıdır.`] });
                 return;
             }
-            addUnsupportedWarnings(slot, ['id', 'name', 'groupId', 'perspectiveCorners', 'clipPolygon', 'foregroundPolygons', 'effects', 'relighting', 'shadow', 'depthOrder'], prefix, result.warnings);
+            addUnsupportedWarnings(slot, ['id', 'name', 'groupId', 'perspectiveCorners', 'clipPolygon', 'derivePerspectiveFromClip', 'fitPaddingPercent', 'fitMode', 'foregroundPolygons', 'effects', 'relighting', 'shadow', 'depthOrder'], prefix, result.warnings);
             if (typeof slot.id !== 'string' || !slot.id.trim()) slotErrors.push(`${prefix}.id: boş olmayan bir metin olmalıdır.`);
             else if (!/^[A-Za-z0-9_-]{1,120}$/.test(slot.id)) slotErrors.push(`${prefix}.id: yalnızca harf, sayı, _ ve - içerebilir.`);
             else if (seenIds.has(slot.id)) result.warnings.push(`${prefix}.id: “${slot.id}” tekrar ediyor; güvenli benzersiz ID üretilecek.`);
@@ -940,17 +971,22 @@
             if (typeof slot.id === 'string') seenIds.add(slot.id);
             if (slot.name != null && (typeof slot.name !== 'string' || slot.name.length > 120)) slotErrors.push(`${prefix}.name: en fazla 120 karakterlik metin olmalıdır.`);
             if (slot.groupId != null && (typeof slot.groupId !== 'string' || !slot.groupId.trim() || slot.groupId.trim().length > 120)) slotErrors.push(`${prefix}.groupId: 1–120 karakterlik boş olmayan bir metin olmalıdır.`);
+            if(slot.derivePerspectiveFromClip!=null&&typeof slot.derivePerspectiveFromClip!=='boolean')slotErrors.push(`${prefix}.derivePerspectiveFromClip: true veya false olmalıdır.`);
+            if(slot.fitPaddingPercent!=null)validateJsonNumber(slot.fitPaddingPercent,`${prefix}.fitPaddingPercent`,0,30,slotErrors);
+            if(slot.fitMode!=null&&slot.fitMode!=='contain')slotErrors.push(`${prefix}.fitMode: yalnızca “contain” desteklenir.`);
             const corners = slot.perspectiveCorners;
-            if (!corners || typeof corners !== 'object' || Array.isArray(corners)) slotErrors.push(`${prefix}.perspectiveCorners: dört köşe nesnesi zorunludur.`);
+            if ((!corners || typeof corners !== 'object' || Array.isArray(corners))&&!slot.derivePerspectiveFromClip) slotErrors.push(`${prefix}.perspectiveCorners: dört köşe nesnesi zorunludur.`);
             else {
-                addUnsupportedWarnings(corners, ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'], `${prefix}.perspectiveCorners`, result.warnings);
-                ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].forEach((key) => validateJsonPoint(corners[key], `${prefix}.perspectiveCorners.${key}`, slotErrors));
+                if(corners){addUnsupportedWarnings(corners, ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'], `${prefix}.perspectiveCorners`, result.warnings);['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].forEach((key) => validateJsonPoint(corners[key], `${prefix}.perspectiveCorners.${key}`, slotErrors));}
             }
             if (slot.clipPolygon != null) {
                 if (!Array.isArray(slot.clipPolygon) || slot.clipPolygon.length < 3) slotErrors.push(`${prefix}.clipPolygon: en az 3 noktalı bir dizi olmalıdır.`);
                 else if (slot.clipPolygon.length > 500) slotErrors.push(`${prefix}.clipPolygon: en fazla 500 nokta içerebilir.`);
                 else slot.clipPolygon.forEach((point, pointIndex) => validateJsonPoint(point, `${prefix}.clipPolygon[${pointIndex}]`, slotErrors));
             }
+            const perspectivePoints=slot.derivePerspectiveFromClip?slot.clipPolygon:(corners&&['topLeft','topRight','bottomRight','bottomLeft'].map((key)=>corners[key]));
+            if(slot.derivePerspectiveFromClip&&(!Array.isArray(slot.clipPolygon)||slot.clipPolygon.length!==4))slotErrors.push(`${prefix}.clipPolygon: türetilmiş perspektif için tam 4 nokta içermelidir.`);
+            if(Array.isArray(perspectivePoints)&&perspectivePoints.length===4&&perspectivePoints.every((point)=>Array.isArray(point)&&point.length===2&&point.every(Number.isFinite))&&!validPerspectiveQuad(perspectivePoints.map((point)=>({x:point[0],y:point[1]}))))slotErrors.push(`${prefix}: perspektif köşeleri topLeft, topRight, bottomRight, bottomLeft sırasıyla saat yönünde, dışbükey ve kesişmeyen olmalıdır.`);
             if (slot.foregroundPolygons != null && !Array.isArray(slot.foregroundPolygons)) slotErrors.push(`${prefix}.foregroundPolygons: dizi olmalıdır.`);
             else (slot.foregroundPolygons || []).forEach((polygon, polygonIndex) => {
                 const polygonPath = `${prefix}.foregroundPolygons[${polygonIndex}]`;
@@ -1024,7 +1060,9 @@
         const slotLayers = [], polygonLayers = [];
         ordered.forEach(({ slot }, slotIndex) => {
             const cornerSource = slot.perspectiveCorners;
-            const corners = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].map((key) => normalizedJsonPoint(cornerSource[key], canvasWidth, canvasHeight));
+            const corners = slot.derivePerspectiveFromClip
+                ? slot.clipPolygon.map((point)=>normalizedJsonPoint(point,canvasWidth,canvasHeight))
+                : ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].map((key) => normalizedJsonPoint(cornerSource[key], canvasWidth, canvasHeight));
             const xs = corners.map((point) => point.x), ys = corners.map((point) => point.y);
             const layer = makeLayer('product_slot', null, (slot.name || `Slot ${state.editor.document.layers.filter((item) => item.type === 'product_slot').length + slotIndex + 1}`).trim());
             layer.id = uniqueImportedId(slot.id, usedIds);
@@ -1034,8 +1072,10 @@
                 y: (Math.min(...ys) + Math.max(...ys)) / 2,
                 width: Math.max(40, Math.max(...xs) - Math.min(...xs)),
                 height: Math.max(40, Math.max(...ys) - Math.min(...ys)),
-                perspective: { enabled: true, corners }
+                perspective: { enabled: true, corners, derivedFromClip:Boolean(slot.derivePerspectiveFromClip) }
             });
+            if(slot.derivePerspectiveFromClip||slot.fitMode==='contain')layer.frame.fitMode='contain';
+            if(slot.derivePerspectiveFromClip||slot.fitPaddingPercent!=null){layer.frame.smartFit=normalizeSmartFit(layer.frame.smartFit||{});layer.frame.smartFit.padding=slot.fitPaddingPercent==null?5:slot.fitPaddingPercent;}
             if (slot.clipPolygon) layer.clipPolygon = normalizeClipPolygon({ points: slot.clipPolygon.map((point) => normalizedJsonPoint(point, canvasWidth, canvasHeight)), closed: true });
             ['blur', 'opacity', 'brightness', 'contrast', 'saturation', 'hue', 'sharpen'].forEach((key) => { if (slot.effects && slot.effects[key] != null) layer.frame[key] = slot.effects[key]; });
             layer.frame.relighting=normalizeRelighting(Object.assign({},sceneLighting,safeRelightingValues(slot.relighting,`slots[${slotIndex}].relighting`)));
@@ -1124,8 +1164,11 @@
     }
     function handleKeyboard(event) {
         if (state.view !== 'editor' || !document.getElementById('mockupStudioSection') || document.getElementById('mockupStudioSection').style.display === 'none') return;
-        if (!(event.ctrlKey || event.metaKey)) return;
         if (event.target && event.target.closest && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+        if(document.querySelector('.ms-json-modal:not([hidden]), .ms-lightbox:not([hidden])'))return;
+        if(event.key==='Escape'&&state.marquee){event.preventDefault();cancelMarqueeSelection();return;}
+        if((event.key==='Delete'||event.key==='Backspace')&&!(event.ctrlKey||event.metaKey)){event.preventDefault();deleteSelectedLayers();return;}
+        if (!(event.ctrlKey || event.metaKey)) return;
         const key = event.key.toLowerCase();
         if (key === 'z' && event.shiftKey) { event.preventDefault(); redo(); }
         else if (key === 'z') { event.preventDefault(); undo(); }
@@ -1417,7 +1460,8 @@
             row.innerHTML = `<span class="ms-layer-icon">${layerIcon(layer.type)}</span><span class="ms-layer-name">${esc(layer.name)}</span>
                 <button data-action="rename" class="ms-icon-btn" title="Yeniden adlandır">✎</button>
                 <button data-action="visible" class="ms-icon-btn" title="Görünürlük">${layer.visible ? '👁️' : '🙈'}</button>
-                <button data-action="lock" class="ms-icon-btn" title="Kilitle">${layer.locked ? '🔒' : '🔓'}</button>`;
+                <button data-action="lock" class="ms-icon-btn" title="Kilitle">${layer.locked ? '🔒' : '🔓'}</button>
+                ${layer.type!=='scene_background'?`<button data-action="delete" class="ms-icon-btn ms-layer-delete" title="Katmanı sil" aria-label="${esc(layer.name)} katmanını sil" ${layer.locked?'disabled':''}>🗑️</button>`:''}`;
             row.addEventListener('click', (event) => selectLayer(layer.id, layer.type === 'product_slot' && (event.ctrlKey || event.metaKey)));
             row.addEventListener('dragstart', () => { state.dragLayerId = layer.id; });
             row.addEventListener('dragover', (e) => e.preventDefault());
@@ -1425,6 +1469,7 @@
             row.querySelector('[data-action="rename"]').addEventListener('click', (e) => { e.stopPropagation(); renameLayer(layer); });
             row.querySelector('[data-action="visible"]').addEventListener('click', (e) => { e.stopPropagation(); toggleLayer(layer, 'visible'); });
             row.querySelector('[data-action="lock"]').addEventListener('click', (e) => { e.stopPropagation(); toggleLayer(layer, 'locked'); });
+            const deleteButton=row.querySelector('[data-action="delete"]');if(deleteButton){deleteButton.addEventListener('mousedown',(e)=>e.stopPropagation());deleteButton.addEventListener('click',(e)=>{e.stopPropagation();deleteLayerFromPanel(layer);});}
             list.appendChild(row);
         });
         updateSlotBindingButton();
@@ -1464,6 +1509,10 @@
         state.transformer = new Konva.Transformer({ rotateEnabled: true, keepRatio: true, flipEnabled: false, anchorSize: 4, anchorStrokeWidth: 1, borderStrokeWidth: 1, anchorCornerRadius: 1, rotateAnchorOffset: 24, anchorFill: '#fff', anchorStroke: '#8e44ad', borderStroke: '#8e44ad', boundBoxFunc: (oldBox, newBox) => Math.abs(newBox.width) < 40 || Math.abs(newBox.height) < 40 ? oldBox : newBox });
         state.transformer.on('mouseenter', () => { state.transformer.find('Rect').forEach((anchor) => anchor.hitStrokeWidth(28)); });
         state.stage.on('click tap', handleStagePolygonPoint);
+        state.stage.on('mousedown touchstart', beginMarqueeSelection);
+        state.stage.on('mousemove touchmove', updateMarqueeSelection);
+        state.stage.on('mouseup touchend', finishMarqueeSelection);
+        state.stage.container().style.userSelect='none';
         state.uiLayer.add(state.transformer); resizeStage();
     }
     function resizeStage() {
@@ -1483,6 +1532,7 @@
         state.perspectiveHandles.forEach((marker) => marker.destroy()); state.perspectiveHandles.clear();
         state.polygonHandles.forEach((marker) => marker.destroy()); state.polygonHandles.clear();
         state.clipHandles.forEach((marker) => marker.destroy()); state.clipHandles.clear();
+        cancelMarqueeSelection();
     }
     async function rebuildCanvas() {
         clearCanvas();
@@ -1494,6 +1544,13 @@
         if (layer.type !== 'product_slot') return getEditorAsset(layer.assetId);
         return getEditorAsset(state.slotPreviewAssetIds.get(layer.id)) || getEditorAsset(state.previewAssetId) || getEditorAsset(layer.assetId);
     }
+    function canvasPolygon(){return [{x:0,y:0},{x:SIZE,y:0},{x:SIZE,y:SIZE},{x:0,y:SIZE}];}
+    function sceneRenderPolygon(documentData){const scene=(documentData.layers||[]).find((layer)=>layer.type==='scene_background'&&layer.visible!==false);return scene?rotatedRectangleCorners(Object.assign(defaultFrame(),scene.frame||{})):canvasPolygon();}
+    function polygonBounds(points){const xs=points.map((point)=>point.x),ys=points.map((point)=>point.y);return {left:Math.min(...xs),right:Math.max(...xs),top:Math.min(...ys),bottom:Math.max(...ys)};}
+    function boundsIntersect(a,b){return Math.min(a.right,b.right,SIZE)>Math.max(a.left,b.left,0)&&Math.min(a.bottom,b.bottom,SIZE)>Math.max(a.top,b.top,0);}
+    function slotPolygon(layer){return layer.frame.perspective&&layer.frame.perspective.enabled?layer.frame.perspective.corners:rotatedRectangleCorners(layer.frame);}
+    function slotHasVisibleArea(layer,renderBounds){return boundsIntersect(polygonBounds(slotPolygon(layer)),polygonBounds(renderBounds||canvasPolygon()));}
+    function tracePolygon(context,points){context.beginPath();context.moveTo(points[0].x,points[0].y);points.slice(1).forEach((point)=>context.lineTo(point.x,point.y));context.closePath();}
     function loadImage(url) {
         return new Promise((resolve, reject) => {
             const image = new Image(); image.crossOrigin = 'anonymous'; image.onload = () => resolve(image); image.onerror = reject; image.src = url;
@@ -1502,9 +1559,11 @@
     async function createNode(layer) {
         const asset = resolveEditorLayerAsset(layer);
         if (!asset && layer.type !== 'product_slot') return null;
+        const renderBounds=sceneRenderPolygon(state.editor.document);
+        if(layer.type==='product_slot'&&!slotHasVisibleArea(layer,renderBounds))return null;
         try {
             const image = asset ? await loadImage(assetUrl(asset.storagePath)) : null;
-            const node = image ? makeImageNode(image, layer, layer.frame) : new Konva.Rect({ x: layer.frame.x, y: layer.frame.y, width: layer.frame.width, height: layer.frame.height, offsetX: layer.frame.width/2, offsetY: layer.frame.height/2, rotation: layer.frame.rotation||0, fill:'rgba(0,0,0,0.01)', draggable:!layer.locked });
+            const node = image ? makeImageNode(image, layer, layer.frame,renderBounds) : new Konva.Rect({ x: layer.frame.x, y: layer.frame.y, width: layer.frame.width, height: layer.frame.height, offsetX: layer.frame.width/2, offsetY: layer.frame.height/2, rotation: layer.frame.rotation||0, fill:'rgba(0,0,0,0.01)', draggable:!layer.locked });
             const interactionNode = visualNode(node);
             node.setAttr('mockupLayerId', layer.id);
             interactionNode.setAttr('mockupLayerId', layer.id);
@@ -1519,7 +1578,7 @@
             state.contentLayer.add(node); state.nodes.set(layer.id, node); return node;
         } catch (error) { setStatus('Görsel yüklenemedi: ' + (asset ? asset.name : layer.name), true); return null; }
     }
-    function makeImageNode(image, layer, frame) {
+    function makeImageNode(image, layer, frame, renderBounds) {
         const perspective = layer.type === 'product_slot' && frame.perspective && frame.perspective.enabled;
         const polygon = layer.type === 'foreground_polygon';
         const productSource=layer.type==='product_slot'?renderRelitSource(image,frame):image;
@@ -1529,14 +1588,15 @@
             : { image: renderedImage, x: frame.x, y: frame.y, width: frame.width, height: frame.height, offsetX: frame.width / 2, offsetY: frame.height / 2, rotation: frame.rotation || 0, opacity: frame.opacity == null ? 1 : frame.opacity, visible: layer.visible !== false, draggable: !layer.locked && layer.type !== 'scene_background' });
         imageNode.setAttr('mockupSourceImage', image);
         applyEffects(imageNode, frame, layer.type);
-        const clip = layer.type === 'product_slot' && layer.clipPolygon ? normalizeClipPolygon(layer.clipPolygon) : null;
-        if (!clip || !clip.closed || clip.points.length < 3) return imageNode;
-        layer.clipPolygon = clip;
+        if(layer.type!=='product_slot')return imageNode;
+        const clip = layer.clipPolygon ? normalizeClipPolygon(layer.clipPolygon) : null;
+        if(clip)layer.clipPolygon=clip;
         const group = new Konva.Group({ visible: layer.visible !== false, clipFunc(context) {
-            const points=layer.clipPolygon&&layer.clipPolygon.points||[];if(points.length<3)return;
-            context.beginPath(); context.moveTo(points[0].x, points[0].y);
-            points.slice(1).forEach((point) => context.lineTo(point.x, point.y));
-            context.closePath();
+            const liveEditorNode=state.nodes.get(layer.id)===group;
+            const bounds=liveEditorNode?sceneRenderPolygon(state.editor.document):(renderBounds&&renderBounds.length>=3?renderBounds:canvasPolygon());
+            tracePolygon(context,bounds);
+            const points=layer.clipPolygon&&layer.clipPolygon.closed&&layer.clipPolygon.points||[];
+            if(points.length>=3){context.clip();tracePolygon(context,points);}
         } });
         imageNode.visible(true); group.add(imageNode);
         group.setAttr('mockupSourceImage', image); group.setAttr('mockupVisualNode', imageNode);
@@ -1596,7 +1656,7 @@
                 line.points(corners.flatMap((item) => [item.x, item.y]));
                 refreshSpecialNode(layer); state.uiLayer.batchDraw();
             });
-            handle.on('dragend', () => { recordHistory(handle.getAttr('historyBefore')); renderInspector(); });
+            handle.on('dragend', () => { if(layer.frame.perspective)layer.frame.perspective.derivedFromClip=false;if(!validPerspectiveQuad(corners))setStatus('Perspektif köşeleri ters veya kesişiyor; ürün düzeltilene kadar render edilmez.',true);recordHistory(handle.getAttr('historyBefore')); renderInspector(); });
             state.uiLayer.add(handle); state.perspectiveHandles.set(layer.id + '-' + index, handle);
         });
     }
@@ -1663,6 +1723,31 @@
         if (!layer || layer.locked || layer.geometry.closed || event.target !== state.stage) return;
         addPolygonPointFromPointer(layer);
     }
+    function pointInPolygon(point,polygon){let inside=false;for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){const a=polygon[i],b=polygon[j],crosses=(a.y>point.y)!==(b.y>point.y)&&point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x;if(crosses)inside=!inside;}return inside;}
+    function slotAtPoint(point){return state.editor.document.layers.some((layer)=>layer.type==='product_slot'&&layer.visible!==false&&pointInPolygon(point,slotPolygon(layer)));}
+    function logicalStagePointer(){const pointer=state.stage&&state.stage.getPointerPosition();return pointer?{x:pointer.x/state.scale,y:pointer.y/state.scale}:null;}
+    function beginMarqueeSelection(event){
+        if(state.polygonDrawingLayerId||state.clipDrawingLayerId)return;
+        const point=logicalStagePointer();if(!point||slotAtPoint(point))return;
+        if(event.evt&&event.evt.preventDefault)event.evt.preventDefault();
+        state.marquee={start:point,current:point,moved:false,shift:Boolean(event.evt&&event.evt.shiftKey),toggle:Boolean(event.evt&&(event.evt.ctrlKey||event.evt.metaKey))};
+        state.marqueeRect=new Konva.Rect({x:point.x,y:point.y,width:0,height:0,fill:'rgba(47,128,183,.12)',stroke:'#2f80b7',strokeWidth:4,dash:[14,9],listening:false,name:'ms-marquee-selection'});
+        state.uiLayer.add(state.marqueeRect);state.marqueeRect.moveToTop();state.uiLayer.batchDraw();
+    }
+    function updateMarqueeSelection(event){
+        if(!state.marquee)return;const point=logicalStagePointer();if(!point)return;if(event.evt&&event.evt.preventDefault)event.evt.preventDefault();
+        state.marquee.current=point;state.marquee.moved=state.marquee.moved||Math.hypot(point.x-state.marquee.start.x,point.y-state.marquee.start.y)>6;
+        state.marqueeRect.setAttrs({x:Math.min(point.x,state.marquee.start.x),y:Math.min(point.y,state.marquee.start.y),width:Math.abs(point.x-state.marquee.start.x),height:Math.abs(point.y-state.marquee.start.y)});state.uiLayer.batchDraw();
+    }
+    function finishMarqueeSelection(event){
+        if(!state.marquee)return;const marquee=state.marquee,moved=marquee.moved,selection=state.marqueeRect?{left:state.marqueeRect.x(),top:state.marqueeRect.y(),right:state.marqueeRect.x()+state.marqueeRect.width(),bottom:state.marqueeRect.y()+state.marqueeRect.height()}:null;
+        if(event.evt&&event.evt.preventDefault)event.evt.preventDefault();cancelMarqueeSelection();
+        if(!moved){selectLayer(null);return;}
+        const found=state.editor.document.layers.filter((layer)=>layer.type==='product_slot'&&layer.visible!==false&&!layer.locked&&slotHasVisibleArea(layer,sceneRenderPolygon(state.editor.document))&&boundsIntersect(polygonBounds(slotPolygon(layer)),selection)).map((layer)=>layer.id);
+        const next=marquee.shift?new Set(state.selectedLayerIds):marquee.toggle?new Set(state.selectedLayerIds):new Set();
+        found.forEach((id)=>{if(marquee.toggle&&next.has(id))next.delete(id);else next.add(id);});state.selectedLayerIds=next;state.selectedLayerId=[...next].pop()||null;selectLayer(state.selectedLayerId,false,true);setStatus(`${found.length} slot seçim alanıyla bulundu.`,false);
+    }
+    function cancelMarqueeSelection(){if(state.marqueeRect){state.marqueeRect.destroy();state.marqueeRect=null;}state.marquee=null;if(state.uiLayer)state.uiLayer.batchDraw();}
     function addPolygonPointFromPointer(layer) {
         const pointer = state.stage.getPointerPosition(); if (!pointer) return;
         const before = editorSnapshot();
@@ -1854,11 +1939,12 @@
         setStatus(enabled ? 'Perspektif modu açıldı; dört köşeyi sürükleyebilirsiniz.' : 'Normal dikdörtgen dönüşümüne dönüldü.', false);
     }
     async function resetPerspectiveCorners(layer) {
-        const before = editorSnapshot(); layer.frame.perspective.corners = rotatedRectangleCorners(layer.frame); recordHistory(before);
+        const before = editorSnapshot(); layer.frame.perspective.corners = rotatedRectangleCorners(layer.frame);layer.frame.perspective.derivedFromClip=false; recordHistory(before);
         refreshSpecialNode(layer); renderSelectionMarkers(); renderInspector();
     }
     function alphaBounds(image) {
-        const sourceWidth = image.naturalWidth, sourceHeight = image.naturalHeight;
+        const cached=state.alphaBoundsCache.get(image);if(cached)return cached;
+        const sourceWidth = image.naturalWidth||image.width, sourceHeight = image.naturalHeight||image.height;
         const scale = Math.min(1, 1024 / Math.max(sourceWidth, sourceHeight));
         const canvas = makeCanvas(sourceWidth * scale, sourceHeight * scale), context = canvas.getContext('2d', { willReadFrequently: true });
         context.drawImage(image, 0, 0, canvas.width, canvas.height); const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -1867,8 +1953,8 @@
             if (pixels[(y * canvas.width + x) * 4 + 3] < 8) continue;
             if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y;
         }
-        if (right < left || bottom < top) return { x: 0, y: 0, width: 1, height: 1 };
-        return { x: left / canvas.width, y: top / canvas.height, width: (right - left + 1) / canvas.width, height: (bottom - top + 1) / canvas.height };
+        const result=right < left || bottom < top?{ x: 0, y: 0, width: 1, height: 1 }:{ x: left / canvas.width, y: top / canvas.height, width: (right - left + 1) / canvas.width, height: (bottom - top + 1) / canvas.height };
+        state.alphaBoundsCache.set(image,result);return result;
     }
     function smartPlaceProduct(layer) {
         const node = state.nodes.get(layer.id), image = node && node.getAttr('mockupSourceImage');
@@ -1974,7 +2060,20 @@
         const previewId = state.slotPreviewAssetIds.get(layer.id); if (previewId) state.slotPreviewAssetIds.set(copy.id, previewId);
         state.selectedLayerId=copy.id; state.selectedLayerIds=new Set([copy.id]); recordHistory(before); await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); setStatus(`${copy.name} çoğaltıldı.`,false);
     }
-    function removeLayer(layer) { const before=editorSnapshot(), index=state.editor.document.layers.findIndex((l)=>l.id===layer.id); if(index<0)return;invalidateLayerRelight(layer); const node=state.nodes.get(layer.id); if(node)node.destroy(); state.nodes.delete(layer.id); state.editor.document.layers.splice(index,1); state.selectedLayerIds.delete(layer.id); state.selectedLayerId=[...state.selectedLayerIds].pop()||null; if(state.polygonDrawingLayerId===layer.id)state.polygonDrawingLayerId=null;if(state.clipDrawingLayerId===layer.id)state.clipDrawingLayerId=null; state.transformer.nodes([]); recordHistory(before); state.stage.batchDraw(); renderEditor(); }
+    async function deleteLayersById(ids) {
+        const requested=new Set(ids||[]),matched=state.editor.document.layers.filter((layer)=>requested.has(layer.id)&&layer.type!=='scene_background'),locked=matched.filter((layer)=>layer.locked),deletable=matched.filter((layer)=>!layer.locked);
+        if(!deletable.length){if(locked.length)setStatus('Silmek için önce katman kilidini açın.',true);return;}
+        const before=editorSnapshot(),deletedIds=new Set(deletable.map((layer)=>layer.id));
+        deletable.forEach((layer)=>{invalidateLayerRelight(layer);state.slotPreviewAssetIds.delete(layer.id);});
+        state.editor.document.layers=state.editor.document.layers.filter((layer)=>!deletedIds.has(layer.id));
+        state.selectedLayerIds=new Set([...state.selectedLayerIds].filter((id)=>!deletedIds.has(id)));state.selectedLayerId=[...state.selectedLayerIds].pop()||null;
+        if(deletedIds.has(state.polygonDrawingLayerId))state.polygonDrawingLayerId=null;if(deletedIds.has(state.clipDrawingLayerId))state.clipDrawingLayerId=null;
+        recordHistory(before);await rebuildCanvas();renderEditor();
+        setStatus(locked.length?`${deletable.length} katman silindi. Kilitli katmanlar için önce kilidi açın.`:`${deletable.length} katman silindi.`,Boolean(locked.length));
+    }
+    function deleteSelectedLayers(){const ids=state.selectedLayerIds.size?[...state.selectedLayerIds]:(state.selectedLayerId?[state.selectedLayerId]:[]);if(!ids.length)return;deleteLayersById(ids);}
+    function deleteLayerFromPanel(layer){if(layer.locked)return setStatus('Silmek için önce katman kilidini açın.',true);const selected=state.selectedLayerIds.has(layer.id)&&state.selectedLayerIds.size>1;const ids=selected&&window.confirm('Seçili katmanların tümü silinsin mi?\n\nTamam: Seçili katmanların tümünü sil\nİptal: Yalnız bu katmanı sil')?[...state.selectedLayerIds]:[layer.id];deleteLayersById(ids);}
+    function removeLayer(layer) { deleteLayersById([layer.id]); }
 
     async function exportEditorBlob(targetSize) {
         if (!state.stage) return null;
@@ -2131,7 +2230,7 @@
             setStatus('Çıktı oluşturulamadı: '+error.message,true);return null;
         }finally{if(opts.manageBusy!==false)setBusy(false);}
     }
-    async function renderSnapshot(snapshot,product){snapshot=normalizeDocument(snapshot);const host=document.getElementById('msRenderHost');host.innerHTML='';const stage=new Konva.Stage({container:host,width:SIZE,height:SIZE}),layerCanvas=new Konva.Layer();stage.add(layerCanvas);layerCanvas.add(new Konva.Rect({x:0,y:0,width:SIZE,height:SIZE,fill:'#fff',listening:false}));for(const item of snapshot.layers||[]){if(item.visible===false)continue;let asset=item.type==='product_slot'?product:(snapshot.assets||[]).find(a=>a.id===item.assetId);if(!asset||!asset.storagePath)continue;try{const image=await loadImage(assetUrl(asset.storagePath));const node=makeImageNode(image,{type:item.type,visible:true,locked:true,geometry:item.geometry,clipPolygon:item.clipPolygon},Object.assign(defaultFrame(),item.frame||{}));setNodeDraggable(node,false);layerCanvas.add(node);}catch(error){throw new Error('Render varlığı yüklenemedi: '+(asset.name||asset.storagePath));}}layerCanvas.draw();try{return await ensurePngBlob(await stage.toBlob({mimeType:'image/png',pixelRatio:1}));}finally{stage.destroy();host.innerHTML='';}}
+    async function renderSnapshot(snapshot,product){snapshot=normalizeDocument(snapshot);const host=document.getElementById('msRenderHost');host.innerHTML='';const stage=new Konva.Stage({container:host,width:SIZE,height:SIZE}),layerCanvas=new Konva.Layer(),renderBounds=sceneRenderPolygon(snapshot);stage.add(layerCanvas);layerCanvas.add(new Konva.Rect({x:0,y:0,width:SIZE,height:SIZE,fill:'#fff',listening:false}));for(const item of snapshot.layers||[]){if(item.visible===false||(item.type==='product_slot'&&!slotHasVisibleArea(item,renderBounds)))continue;let asset=item.type==='product_slot'?product:(snapshot.assets||[]).find(a=>a.id===item.assetId);if(!asset||!asset.storagePath)continue;try{const image=await loadImage(assetUrl(asset.storagePath));const node=makeImageNode(image,{type:item.type,visible:true,locked:true,geometry:item.geometry,clipPolygon:item.clipPolygon},Object.assign(defaultFrame(),item.frame||{}),renderBounds);setNodeDraggable(node,false);layerCanvas.add(node);}catch(error){throw new Error('Render varlığı yüklenemedi: '+(asset.name||asset.storagePath));}}layerCanvas.draw();try{return await ensurePngBlob(await stage.toBlob({mimeType:'image/png',pixelRatio:1}));}finally{stage.destroy();host.innerHTML='';}}
 
     async function getOutputUrl(output, refresh) {
         const cached=state.outputUrlCache.get(output.export_path);if(!refresh&&cached&&cached.expires>Date.now())return cached.url;
