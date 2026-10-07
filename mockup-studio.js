@@ -9,7 +9,7 @@
         canvas: { width: 2000, height: 2000, coordinateSystem: 'normalized_0_1000' },
         sceneLighting: { temperature: 15, tint: 0, exposure: 0, contrast: 1, saturation: 1, highlights: -10, shadows: 8 },
         slots: [{
-            id: 'slot_01', name: 'Ön Hero',
+            id: 'slot_01', name: 'Ön Hero', groupId: 'hero_group',
             perspectiveCorners: { topLeft: [220, 180], topRight: [520, 210], bottomRight: [500, 520], bottomLeft: [200, 490] },
             clipPolygon: [[235, 225], [530, 250], [510, 540], [215, 505]],
             foregroundPolygons: [{ label: 'front_box_edge', points: [[200, 490], [500, 520], [495, 570], [195, 540]] }],
@@ -139,6 +139,11 @@
             }
             if (layer.type === 'product_slot' && layer.clipPolygon) {
                 layer.clipPolygon = normalizeClipPolygon(layer.clipPolygon);
+            }
+            if (layer.type === 'product_slot') {
+                const groupId = normalizeSlotGroupId(layer.groupId);
+                if (groupId) layer.groupId = groupId;
+                else delete layer.groupId;
             }
             if (layer.type === 'foreground_polygon') {
                 layer.geometry = normalizePolygonGeometry(layer.geometry, layer.assetId);
@@ -896,6 +901,10 @@
         else if (value < min || value > max) errors.push(`${path}: ${min}–${max} aralığında olmalıdır.`);
     }
 
+    function normalizeSlotGroupId(value) {
+        return typeof value === 'string' && value.trim() ? value.trim().slice(0, 120) : null;
+    }
+
     function validateSlotJson(text) {
         const result = { parsed: null, found: 0, validSlots: [], invalidSlots: [], errors: [], warnings: [] };
         try { result.parsed = JSON.parse(text); }
@@ -923,13 +932,14 @@
                 result.invalidSlots.push({ index, errors: [`${prefix}: bir nesne olmalıdır.`] });
                 return;
             }
-            addUnsupportedWarnings(slot, ['id', 'name', 'perspectiveCorners', 'clipPolygon', 'foregroundPolygons', 'effects', 'relighting', 'shadow', 'depthOrder'], prefix, result.warnings);
+            addUnsupportedWarnings(slot, ['id', 'name', 'groupId', 'perspectiveCorners', 'clipPolygon', 'foregroundPolygons', 'effects', 'relighting', 'shadow', 'depthOrder'], prefix, result.warnings);
             if (typeof slot.id !== 'string' || !slot.id.trim()) slotErrors.push(`${prefix}.id: boş olmayan bir metin olmalıdır.`);
             else if (!/^[A-Za-z0-9_-]{1,120}$/.test(slot.id)) slotErrors.push(`${prefix}.id: yalnızca harf, sayı, _ ve - içerebilir.`);
             else if (seenIds.has(slot.id)) result.warnings.push(`${prefix}.id: “${slot.id}” tekrar ediyor; güvenli benzersiz ID üretilecek.`);
             else if (existingIds.has(slot.id)) result.warnings.push(`${prefix}.id: “${slot.id}” mevcut bir katmanla çakışıyor; güvenli benzersiz ID üretilecek.`);
             if (typeof slot.id === 'string') seenIds.add(slot.id);
             if (slot.name != null && (typeof slot.name !== 'string' || slot.name.length > 120)) slotErrors.push(`${prefix}.name: en fazla 120 karakterlik metin olmalıdır.`);
+            if (slot.groupId != null && (typeof slot.groupId !== 'string' || !slot.groupId.trim() || slot.groupId.trim().length > 120)) slotErrors.push(`${prefix}.groupId: 1–120 karakterlik boş olmayan bir metin olmalıdır.`);
             const corners = slot.perspectiveCorners;
             if (!corners || typeof corners !== 'object' || Array.isArray(corners)) slotErrors.push(`${prefix}.perspectiveCorners: dört köşe nesnesi zorunludur.`);
             else {
@@ -1018,6 +1028,7 @@
             const xs = corners.map((point) => point.x), ys = corners.map((point) => point.y);
             const layer = makeLayer('product_slot', null, (slot.name || `Slot ${state.editor.document.layers.filter((item) => item.type === 'product_slot').length + slotIndex + 1}`).trim());
             layer.id = uniqueImportedId(slot.id, usedIds);
+            if (slot.groupId != null) layer.groupId = normalizeSlotGroupId(slot.groupId);
             Object.assign(layer.frame, {
                 x: (Math.min(...xs) + Math.max(...xs)) / 2,
                 y: (Math.min(...ys) + Math.max(...ys)) / 2,
@@ -1271,6 +1282,41 @@
         selectLayer(state.selectedLayerId || slots[slots.length - 1].id, false, true);
         renderEditor();
         setStatus(`Örnek ürün ${slots.length} slotta önizleniyor.`, false);
+    }
+
+    function slotGroupMembers(layer) {
+        const groupId = normalizeSlotGroupId(layer && layer.groupId);
+        return groupId ? state.editor.document.layers.filter((item) => item.type === 'product_slot' && item.groupId === groupId) : [];
+    }
+
+    async function applyProductToSlotGroup(layer, replacing) {
+        const asset = preferredEditorProduct();
+        const members = slotGroupMembers(layer);
+        if (!normalizeSlotGroupId(layer.groupId)) return setStatus('Seçili slot bir Smart Slot Group üyesi değil.', true);
+        if (!asset) return setStatus('Önce ürün kütüphanesinden bir örnek ürün seçin.', true);
+        if (!members.length) return setStatus('Bu grupta uygulanabilir slot bulunamadı.', true);
+        resetRelightCache();
+        members.forEach((member) => state.slotPreviewAssetIds.set(member.id, asset.id));
+        for (const member of members) {
+            const oldNode = state.nodes.get(member.id);
+            if (oldNode) oldNode.destroy();
+            state.nodes.delete(member.id);
+            await createNode(member);
+        }
+        syncOrder();
+        selectLayer(layer.id, false, true);
+        renderEditor();
+        setStatus(`${replacing ? 'Grup ürünü değiştirildi' : 'Ürün gruba uygulandı'}: ${members.length} slot • ${asset.name}.`, false);
+    }
+
+    function detachSlotFromGroup(layer) {
+        if (!normalizeSlotGroupId(layer.groupId)) return setStatus('Seçili slot bir Smart Slot Group üyesi değil.', true);
+        const previousGroup = layer.groupId, before = editorSnapshot();
+        delete layer.groupId;
+        recordHistory(before);
+        renderLayers();
+        renderInspector();
+        setStatus(`${layer.name}, “${previousGroup}” grubundan ayrıldı.`, false);
     }
 
     async function previewProductInAllSlots() {
@@ -1738,13 +1784,15 @@
         const previewAsset = isProduct ? resolveEditorLayerAsset(layer) : null;
         const productAdjustments = isProduct ? `<div class="ms-product-controls"><h4>ÜRÜN GÖRSEL AYARLARI</h4><div class="ms-selected-product-preview">${previewAsset?`<img src="${assetUrl(previewAsset.storagePath)}" alt="${esc(previewAsset.name)}"><span>${esc(previewAsset.name)}</span>`:'<span>Örnek ürün seçilmedi</span>'}</div>${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}${rangeField('Parlaklık','brightness',f.brightness||0,-100,100,'%')}${rangeField('Kontrast','contrast',f.contrast||0,-100,100,'%')}${rangeField('Doygunluk','saturation',f.saturation||0,-100,100,'%')}${rangeField('Hue','hue',f.hue||0,-180,180,'°')}${rangeField('Keskinlik','sharpen',f.sharpen||0,0,20,'%')}<button id="msResetProductVisuals" class="ms-btn ms-full">Tüm ürün ayarlarını sıfırla</button><small class="ms-help">Normal adım 0,5; dönüş ve yüzde opaklık 1’dir. Shift + yön tuşu 0,1 hassasiyetle ayarlar.</small></div>` : '';
         const lightingTools=isProduct?renderLightingControls(f.relighting):'';
+        const groupMembers=isProduct?slotGroupMembers(layer):[];
+        const groupTools=isProduct&&groupMembers.length?`<div class="ms-section ms-group-tools"><h4>SMART SLOT GROUP</h4><p class="ms-help">${esc(layer.groupId)} • ${groupMembers.length} slot</p><button id="msApplyGroupProduct" class="ms-btn ms-btn-primary ms-full">Ürünü Gruba Uygula</button><button id="msChangeGroupProduct" class="ms-btn ms-full">Grup Ürününü Değiştir</button><button id="msDetachFromGroup" class="ms-btn ms-btn-danger ms-full">Seçili Slotu Gruptan Ayır</button></div>`:'';
         const perspectiveTools = isProduct ? `<div class="ms-section"><h4>PERSPEKTİF SLOTU</h4><label class="ms-check"><input id="msPerspectiveToggle" type="checkbox" ${perspectiveEnabled?'checked':''}> Dört köşeli perspektifi aç</label>${perspectiveEnabled ? `${rangeField('Güvenli iç boşluk','smartPadding',(f.smartFit&&f.smartFit.padding)||0,0,30,'%')}<button id="msSmartPlaceBtn" class="ms-btn ms-btn-primary ms-full">Akıllı yerleştir</button><button id="msResetPerspectiveBtn" class="ms-btn ms-full">Köşeleri sıfırla</button><small class="ms-help">Mor köşeleri tuval üzerinde sürükleyin. Akıllı yerleştirme şeffaf kenarları algılar.</small>` : '<small class="ms-help">Açıldığında mevcut konum ve dönüş dört düzenlenebilir köşeye çevrilir.</small>'}</div>` : '';
         const clipGeometry = isProduct && layer.clipPolygon ? layer.clipPolygon : null;
         const clipTools = isProduct ? `<div class="ms-section ms-clip-tools"><h4>KIRPMA POLİGONU</h4>${clipGeometry?`<p class="ms-help">${clipGeometry.points.length} nokta • ${clipGeometry.closed?'Kapalı':'Çiziliyor'} • Turuncu kesik çizgi</p><button id="msClipDrawBtn" class="ms-btn ms-full">Nokta eklemeye devam et</button><button id="msClipCloseBtn" class="ms-btn ms-btn-primary ms-full" ${clipGeometry.points.length<3?'disabled':''}>Kırpma poligonunu kapat</button><button id="msClipUndoPointBtn" class="ms-btn ms-full" ${!clipGeometry.points.length?'disabled':''}>Son noktayı sil</button><button id="msClipResetBtn" class="ms-btn ms-btn-danger ms-full">Kırpma poligonunu temizle</button>`:'<p class="ms-help">Ürün ve gölgesinin görünebileceği alanı sınırlar; foreground poligonundan bağımsızdır.</p><button id="msClipCreateBtn" class="ms-btn ms-btn-primary ms-full">Kırpma poligonu çiz</button>'}</div>` : '';
         const polygonTools = isPolygon ? `<div class="ms-section"><h4>POLİGON MASKESİ</h4><p class="ms-help">${layer.geometry.points.length} nokta • ${layer.geometry.closed?'Kapalı':'Çiziliyor'}</p><button id="msPolygonDrawBtn" class="ms-btn ms-full">Nokta eklemeye devam et</button><button id="msPolygonCloseBtn" class="ms-btn ms-btn-primary ms-full" ${layer.geometry.points.length<3?'disabled':''}>Poligonu kapat</button><button id="msPolygonUndoPointBtn" class="ms-btn ms-full" ${!layer.geometry.points.length?'disabled':''}>Son noktayı sil</button><button id="msPolygonResetBtn" class="ms-btn ms-btn-danger ms-full">Poligonu sıfırla</button></div>` : '';
         const commonVisuals = isProduct ? '' : `${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}`;
         const shadowTools = `<div class="ms-section"><h4>GÖLGE</h4><label class="ms-check"><input id="msShadowToggle" type="checkbox" ${f.shadow.enabled?'checked':''}> Gölgeyi aç</label>${rangeField('Açı','shadowAngle',f.shadow.angle||0,0,360,'°')}${rangeField('Mesafe','shadowDistance',f.shadow.distance||0,0,300,' px')}${numberField('X ofset','shadowOffsetX',f.shadow.offsetX||0,-300,300)}${numberField('Y ofset','shadowOffsetY',f.shadow.offsetY||0,-300,300)}${rangeField('Blur / yumuşaklık','shadowBlur',f.shadow.blur||0,0,120,' px')}${rangeField('Opaklık','shadowOpacity',Math.round((f.shadow.opacity==null?.35:f.shadow.opacity)*100),0,100,'%')}<div class="ms-field"><label for="msShadowColor">Renk</label><div class="ms-control-inputs"><input id="msShadowColor" type="color" value="${esc(f.shadow.color||'#000000')}"><button type="button" class="ms-control-reset" data-reset-frame-key="shadowColor">Sıfırla</button></div></div></div>`;
-        root.innerHTML = `<h4>${esc(layer.name)}</h4>${productAdjustments}${lightingTools}${transformFields}${commonVisuals}
+        root.innerHTML = `<h4>${esc(layer.name)}</h4>${productAdjustments}${groupTools}${lightingTools}${transformFields}${commonVisuals}
             ${perspectiveTools}${clipTools}${polygonTools}${shadowTools}
             ${layer.type==='product_slot'?'<button id="msDuplicateLayer" class="ms-btn ms-btn-primary ms-full">Slotu çoğalt</button>':''}<button id="msRemoveLayer" class="ms-btn ms-btn-danger ms-full">Katmanı sil</button>`;
         root.querySelectorAll('[data-frame-key]').forEach(bindFrameInput);
@@ -1761,6 +1809,9 @@
             updateNode(layer); recordHistory(before); renderInspector();
         });
         const dup = document.getElementById('msDuplicateLayer'); if (dup) dup.addEventListener('click', () => duplicateLayer(layer));
+        document.getElementById('msApplyGroupProduct')?.addEventListener('click', () => applyProductToSlotGroup(layer, false));
+        document.getElementById('msChangeGroupProduct')?.addEventListener('click', () => applyProductToSlotGroup(layer, true));
+        document.getElementById('msDetachFromGroup')?.addEventListener('click', () => detachSlotFromGroup(layer));
         const perspectiveToggle = document.getElementById('msPerspectiveToggle'); if (perspectiveToggle) perspectiveToggle.addEventListener('change', () => togglePerspective(layer, perspectiveToggle.checked));
         const smartPlace = document.getElementById('msSmartPlaceBtn'); if (smartPlace) smartPlace.addEventListener('click', () => smartPlaceProduct(layer));
         const resetPerspective = document.getElementById('msResetPerspectiveBtn'); if (resetPerspective) resetPerspective.addEventListener('click', () => resetPerspectiveCorners(layer));
