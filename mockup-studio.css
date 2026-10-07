@@ -336,6 +336,7 @@
 .ms-control-inputs input[type="number"], .ms-control-number { width: 62px; padding: 5px; box-sizing: border-box; font-size: 11px; }
 .ms-control-inputs input[type="color"] { width: 48px; height: 32px; padding: 2px; }
 .ms-control-reset { min-height: 28px; padding: 4px 6px; border: 0; border-radius: 4px; background: #edf0f3; color: #52616d; cursor: pointer; font-size: 9px; font-weight: 700; }
+.ms-clip-tools { border-left: 3px dashed #e67e22; padding-left: 9px; }
 
 .ms-json-modal { position: fixed; z-index: 10020; inset: 0; display: grid; place-items: center; padding: 20px; box-sizing: border-box; background: rgba(20,28,35,.72); }
 .ms-json-modal[hidden] { display: none; }

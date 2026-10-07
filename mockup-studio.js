@@ -10,6 +10,7 @@
         slots: [{
             id: 'slot_01', name: 'Ön Hero',
             perspectiveCorners: { topLeft: [220, 180], topRight: [520, 210], bottomRight: [500, 520], bottomLeft: [200, 490] },
+            clipPolygon: [[235, 225], [530, 250], [510, 540], [215, 505]],
             foregroundPolygons: [{ label: 'front_box_edge', points: [[200, 490], [500, 520], [495, 570], [195, 540]] }],
             effects: { blur: 0, opacity: 1, brightness: 1 },
             shadow: { enabled: true, color: '#4B3828', opacity: 0.22, blur: 14, offsetX: 5, offsetY: 8 },
@@ -37,7 +38,9 @@
         selectionMarkers: new Map(),
         perspectiveHandles: new Map(),
         polygonHandles: new Map(),
+        clipHandles: new Map(),
         polygonDrawingLayerId: null,
+        clipDrawingLayerId: null,
         clipboardLayer: null,
         previewAssetId: null,
         slotPreviewAssetIds: new Map(),
@@ -130,6 +133,9 @@
             if (layer.frame.smartFit) {
                 layer.frame.smartFit = normalizeSmartFit(layer.frame.smartFit);
             }
+            if (layer.type === 'product_slot' && layer.clipPolygon) {
+                layer.clipPolygon = normalizeClipPolygon(layer.clipPolygon);
+            }
             if (layer.type === 'foreground_polygon') {
                 layer.geometry = normalizePolygonGeometry(layer.geometry, layer.assetId);
             }
@@ -201,6 +207,14 @@
             sourceAssetId: (raw && raw.sourceAssetId) || assetId || null,
             points: (raw && Array.isArray(raw.points) ? raw.points : []).map((point) => ({ x: Number(point.x) || 0, y: Number(point.y) || 0 })),
             closed: Boolean(raw && raw.closed)
+        };
+    }
+
+    function normalizeClipPolygon(raw) {
+        const source = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.points) ? raw.points : []);
+        return {
+            points: source.map((point) => ({ x: Number(point.x) || 0, y: Number(point.y) || 0 })),
+            closed: Array.isArray(raw) ? source.length >= 3 : Boolean(raw && raw.closed)
         };
     }
 
@@ -699,6 +713,7 @@
         state.editor = blankEditor();
         state.editingPresetId = null;
         state.polygonDrawingLayerId = null;
+        state.clipDrawingLayerId = null;
         state.previewAssetId = null;
         state.slotPreviewAssetIds = new Map();
         state.selectedLayerId = null;
@@ -723,6 +738,7 @@
             state.selectedLayerId = null;
             state.selectedLayerIds = new Set();
             state.polygonDrawingLayerId = null;
+            state.clipDrawingLayerId = null;
             state.previewAssetId = null;
             state.slotPreviewAssetIds = new Map();
             state.selectedAssetId = preferredEditorProduct() ? preferredEditorProduct().id : null;
@@ -847,7 +863,6 @@
             if (root.canvas.coordinateSystem !== 'normalized_0_1000') result.errors.push('canvas.coordinateSystem “normalized_0_1000” olmalıdır.');
         }
         if (!Array.isArray(root.slots) || !root.slots.length) { result.errors.push('slots dizisi boş olamaz.'); return result; }
-        if (root.slots.length > 100) result.errors.push('Tek seferde en fazla 100 slot içe aktarılabilir.');
         result.found = root.slots.length;
         const seenIds = new Set();
         const existingIds = new Set(state.editor.document.layers.map((layer) => layer.id));
@@ -857,7 +872,7 @@
                 result.invalidSlots.push({ index, errors: [`${prefix}: bir nesne olmalıdır.`] });
                 return;
             }
-            addUnsupportedWarnings(slot, ['id', 'name', 'perspectiveCorners', 'foregroundPolygons', 'effects', 'shadow', 'depthOrder'], prefix, result.warnings);
+            addUnsupportedWarnings(slot, ['id', 'name', 'perspectiveCorners', 'clipPolygon', 'foregroundPolygons', 'effects', 'shadow', 'depthOrder'], prefix, result.warnings);
             if (typeof slot.id !== 'string' || !slot.id.trim()) slotErrors.push(`${prefix}.id: boş olmayan bir metin olmalıdır.`);
             else if (!/^[A-Za-z0-9_-]{1,120}$/.test(slot.id)) slotErrors.push(`${prefix}.id: yalnızca harf, sayı, _ ve - içerebilir.`);
             else if (seenIds.has(slot.id)) result.warnings.push(`${prefix}.id: “${slot.id}” tekrar ediyor; güvenli benzersiz ID üretilecek.`);
@@ -869,6 +884,11 @@
             else {
                 addUnsupportedWarnings(corners, ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'], `${prefix}.perspectiveCorners`, result.warnings);
                 ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].forEach((key) => validateJsonPoint(corners[key], `${prefix}.perspectiveCorners.${key}`, slotErrors));
+            }
+            if (slot.clipPolygon != null) {
+                if (!Array.isArray(slot.clipPolygon) || slot.clipPolygon.length < 3) slotErrors.push(`${prefix}.clipPolygon: en az 3 noktalı bir dizi olmalıdır.`);
+                else if (slot.clipPolygon.length > 500) slotErrors.push(`${prefix}.clipPolygon: en fazla 500 nokta içerebilir.`);
+                else slot.clipPolygon.forEach((point, pointIndex) => validateJsonPoint(point, `${prefix}.clipPolygon[${pointIndex}]`, slotErrors));
             }
             if (slot.foregroundPolygons != null && !Array.isArray(slot.foregroundPolygons)) slotErrors.push(`${prefix}.foregroundPolygons: dizi olmalıdır.`);
             else (slot.foregroundPolygons || []).forEach((polygon, polygonIndex) => {
@@ -952,13 +972,14 @@
                 height: Math.max(40, Math.max(...ys) - Math.min(...ys)),
                 perspective: { enabled: true, corners }
             });
+            if (slot.clipPolygon) layer.clipPolygon = normalizeClipPolygon({ points: slot.clipPolygon.map((point) => normalizedJsonPoint(point, canvasWidth, canvasHeight)), closed: true });
             ['blur', 'opacity', 'brightness', 'contrast', 'saturation', 'hue', 'sharpen'].forEach((key) => { if (slot.effects && slot.effects[key] != null) layer.frame[key] = slot.effects[key]; });
             if (slot.shadow) {
                 const supportedShadow = {};
                 ['enabled', 'color', 'opacity', 'blur', 'offsetX', 'offsetY', 'angle', 'distance'].forEach((key) => { if (slot.shadow[key] != null) supportedShadow[key] = slot.shadow[key]; });
                 layer.frame.shadow = normalizeShadow(supportedShadow);
             }
-            layer.visible = true; layer.locked = false;
+            layer.visible = true; layer.locked = false; layer.importedFromJson = true;
             slotLayers.push(layer);
             (slot.foregroundPolygons || []).forEach((polygon, polygonIndex) => {
                 const polygonLayer = makeLayer('foreground_polygon', sceneAsset, polygon.label || `${layer.name} Foreground ${polygonIndex + 1}`);
@@ -974,6 +995,7 @@
         state.selectedLayerIds = new Set(slotLayers.map((layer) => layer.id));
         state.selectedLayerId = slotLayers[slotLayers.length - 1].id;
         state.polygonDrawingLayerId = null;
+        state.clipDrawingLayerId = null;
         recordHistory(before);
         await rebuildCanvas();
         renderEditor();
@@ -1012,6 +1034,8 @@
         state.selectedLayerIds = new Set([...state.selectedLayerIds].filter((id) => state.editor.document.layers.some((layer) => layer.id === id)));
         const selectedPolygon = state.editor.document.layers.find((layer) => layer.id === state.selectedLayerId && layer.type === 'foreground_polygon' && !layer.geometry.closed);
         state.polygonDrawingLayerId = selectedPolygon ? selectedPolygon.id : null;
+        const selectedClip = state.editor.document.layers.find((layer) => layer.id === state.selectedLayerId && layer.type === 'product_slot' && layer.clipPolygon && !layer.clipPolygon.closed);
+        state.clipDrawingLayerId = selectedClip ? selectedClip.id : null;
         await rebuildCanvas();
         renderEditor();
     }
@@ -1082,6 +1106,7 @@
         if (!file) return;
         if (type === 'foreground_mask' && file.type !== 'image/png') return setStatus('Foreground mask şeffaf PNG olmalıdır.', true);
         const before = editorSnapshot();
+        const hasJsonSlots = type === 'scene_background' && state.editor.document.layers.some((layer) => layer.type === 'product_slot' && layer.importedFromJson);
         const asset = await uploadFile(file, type, state.editor.persisted ? state.editor.id : null);
         if (!asset) return;
         state.editor.document.assets.push(asset);
@@ -1096,7 +1121,7 @@
         recordHistory(before);
         await rebuildCanvas();
         renderEditor();
-        if(type==='scene_background')setStatus('Boş sahne draft çalışma belgesine eklendi; kaydetmeden slot ekleyebilirsiniz.',false);
+        if(type==='scene_background')setStatus(hasJsonSlots?'Background değiştirildi. JSON slot koordinatları önceki görselin son hâline bağlı olduğundan hizalar bozulabilir.':'Boş sahne draft çalışma belgesine eklendi; kaydetmeden slot ekleyebilirsiniz.',false);
     }
 
     async function addPolygonMask() {
@@ -1313,7 +1338,7 @@
     }
     function toggleLayer(layer, key) {
         const targets=layer.type==='product_slot'&&state.selectedLayerIds.has(layer.id)?selectedSlotLayers():[layer];
-        const before = editorSnapshot(); targets.forEach((item)=>{item[key]=!layer[key];const node=state.nodes.get(item.id);if(node){node.visible(item.visible);node.draggable(!item.locked&&item.type!=='scene_background'&&item.type!=='foreground_polygon'&&!(item.type==='product_slot'&&item.frame.perspective&&item.frame.perspective.enabled));}});recordHistory(before);
+        const before = editorSnapshot(); targets.forEach((item)=>{item[key]=!layer[key];const node=state.nodes.get(item.id);if(node){node.visible(item.visible);setNodeDraggable(node,!item.locked&&item.type!=='scene_background'&&item.type!=='foreground_polygon'&&!(item.type==='product_slot'&&item.frame.perspective&&item.frame.perspective.enabled));}});recordHistory(before);
         selectLayer(layer.id,false,true); renderLayers(); state.stage.batchDraw();
     }
     function reorderLayer(sourceId, targetId) {
@@ -1355,6 +1380,7 @@
         state.selectionMarkers.forEach((marker) => marker.destroy()); state.selectionMarkers.clear(); state.stage.batchDraw();
         state.perspectiveHandles.forEach((marker) => marker.destroy()); state.perspectiveHandles.clear();
         state.polygonHandles.forEach((marker) => marker.destroy()); state.polygonHandles.clear();
+        state.clipHandles.forEach((marker) => marker.destroy()); state.clipHandles.clear();
     }
     async function rebuildCanvas() {
         clearCanvas();
@@ -1377,15 +1403,17 @@
         try {
             const image = asset ? await loadImage(assetUrl(asset.storagePath)) : null;
             const node = image ? makeImageNode(image, layer, layer.frame) : new Konva.Rect({ x: layer.frame.x, y: layer.frame.y, width: layer.frame.width, height: layer.frame.height, offsetX: layer.frame.width/2, offsetY: layer.frame.height/2, rotation: layer.frame.rotation||0, fill:'rgba(0,0,0,0.01)', draggable:!layer.locked });
+            const interactionNode = visualNode(node);
             node.setAttr('mockupLayerId', layer.id);
-            node.on('mousedown touchstart', (event) => { if(layer.type==='product_slot'&&!state.selectedLayerIds.has(layer.id))selectLayer(layer.id,Boolean(event.evt&&(event.evt.ctrlKey||event.evt.metaKey))); });
-            node.on('click tap', (event) => { event.cancelBubble = true; selectLayer(layer.id, Boolean(event.evt && (event.evt.ctrlKey || event.evt.metaKey))); });
-            node.on('dragstart', () => beginGroupDrag(layer,node));
-            node.on('dragmove', () => moveGroupDrag(layer,node));
-            node.on('dragend', () => endGroupDrag(layer,node));
-            node.on('transform', renderSelectionMarkers);
-            node.on('transformstart', () => node.setAttr('historyBefore', editorSnapshot()));
-            node.on('transformend', () => { updateFrameFromNode(layer, node, true); recordHistory(node.getAttr('historyBefore')); renderInspector(); renderSelectionMarkers(); });
+            interactionNode.setAttr('mockupLayerId', layer.id);
+            interactionNode.on('mousedown touchstart', (event) => { if(layer.type==='product_slot'&&!state.selectedLayerIds.has(layer.id))selectLayer(layer.id,Boolean(event.evt&&(event.evt.ctrlKey||event.evt.metaKey))); });
+            interactionNode.on('click tap', (event) => { event.cancelBubble = true; selectLayer(layer.id, Boolean(event.evt && (event.evt.ctrlKey || event.evt.metaKey))); });
+            interactionNode.on('dragstart', () => beginGroupDrag(layer,interactionNode));
+            interactionNode.on('dragmove', () => moveGroupDrag(layer,interactionNode));
+            interactionNode.on('dragend', () => endGroupDrag(layer,interactionNode));
+            interactionNode.on('transform', renderSelectionMarkers);
+            interactionNode.on('transformstart', () => interactionNode.setAttr('historyBefore', editorSnapshot()));
+            interactionNode.on('transformend', () => { updateFrameFromNode(layer, interactionNode, true); recordHistory(interactionNode.getAttr('historyBefore')); renderInspector(); renderSelectionMarkers(); });
             state.contentLayer.add(node); state.nodes.set(layer.id, node); return node;
         } catch (error) { setStatus('Görsel yüklenemedi: ' + (asset ? asset.name : layer.name), true); return null; }
     }
@@ -1393,12 +1421,26 @@
         const perspective = layer.type === 'product_slot' && frame.perspective && frame.perspective.enabled;
         const polygon = layer.type === 'foreground_polygon';
         const renderedImage = perspective ? renderPerspectiveBitmap(image, frame) : (polygon ? renderPolygonBitmap(image, layer.geometry) : image);
-        const node = new Konva.Image(perspective || polygon
+        const imageNode = new Konva.Image(perspective || polygon
             ? { image: renderedImage, x: 0, y: 0, width: SIZE, height: SIZE, opacity: frame.opacity == null ? 1 : frame.opacity, visible: layer.visible !== false, draggable: false, listening: false }
             : { image: renderedImage, x: frame.x, y: frame.y, width: frame.width, height: frame.height, offsetX: frame.width / 2, offsetY: frame.height / 2, rotation: frame.rotation || 0, opacity: frame.opacity == null ? 1 : frame.opacity, visible: layer.visible !== false, draggable: !layer.locked && layer.type !== 'scene_background' });
-        node.setAttr('mockupSourceImage', image);
-        applyEffects(node, frame, layer.type); return node;
+        imageNode.setAttr('mockupSourceImage', image);
+        applyEffects(imageNode, frame, layer.type);
+        const clip = layer.type === 'product_slot' && layer.clipPolygon ? normalizeClipPolygon(layer.clipPolygon) : null;
+        if (!clip || !clip.closed || clip.points.length < 3) return imageNode;
+        layer.clipPolygon = clip;
+        const group = new Konva.Group({ visible: layer.visible !== false, clipFunc(context) {
+            const points=layer.clipPolygon&&layer.clipPolygon.points||[];if(points.length<3)return;
+            context.beginPath(); context.moveTo(points[0].x, points[0].y);
+            points.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+            context.closePath();
+        } });
+        imageNode.visible(true); group.add(imageNode);
+        group.setAttr('mockupSourceImage', image); group.setAttr('mockupVisualNode', imageNode);
+        return group;
     }
+    function visualNode(node) { return node && node.getAttr && node.getAttr('mockupVisualNode') || node; }
+    function setNodeDraggable(node, value) { const target=visualNode(node); if(target)target.draggable(value); }
     function applyEffects(node, frame, layerType) {
         const shadow = frame.shadow || defaultFrame().shadow;
         node.opacity(frame.opacity == null ? 1 : frame.opacity); node.shadowEnabled(Boolean(shadow.enabled));
@@ -1424,11 +1466,11 @@
         else node.filters([]);
     }
     function refreshSpecialNode(layer) {
-        const node = state.nodes.get(layer.id), source = node && node.getAttr('mockupSourceImage');
-        if (!node || !source) return;
-        if (layer.type === 'product_slot' && layer.frame.perspective && layer.frame.perspective.enabled) node.image(renderPerspectiveBitmap(source, layer.frame));
-        if (layer.type === 'foreground_polygon') node.image(renderPolygonBitmap(source, layer.geometry));
-        applyEffects(node, layer.frame, layer.type);
+        const node = state.nodes.get(layer.id), source = node && node.getAttr('mockupSourceImage'), imageNode=visualNode(node);
+        if (!node || !source || !imageNode) return;
+        if (layer.type === 'product_slot' && layer.frame.perspective && layer.frame.perspective.enabled) imageNode.image(renderPerspectiveBitmap(source, layer.frame));
+        if (layer.type === 'foreground_polygon') imageNode.image(renderPolygonBitmap(source, layer.geometry));
+        applyEffects(imageNode, layer.frame, layer.type);
         node.getLayer().batchDraw();
     }
     function updateFrameFromNode(layer, node, transformed) {
@@ -1489,6 +1531,31 @@
         }
     }
 
+    function renderClipPolygonControls(layer) {
+        const geometry = layer.clipPolygon, points = geometry && geometry.points || [];
+        if (state.clipDrawingLayerId === layer.id && geometry && !geometry.closed) {
+            const capture = new Konva.Rect({ x: 0, y: 0, width: SIZE, height: SIZE, fill: 'rgba(0,0,0,0.001)' });
+            capture.on('click tap', (event) => { event.cancelBubble = true; addClipPointFromPointer(layer); });
+            state.uiLayer.add(capture); state.clipHandles.set(layer.id + '-capture', capture);
+        }
+        if (points.length) {
+            const line = new Konva.Line({ points: points.flatMap((point) => [point.x, point.y]), closed: geometry.closed, stroke: '#e67e22', strokeWidth: 6, dash: [14, 10], fill: geometry.closed ? 'rgba(230,126,34,.07)' : undefined, listening: false });
+            state.uiLayer.add(line); state.clipHandles.set(layer.id + '-line', line);
+            points.forEach((point, index) => {
+                const handle = new Konva.Circle({ x: point.x, y: point.y, radius: 13, fill: '#fff', stroke: '#e67e22', strokeWidth: 6, hitStrokeWidth: 22, draggable: !layer.locked });
+                handle.on('dragstart', () => handle.setAttr('historyBefore', editorSnapshot()));
+                handle.on('dragmove', () => { point.x=Math.round(handle.x());point.y=Math.round(handle.y());line.points(points.flatMap((item)=>[item.x,item.y]));state.contentLayer.batchDraw();state.uiLayer.batchDraw(); });
+                handle.on('dragend', () => { recordHistory(handle.getAttr('historyBefore')); renderInspector(); });
+                state.uiLayer.add(handle); state.clipHandles.set(layer.id + '-' + index, handle);
+            });
+        }
+    }
+
+    function addClipPointFromPointer(layer) {
+        const pointer=state.stage.getPointerPosition();if(!pointer||!layer.clipPolygon)return;
+        const before=editorSnapshot();layer.clipPolygon.points.push({x:Math.round(pointer.x/state.scale),y:Math.round(pointer.y/state.scale)});recordHistory(before);renderSelectionMarkers();renderInspector();
+    }
+
     function handleStagePolygonPoint(event) {
         const layer = state.editor && state.editor.document.layers.find((item) => item.id === state.polygonDrawingLayerId);
         if (!layer || layer.locked || layer.geometry.closed || event.target !== state.stage) return;
@@ -1506,13 +1573,14 @@
         state.selectionMarkers.clear();
         state.perspectiveHandles.forEach((marker) => marker.destroy()); state.perspectiveHandles.clear();
         state.polygonHandles.forEach((marker) => marker.destroy()); state.polygonHandles.clear();
+        state.clipHandles.forEach((marker) => marker.destroy()); state.clipHandles.clear();
         state.transformer.visible(state.guidesVisible);
         if (!state.guidesVisible) { state.uiLayer.batchDraw(); return; }
         renderEditorGrid();
         state.editor.document.layers.forEach((layer) => {
             if (layer.type !== 'product_slot' || layer.visible === false) return;
-            const node = state.nodes.get(layer.id);
-            if (!node) return;
+            const rootNode = state.nodes.get(layer.id), node=visualNode(rootNode);
+            if (!rootNode || !node) return;
             const selected = state.selectedLayerIds.has(layer.id);
             if (layer.type === 'product_slot' && layer.frame.perspective && layer.frame.perspective.enabled) {
                 if (selected) renderPerspectiveControls(layer);
@@ -1533,6 +1601,8 @@
         });
         const selectedPolygon = state.editor.document.layers.find((layer) => layer.id === state.selectedLayerId && layer.type === 'foreground_polygon' && layer.visible !== false);
         if (selectedPolygon && state.nodes.get(selectedPolygon.id)) renderPolygonControls(selectedPolygon);
+        const selectedClipSlot = state.editor.document.layers.find((layer) => layer.id === state.selectedLayerId && layer.type === 'product_slot' && layer.visible !== false && layer.clipPolygon);
+        if (selectedClipSlot) renderClipPolygonControls(selectedClipSlot);
         state.transformer.moveToTop(); state.uiLayer.batchDraw();
     }
 
@@ -1544,17 +1614,17 @@
     }
 
     function selectedSlotLayers(){return state.editor.document.layers.filter((layer)=>layer.type==='product_slot'&&state.selectedLayerIds.has(layer.id));}
-    function translateSlot(layer,dx,dy){layer.frame.x+=dx;layer.frame.y+=dy;if(layer.frame.perspective&&layer.frame.perspective.corners)layer.frame.perspective.corners.forEach((point)=>{point.x+=dx;point.y+=dy;});const node=state.nodes.get(layer.id);if(layer.frame.perspective&&layer.frame.perspective.enabled)refreshSpecialNode(layer);else if(node)node.position({x:layer.frame.x,y:layer.frame.y});}
+    function translateSlot(layer,dx,dy){layer.frame.x+=dx;layer.frame.y+=dy;if(layer.frame.perspective&&layer.frame.perspective.corners)layer.frame.perspective.corners.forEach((point)=>{point.x+=dx;point.y+=dy;});if(layer.clipPolygon&&layer.clipPolygon.points)layer.clipPolygon.points.forEach((point)=>{point.x+=dx;point.y+=dy;});const node=state.nodes.get(layer.id);if(layer.frame.perspective&&layer.frame.perspective.enabled)refreshSpecialNode(layer);else if(node)visualNode(node).position({x:layer.frame.x,y:layer.frame.y});}
     function beginGroupDrag(layer,node){
         if(layer.type!=='product_slot'){node.setAttr('historyBefore',editorSnapshot());return;}
         if(!state.selectedLayerIds.has(layer.id))state.selectedLayerIds=new Set([layer.id]);
-        const slots=selectedSlotLayers();state.groupDrag={before:editorSnapshot(),sourceId:layer.id,startX:node.x(),startY:node.y(),slots:slots.map((item)=>({id:item.id,x:item.frame.x,y:item.frame.y,corners:item.frame.perspective&&item.frame.perspective.corners?clone(item.frame.perspective.corners):null}))};
+        const slots=selectedSlotLayers();state.groupDrag={before:editorSnapshot(),sourceId:layer.id,startX:node.x(),startY:node.y(),slots:slots.map((item)=>({id:item.id,x:item.frame.x,y:item.frame.y,corners:item.frame.perspective&&item.frame.perspective.corners?clone(item.frame.perspective.corners):null,clip:item.clipPolygon&&item.clipPolygon.points?clone(item.clipPolygon.points):null}))};
     }
     function moveGroupDrag(layer,node){
         const group=state.groupDrag;if(!group||group.sourceId!==layer.id)return;
         let dx=node.x()-group.startX,dy=node.y()-group.startY;
         if(state.gridVisible){const step=Math.max(10,Number(state.gridSize)||25);dx=Math.round((group.slots.find((item)=>item.id===layer.id).x+dx)/step)*step-group.slots.find((item)=>item.id===layer.id).x;dy=Math.round((group.slots.find((item)=>item.id===layer.id).y+dy)/step)*step-group.slots.find((item)=>item.id===layer.id).y;}
-        group.slots.forEach((origin)=>{const item=state.editor.document.layers.find((candidate)=>candidate.id===origin.id);if(!item)return;item.frame.x=origin.x+dx;item.frame.y=origin.y+dy;if(origin.corners)item.frame.perspective.corners=origin.corners.map((point)=>({x:point.x+dx,y:point.y+dy}));const target=state.nodes.get(item.id);if(item.frame.perspective&&item.frame.perspective.enabled)refreshSpecialNode(item);else if(target)target.position({x:item.frame.x,y:item.frame.y});});
+        group.slots.forEach((origin)=>{const item=state.editor.document.layers.find((candidate)=>candidate.id===origin.id);if(!item)return;item.frame.x=origin.x+dx;item.frame.y=origin.y+dy;if(origin.corners)item.frame.perspective.corners=origin.corners.map((point)=>({x:point.x+dx,y:point.y+dy}));if(origin.clip)item.clipPolygon.points=origin.clip.map((point)=>({x:point.x+dx,y:point.y+dy}));const target=state.nodes.get(item.id);if(item.frame.perspective&&item.frame.perspective.enabled)refreshSpecialNode(item);else if(target)visualNode(target).position({x:item.frame.x,y:item.frame.y});});
         renderSelectionMarkers();renderSmartGuides(selectedSlotLayers());state.uiLayer.batchDraw();
     }
     function endGroupDrag(layer,node){
@@ -1575,7 +1645,7 @@
         }
         state.selectedLayerId = state.selectedLayerIds.has(id) ? id : ([...state.selectedLayerIds].pop() || null);
         const layer = state.editor.document.layers.find((item) => item.id === state.selectedLayerId);
-        const node = layer ? state.nodes.get(layer.id) : null;
+        const node = layer ? visualNode(state.nodes.get(layer.id)) : null;
         const special = layer && ((layer.type === 'product_slot' && layer.frame.perspective && layer.frame.perspective.enabled) || layer.type === 'foreground_polygon');
         state.transformer.nodes(layer && node && !special && !layer.locked && layer.visible ? [node] : []);
         state.transformer.find('Rect').forEach((anchor) => anchor.hitStrokeWidth(28));
@@ -1595,11 +1665,13 @@
         const previewAsset = isProduct ? resolveEditorLayerAsset(layer) : null;
         const productAdjustments = isProduct ? `<div class="ms-product-controls"><h4>ÜRÜN GÖRSEL AYARLARI</h4><div class="ms-selected-product-preview">${previewAsset?`<img src="${assetUrl(previewAsset.storagePath)}" alt="${esc(previewAsset.name)}"><span>${esc(previewAsset.name)}</span>`:'<span>Örnek ürün seçilmedi</span>'}</div>${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}${rangeField('Parlaklık','brightness',f.brightness||0,-100,100,'%')}${rangeField('Kontrast','contrast',f.contrast||0,-100,100,'%')}${rangeField('Doygunluk','saturation',f.saturation||0,-100,100,'%')}${rangeField('Hue','hue',f.hue||0,-180,180,'°')}${rangeField('Keskinlik','sharpen',f.sharpen||0,0,20,'%')}<button id="msResetProductVisuals" class="ms-btn ms-full">Tüm ürün ayarlarını sıfırla</button><small class="ms-help">Normal adım 0,5; dönüş ve yüzde opaklık 1’dir. Shift + yön tuşu 0,1 hassasiyetle ayarlar.</small></div>` : '';
         const perspectiveTools = isProduct ? `<div class="ms-section"><h4>PERSPEKTİF SLOTU</h4><label class="ms-check"><input id="msPerspectiveToggle" type="checkbox" ${perspectiveEnabled?'checked':''}> Dört köşeli perspektifi aç</label>${perspectiveEnabled ? `${rangeField('Güvenli iç boşluk','smartPadding',(f.smartFit&&f.smartFit.padding)||0,0,30,'%')}<button id="msSmartPlaceBtn" class="ms-btn ms-btn-primary ms-full">Akıllı yerleştir</button><button id="msResetPerspectiveBtn" class="ms-btn ms-full">Köşeleri sıfırla</button><small class="ms-help">Mor köşeleri tuval üzerinde sürükleyin. Akıllı yerleştirme şeffaf kenarları algılar.</small>` : '<small class="ms-help">Açıldığında mevcut konum ve dönüş dört düzenlenebilir köşeye çevrilir.</small>'}</div>` : '';
+        const clipGeometry = isProduct && layer.clipPolygon ? layer.clipPolygon : null;
+        const clipTools = isProduct ? `<div class="ms-section ms-clip-tools"><h4>KIRPMA POLİGONU</h4>${clipGeometry?`<p class="ms-help">${clipGeometry.points.length} nokta • ${clipGeometry.closed?'Kapalı':'Çiziliyor'} • Turuncu kesik çizgi</p><button id="msClipDrawBtn" class="ms-btn ms-full">Nokta eklemeye devam et</button><button id="msClipCloseBtn" class="ms-btn ms-btn-primary ms-full" ${clipGeometry.points.length<3?'disabled':''}>Kırpma poligonunu kapat</button><button id="msClipUndoPointBtn" class="ms-btn ms-full" ${!clipGeometry.points.length?'disabled':''}>Son noktayı sil</button><button id="msClipResetBtn" class="ms-btn ms-btn-danger ms-full">Kırpma poligonunu temizle</button>`:'<p class="ms-help">Ürün ve gölgesinin görünebileceği alanı sınırlar; foreground poligonundan bağımsızdır.</p><button id="msClipCreateBtn" class="ms-btn ms-btn-primary ms-full">Kırpma poligonu çiz</button>'}</div>` : '';
         const polygonTools = isPolygon ? `<div class="ms-section"><h4>POLİGON MASKESİ</h4><p class="ms-help">${layer.geometry.points.length} nokta • ${layer.geometry.closed?'Kapalı':'Çiziliyor'}</p><button id="msPolygonDrawBtn" class="ms-btn ms-full">Nokta eklemeye devam et</button><button id="msPolygonCloseBtn" class="ms-btn ms-btn-primary ms-full" ${layer.geometry.points.length<3?'disabled':''}>Poligonu kapat</button><button id="msPolygonUndoPointBtn" class="ms-btn ms-full" ${!layer.geometry.points.length?'disabled':''}>Son noktayı sil</button><button id="msPolygonResetBtn" class="ms-btn ms-btn-danger ms-full">Poligonu sıfırla</button></div>` : '';
         const commonVisuals = isProduct ? '' : `${rangeField('Opaklık','opacity',Math.round((f.opacity==null?1:f.opacity)*100),0,100,'%')}${rangeField('Blur','blur',f.blur||0,0,80,' px')}`;
         const shadowTools = `<div class="ms-section"><h4>GÖLGE</h4><label class="ms-check"><input id="msShadowToggle" type="checkbox" ${f.shadow.enabled?'checked':''}> Gölgeyi aç</label>${rangeField('Açı','shadowAngle',f.shadow.angle||0,0,360,'°')}${rangeField('Mesafe','shadowDistance',f.shadow.distance||0,0,300,' px')}${numberField('X ofset','shadowOffsetX',f.shadow.offsetX||0,-300,300)}${numberField('Y ofset','shadowOffsetY',f.shadow.offsetY||0,-300,300)}${rangeField('Blur / yumuşaklık','shadowBlur',f.shadow.blur||0,0,120,' px')}${rangeField('Opaklık','shadowOpacity',Math.round((f.shadow.opacity==null?.35:f.shadow.opacity)*100),0,100,'%')}<div class="ms-field"><label for="msShadowColor">Renk</label><div class="ms-control-inputs"><input id="msShadowColor" type="color" value="${esc(f.shadow.color||'#000000')}"><button type="button" class="ms-control-reset" data-reset-frame-key="shadowColor">Sıfırla</button></div></div></div>`;
         root.innerHTML = `<h4>${esc(layer.name)}</h4>${productAdjustments}${transformFields}${commonVisuals}
-            ${perspectiveTools}${polygonTools}${shadowTools}
+            ${perspectiveTools}${clipTools}${polygonTools}${shadowTools}
             ${layer.type==='product_slot'?'<button id="msDuplicateLayer" class="ms-btn ms-btn-primary ms-full">Slotu çoğalt</button>':''}<button id="msRemoveLayer" class="ms-btn ms-btn-danger ms-full">Katmanı sil</button>`;
         root.querySelectorAll('[data-frame-key]').forEach(bindFrameInput);
         root.querySelectorAll('[data-reset-frame-key]').forEach((button) => button.addEventListener('click', () => resetFrameControl(layer, button.dataset.resetFrameKey)));
@@ -1616,6 +1688,11 @@
         const perspectiveToggle = document.getElementById('msPerspectiveToggle'); if (perspectiveToggle) perspectiveToggle.addEventListener('change', () => togglePerspective(layer, perspectiveToggle.checked));
         const smartPlace = document.getElementById('msSmartPlaceBtn'); if (smartPlace) smartPlace.addEventListener('click', () => smartPlaceProduct(layer));
         const resetPerspective = document.getElementById('msResetPerspectiveBtn'); if (resetPerspective) resetPerspective.addEventListener('click', () => resetPerspectiveCorners(layer));
+        const clipCreate = document.getElementById('msClipCreateBtn'); if (clipCreate) clipCreate.addEventListener('click', () => startClipPolygon(layer));
+        const clipDraw = document.getElementById('msClipDrawBtn'); if (clipDraw) clipDraw.addEventListener('click', () => continueClipPolygon(layer));
+        const clipClose = document.getElementById('msClipCloseBtn'); if (clipClose) clipClose.addEventListener('click', () => closeClipPolygon(layer));
+        const clipUndo = document.getElementById('msClipUndoPointBtn'); if (clipUndo) clipUndo.addEventListener('click', () => removeLastClipPoint(layer));
+        const clipReset = document.getElementById('msClipResetBtn'); if (clipReset) clipReset.addEventListener('click', () => clearClipPolygon(layer));
         const polygonDraw = document.getElementById('msPolygonDrawBtn'); if (polygonDraw) polygonDraw.addEventListener('click', () => { const before=editorSnapshot(); layer.geometry.closed=false; state.polygonDrawingLayerId=layer.id; recordHistory(before); refreshSpecialNode(layer); renderInspector(); renderSelectionMarkers(); });
         const polygonClose = document.getElementById('msPolygonCloseBtn'); if (polygonClose) polygonClose.addEventListener('click', () => closePolygon(layer));
         const polygonUndo = document.getElementById('msPolygonUndoPointBtn'); if (polygonUndo) polygonUndo.addEventListener('click', () => removeLastPolygonPoint(layer));
@@ -1629,10 +1706,10 @@
     function syncBulkInputs(key,value){const root=document.getElementById('msInspector');if(!root)return;root.querySelectorAll(`[data-bulk-key="${key}"]`).forEach((input)=>{if(document.activeElement!==input||Number(input.value)!==value)input.value=Math.round(value*10)/10;});const label=root.querySelector(`[data-bulk-key="${key}"]`)?.closest('.ms-field')?.querySelector('.ms-field-value');if(label)label.textContent=Math.round(value*10)/10+(root.querySelector(`[data-bulk-key="${key}"]`)?.dataset.suffix||'');}
     function applyBulkControl(key,value){const slots=selectedSlotLayers();if(!slots.length)return;const before=editorSnapshot();slots.forEach((layer)=>{setFrameControlValue(layer,key,value);updateNode(layer);});recordHistory(before);syncBulkInputs(key,value);renderInspector();}
     function bindBulkInput(input){let before=null;const remember=()=>{if(!before)before=editorSnapshot();};input.addEventListener('pointerdown',remember);input.addEventListener('focus',remember);input.addEventListener('keydown',(event)=>{if(input.type==='range'&&event.shiftKey&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();remember();const direction=['ArrowRight','ArrowUp'].includes(event.key)?1:-1;input.value=String(Math.max(Number(input.min),Math.min(Number(input.max),Number(input.value)+direction*.1)));input.dispatchEvent(new Event('input',{bubbles:true}));}});input.addEventListener('input',()=>{const key=input.dataset.bulkKey,value=Number(input.value);selectedSlotLayers().forEach((layer)=>{setFrameControlValue(layer,key,value);updateNode(layer);});syncBulkInputs(key,value);});input.addEventListener('change',()=>{recordHistory(before);before=null;});}
-    function applyBulkFlag(key,value){const slots=selectedSlotLayers(),before=editorSnapshot();slots.forEach((layer)=>{if(key==='shadow'){layer.frame.shadow=normalizeShadow(layer.frame.shadow);layer.frame.shadow.enabled=value;}else layer[key]=value;const node=state.nodes.get(layer.id);if(node){node.visible(layer.visible);node.draggable(!layer.locked&&!(layer.frame.perspective&&layer.frame.perspective.enabled));}updateNode(layer);});recordHistory(before);renderInspector();renderLayers();}
+    function applyBulkFlag(key,value){const slots=selectedSlotLayers(),before=editorSnapshot();slots.forEach((layer)=>{if(key==='shadow'){layer.frame.shadow=normalizeShadow(layer.frame.shadow);layer.frame.shadow.enabled=value;}else layer[key]=value;const node=state.nodes.get(layer.id);if(node){node.visible(layer.visible);setNodeDraggable(node,!layer.locked&&!(layer.frame.perspective&&layer.frame.perspective.enabled));}updateNode(layer);});recordHistory(before);renderInspector();renderLayers();}
     function slotEdges(layer){const f=layer.frame;return {left:f.x-f.width/2,right:f.x+f.width/2,top:f.y-f.height/2,bottom:f.y+f.height/2,cx:f.x,cy:f.y};}
     function alignSelectedSlots(action){const slots=selectedSlotLayers();if(slots.length<2)return;const before=editorSnapshot(),edges=slots.map(slotEdges);if(action==='front'||action==='back'){moveSelectedLayers(action);return;}if(action==='distributeX'||action==='distributeY'){const axis=action==='distributeX'?'x':'y',ordered=slots.slice().sort((a,b)=>a.frame[axis]-b.frame[axis]),start=ordered[0].frame[axis],end=ordered.at(-1).frame[axis],gap=(end-start)/(ordered.length-1);ordered.forEach((layer,index)=>{const delta=start+gap*index-layer.frame[axis];translateSlot(layer,axis==='x'?delta:0,axis==='y'?delta:0);});}else if(action==='width'||action==='height'){const key=action==='width'?'width':'height',target=slots[0].frame[key];slots.slice(1).forEach((layer)=>resizeSlot(layer,key,target));}else{const value=action==='left'?Math.min(...edges.map((edge)=>edge.left)):action==='right'?Math.max(...edges.map((edge)=>edge.right)):action==='top'?Math.min(...edges.map((edge)=>edge.top)):action==='bottom'?Math.max(...edges.map((edge)=>edge.bottom)):action==='centerX'?(Math.min(...edges.map((edge)=>edge.left))+Math.max(...edges.map((edge)=>edge.right)))/2:(Math.min(...edges.map((edge)=>edge.top))+Math.max(...edges.map((edge)=>edge.bottom)))/2;slots.forEach((layer)=>{const target=action==='left'?value+layer.frame.width/2:action==='right'?value-layer.frame.width/2:action==='top'?value+layer.frame.height/2:action==='bottom'?value-layer.frame.height/2:value;translateSlot(layer,action==='left'||action==='right'||action==='centerX'?target-layer.frame.x:0,action==='top'||action==='bottom'||action==='centerY'?target-layer.frame.y:0);});}recordHistory(before);syncOrder();renderInspector();}
-    function resizeSlot(layer,key,target){const current=layer.frame[key];if(current===target)return;const ratio=target/current;layer.frame[key]=target;if(layer.frame.perspective&&layer.frame.perspective.corners){const center={x:layer.frame.x,y:layer.frame.y};layer.frame.perspective.corners.forEach((point)=>{if(key==='width')point.x=center.x+(point.x-center.x)*ratio;else point.y=center.y+(point.y-center.y)*ratio;});refreshSpecialNode(layer);}else updateNode(layer);}
+    function resizeSlot(layer,key,target){const current=layer.frame[key];if(current===target)return;const ratio=target/current;layer.frame[key]=target;const center={x:layer.frame.x,y:layer.frame.y};if(layer.frame.perspective&&layer.frame.perspective.corners)layer.frame.perspective.corners.forEach((point)=>{if(key==='width')point.x=center.x+(point.x-center.x)*ratio;else point.y=center.y+(point.y-center.y)*ratio;});if(layer.clipPolygon&&layer.clipPolygon.points)layer.clipPolygon.points.forEach((point)=>{if(key==='width')point.x=center.x+(point.x-center.x)*ratio;else point.y=center.y+(point.y-center.y)*ratio;});if(layer.frame.perspective&&layer.frame.perspective.enabled)refreshSpecialNode(layer);else updateNode(layer);}
     function snapSelectedSlots(){const slots=selectedSlotLayers();if(!slots.length)return;const before=editorSnapshot(),step=Math.max(10,Number(state.gridSize)||25);slots.forEach((layer)=>translateSlot(layer,Math.round(layer.frame.x/step)*step-layer.frame.x,Math.round(layer.frame.y/step)*step-layer.frame.y));recordHistory(before);renderSelectionMarkers();renderInspector();}
     function moveSelectedLayers(direction){const selected=selectedSlotLayers();if(!selected.length)return;const before=editorSnapshot(),layers=state.editor.document.layers,ordered=layers.filter((layer)=>layer.type==='product_slot'),chosen=ordered.filter((layer)=>state.selectedLayerIds.has(layer.id)),other=ordered.filter((layer)=>!state.selectedLayerIds.has(layer.id)),next=direction==='front'?[...other,...chosen]:[...chosen,...other];let index=0;state.editor.document.layers=layers.map((layer)=>layer.type==='product_slot'?next[index++]:layer);recordHistory(before);syncOrder();renderLayers();renderInspector();}
     async function replaceLayerNode(layer) {
@@ -1688,6 +1765,23 @@
         const before = editorSnapshot(); layer.geometry.points = []; layer.geometry.closed = false; state.polygonDrawingLayerId = layer.id; recordHistory(before);
         refreshSpecialNode(layer); renderInspector(); renderSelectionMarkers(); setStatus('Poligon sıfırlandı; tuvale tıklayarak yeniden çizin.', false);
     }
+    function startClipPolygon(layer) {
+        const before=editorSnapshot();layer.clipPolygon={points:[],closed:false};state.clipDrawingLayerId=layer.id;recordHistory(before);renderInspector();renderSelectionMarkers();setStatus('Tuvale tıklayarak kırpma poligonu noktalarını ekleyin.',false);
+    }
+    function continueClipPolygon(layer) {
+        const before=editorSnapshot();layer.clipPolygon=normalizeClipPolygon(layer.clipPolygon);layer.clipPolygon.closed=false;state.clipDrawingLayerId=layer.id;recordHistory(before);renderInspector();renderSelectionMarkers();
+    }
+    async function closeClipPolygon(layer) {
+        if(!layer.clipPolygon||layer.clipPolygon.points.length<3)return setStatus('Kırpma poligonunu kapatmak için en az 3 nokta gerekir.',true);
+        const before=editorSnapshot();layer.clipPolygon.closed=true;state.clipDrawingLayerId=null;recordHistory(before);await replaceLayerNode(layer);setStatus('Kırpma poligonu kapatıldı; ürün ve gölge bu alanla sınırlandı.',false);
+    }
+    async function removeLastClipPoint(layer) {
+        if(!layer.clipPolygon||!layer.clipPolygon.points.length)return;
+        const before=editorSnapshot();layer.clipPolygon.points.pop();layer.clipPolygon.closed=false;state.clipDrawingLayerId=layer.id;recordHistory(before);if(layer.clipPolygon.points.length<3)await replaceLayerNode(layer);else{renderInspector();renderSelectionMarkers();state.contentLayer.batchDraw();}
+    }
+    async function clearClipPolygon(layer) {
+        const before=editorSnapshot();delete layer.clipPolygon;state.clipDrawingLayerId=null;recordHistory(before);await replaceLayerNode(layer);setStatus('Kırpma poligonu temizlendi.',false);
+    }
     const CONTROL_DEFAULTS = { opacity:100, blur:0, brightness:0, contrast:0, saturation:0, hue:0, sharpen:0, rotation:0, smartPadding:0, shadowAngle:56, shadowDistance:22, shadowOffsetX:12, shadowOffsetY:18, shadowBlur:24, shadowOpacity:35, shadowColor:'#000000' };
     function controlStep(key){return ['rotation','shadowAngle','hue','opacity','shadowOpacity'].includes(key)?1:.5;}
     function numberField(label,key,value,min,max) { return `<div class="ms-field"><label>${label}</label><div class="ms-control-inputs"><input data-frame-key="${key}" type="number" step="${controlStep(key)}" min="${min}" max="${max}" value="${Math.round(value*10)/10}"><button type="button" class="ms-control-reset" data-reset-frame-key="${key}">Sıfırla</button></div></div>`; }
@@ -1716,15 +1810,17 @@
             const key=input.dataset.frameKey, value=Number(input.value); setFrameControlValue(layer,key,value); syncControlInputs(document.getElementById('msInspector'),key,value);
             if(key.startsWith('shadow')) { syncControlInputs(document.getElementById('msInspector'),'shadowAngle',layer.frame.shadow.angle);syncControlInputs(document.getElementById('msInspector'),'shadowDistance',layer.frame.shadow.distance);syncControlInputs(document.getElementById('msInspector'),'shadowOffsetX',layer.frame.shadow.offsetX);syncControlInputs(document.getElementById('msInspector'),'shadowOffsetY',layer.frame.shadow.offsetY); }
             updateNode(layer);
+            if (layer.type === 'scene_background' && state.editor.document.layers.some((item) => item.type === 'product_slot' && item.importedFromJson)) setStatus('Background kırpılır, döndürülür veya oranı değiştirilirse JSON slot koordinatları bozulabilir.', true);
         });
         input.addEventListener('change', () => { recordHistory(before); before=null; });
     }
     function resetFrameControl(layer,key) { const before=editorSnapshot(); if(key==='shadowColor')layer.frame.shadow.color=CONTROL_DEFAULTS.shadowColor;else setFrameControlValue(layer,key,CONTROL_DEFAULTS[key]??0);recordHistory(before);updateNode(layer);renderInspector(); }
-    function updateNode(layer) { const node=state.nodes.get(layer.id); if(!node)return; const f=layer.frame; if((layer.type==='product_slot'&&f.perspective&&f.perspective.enabled)||layer.type==='foreground_polygon'){refreshSpecialNode(layer);}else{node.position({x:f.x,y:f.y});node.size({width:f.width,height:f.height});node.offset({x:f.width/2,y:f.height/2});node.rotation(f.rotation||0);applyEffects(node,f,layer.type);} state.transformer.forceUpdate(); renderSelectionMarkers(); state.stage.batchDraw(); }
+    function updateNode(layer) { const root=state.nodes.get(layer.id),node=visualNode(root); if(!node)return; const f=layer.frame; if((layer.type==='product_slot'&&f.perspective&&f.perspective.enabled)||layer.type==='foreground_polygon'){refreshSpecialNode(layer);}else{node.position({x:f.x,y:f.y});node.size({width:f.width,height:f.height});node.offset({x:f.width/2,y:f.height/2});node.rotation(f.rotation||0);applyEffects(node,f,layer.type);} state.transformer.forceUpdate(); renderSelectionMarkers(); state.stage.batchDraw(); }
     function nextSlotName() { return 'Slot ' + (state.editor.document.layers.filter((layer) => layer.type === 'product_slot').length + 1); }
     function offsetSlotCopy(source) {
         const copy = clone(source); copy.id = uid(); copy.name = nextSlotName(); copy.frame.x += 25; copy.frame.y += 25;
         if (copy.frame.perspective && copy.frame.perspective.corners) copy.frame.perspective.corners.forEach((point) => { point.x += 25; point.y += 25; });
+        if (copy.clipPolygon && copy.clipPolygon.points) copy.clipPolygon.points.forEach((point) => { point.x += 25; point.y += 25; });
         return copy;
     }
     function copySelectedSlot() {
@@ -1748,7 +1844,7 @@
         const previewId = state.slotPreviewAssetIds.get(layer.id); if (previewId) state.slotPreviewAssetIds.set(copy.id, previewId);
         state.selectedLayerId=copy.id; state.selectedLayerIds=new Set([copy.id]); recordHistory(before); await createNode(copy); syncOrder(); selectLayer(copy.id); renderEditor(); setStatus(`${copy.name} çoğaltıldı.`,false);
     }
-    function removeLayer(layer) { const before=editorSnapshot(), index=state.editor.document.layers.findIndex((l)=>l.id===layer.id); if(index<0)return; const node=state.nodes.get(layer.id); if(node)node.destroy(); state.nodes.delete(layer.id); state.editor.document.layers.splice(index,1); state.selectedLayerIds.delete(layer.id); state.selectedLayerId=[...state.selectedLayerIds].pop()||null; if(state.polygonDrawingLayerId===layer.id)state.polygonDrawingLayerId=null; state.transformer.nodes([]); recordHistory(before); state.stage.batchDraw(); renderEditor(); }
+    function removeLayer(layer) { const before=editorSnapshot(), index=state.editor.document.layers.findIndex((l)=>l.id===layer.id); if(index<0)return; const node=state.nodes.get(layer.id); if(node)node.destroy(); state.nodes.delete(layer.id); state.editor.document.layers.splice(index,1); state.selectedLayerIds.delete(layer.id); state.selectedLayerId=[...state.selectedLayerIds].pop()||null; if(state.polygonDrawingLayerId===layer.id)state.polygonDrawingLayerId=null;if(state.clipDrawingLayerId===layer.id)state.clipDrawingLayerId=null; state.transformer.nodes([]); recordHistory(before); state.stage.batchDraw(); renderEditor(); }
 
     async function exportEditorBlob(targetSize) {
         if (!state.stage) return null;
@@ -1905,7 +2001,7 @@
             setStatus('Çıktı oluşturulamadı: '+error.message,true);return null;
         }finally{if(opts.manageBusy!==false)setBusy(false);}
     }
-    async function renderSnapshot(snapshot,product){snapshot=normalizeDocument(snapshot);const host=document.getElementById('msRenderHost');host.innerHTML='';const stage=new Konva.Stage({container:host,width:SIZE,height:SIZE}),layerCanvas=new Konva.Layer();stage.add(layerCanvas);layerCanvas.add(new Konva.Rect({x:0,y:0,width:SIZE,height:SIZE,fill:'#fff',listening:false}));for(const item of snapshot.layers||[]){if(item.visible===false)continue;let asset=item.type==='product_slot'?product:(snapshot.assets||[]).find(a=>a.id===item.assetId);if(!asset||!asset.storagePath)continue;try{const image=await loadImage(assetUrl(asset.storagePath));const node=makeImageNode(image,{type:item.type,visible:true,locked:true,geometry:item.geometry},Object.assign(defaultFrame(),item.frame||{}));node.draggable(false);layerCanvas.add(node);}catch(error){throw new Error('Render varlığı yüklenemedi: '+(asset.name||asset.storagePath));}}layerCanvas.draw();try{return await ensurePngBlob(await stage.toBlob({mimeType:'image/png',pixelRatio:1}));}finally{stage.destroy();host.innerHTML='';}}
+    async function renderSnapshot(snapshot,product){snapshot=normalizeDocument(snapshot);const host=document.getElementById('msRenderHost');host.innerHTML='';const stage=new Konva.Stage({container:host,width:SIZE,height:SIZE}),layerCanvas=new Konva.Layer();stage.add(layerCanvas);layerCanvas.add(new Konva.Rect({x:0,y:0,width:SIZE,height:SIZE,fill:'#fff',listening:false}));for(const item of snapshot.layers||[]){if(item.visible===false)continue;let asset=item.type==='product_slot'?product:(snapshot.assets||[]).find(a=>a.id===item.assetId);if(!asset||!asset.storagePath)continue;try{const image=await loadImage(assetUrl(asset.storagePath));const node=makeImageNode(image,{type:item.type,visible:true,locked:true,geometry:item.geometry,clipPolygon:item.clipPolygon},Object.assign(defaultFrame(),item.frame||{}));setNodeDraggable(node,false);layerCanvas.add(node);}catch(error){throw new Error('Render varlığı yüklenemedi: '+(asset.name||asset.storagePath));}}layerCanvas.draw();try{return await ensurePngBlob(await stage.toBlob({mimeType:'image/png',pixelRatio:1}));}finally{stage.destroy();host.innerHTML='';}}
 
     async function getOutputUrl(output, refresh) {
         const cached=state.outputUrlCache.get(output.export_path);if(!refresh&&cached&&cached.expires>Date.now())return cached.url;
