@@ -189,6 +189,7 @@ async function mockStorage(route) {
         executablePath: process.env.MOCKUP_BROWSER_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
     });
     const page = await browser.newPage();
+    page.on('pageerror', error => console.error('[browser page error]', error.message));
     await page.addInitScript(() => {
         localStorage.setItem('paraBassAuth', 'true');
         localStorage.setItem('paraBassRole', 'patron');
@@ -202,6 +203,7 @@ async function mockStorage(route) {
         await page.locator('[data-view="editor"]').click();
     };
     const controlNumber = (key) => page.locator(`[data-frame-key="${key}"][type="number"]`).last();
+    const lightingNumber = (key) => page.locator(`[data-lighting-key="${key}"][type="number"]`).last();
     const makeSolidPng = async (color) => Buffer.from(await page.evaluate((fill) => {
         const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;const context=canvas.getContext('2d');context.fillStyle=fill;context.fillRect(0,0,64,64);return canvas.toDataURL('image/png').split(',')[1];
     }, color), 'base64');
@@ -526,11 +528,13 @@ async function mockStorage(route) {
         await page.locator('#msJsonCancelBtn').click();
 
         const singleJson = JSON.parse(slotImportDocument([importedSlot('slot_01')]));
+        singleJson.sceneLighting = { temperature: 15, tint: 3, exposure: 0.5, contrast: 1.1, saturation: 1.2, highlights: -10, shadows: 8 };
         Object.assign(singleJson.slots[0], {
             perspectiveCorners: { topLeft: [100, 100], topRight: [900, 100], bottomRight: [900, 900], bottomLeft: [100, 900] },
             clipPolygon: [[300, 300], [700, 300], [700, 700], [300, 700]],
             foregroundPolygons: [{ label: 'front_box_edge', points: [[300, 500], [700, 500], [700, 600], [300, 600]] }],
             effects: { blur: 0, opacity: 1, brightness: 0, temperature: 4200 },
+            relighting: { temperature: 18, exposure: -0.1 },
             shadow: { enabled: true, color: '#000000', opacity: 0.8, blur: 14, offsetX: 100, offsetY: 0 }
         });
         await page.locator('#msJsonImportBtn').click();
@@ -576,12 +580,31 @@ async function mockStorage(route) {
         assert.strictEqual(importedV1Slot.frame.blur, 0, 'Blur aktarılmalı');
         assert.strictEqual(importedV1Slot.frame.opacity, 1, 'Opaklık aktarılmalı');
         assert.strictEqual(importedV1Slot.frame.temperature, undefined, 'Desteklenmeyen efekt slot verisine aktarılmamalı');
+        assert.deepStrictEqual(importedV1Slot.frame.relighting, { temperature: 18, tint: 3, exposure: -0.1, contrast: 1.1, saturation: 1.2, highlights: -10, shadows: 8 }, 'Slot relighting yalnız verdiği alanlarla sceneLighting temelini override etmeli');
         assert.strictEqual(importedV1Slot.frame.shadow.color, '#000000', 'Gölge rengi aktarılmalı');
         assert.strictEqual(importedV1Slot.frame.shadow.offsetX, 100, 'Gölge X ofseti aktarılmalı');
         const importedPolygon = importedV1.layers.find(layer => layer.type === 'foreground_polygon');
         assert(importedPolygon && importedPolygon.geometry.closed, 'Foreground poligonu mevcut kapalı poligon yapısına aktarılmalı');
         assert.deepStrictEqual(importedPolygon.geometry.points[0], { x: 600, y: 1000 }, 'Foreground poligon normalize koordinatları tuvale çevrilmeli');
         assert.strictEqual(importedPolygon.type, 'foreground_polygon', 'Foreground poligonu clipPolygon ile birleştirilmemeli');
+
+        const lightingProductPng = Buffer.from(await page.evaluate(() => {
+            const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;const context=canvas.getContext('2d');
+            context.fillStyle='rgb(45,65,115)';context.fillRect(0,0,32,64);
+            context.fillStyle='rgb(205,220,235)';context.fillRect(32,0,32,64);
+            context.clearRect(0,0,20,20);
+            return canvas.toDataURL('image/png').split(',')[1];
+        }), 'base64');
+        db.fixtureBodies.set('lighting-test-product.png', lightingProductPng);
+        await page.locator('#msEditorProductInput').setInputFiles({ name: 'lighting-test-product.png', mimeType: 'image/png', buffer: lightingProductPng });
+        await page.getByText(/tüm slotlarda önizlemeye alındı/).waitFor();
+        if ((await page.locator('#msToggleGuides').textContent()).includes('Açık')) await page.locator('#msToggleGuides').click();
+        await page.waitForTimeout(300);
+        const lightingPreviewImage = await page.locator('#mockupCanvasHost').screenshot();
+        const lightingPreviewDark = await readPngPixel(lightingPreviewImage, 800, 800);
+        const lightingPreviewLight = await readPngPixel(lightingPreviewImage, 1200, 800);
+        const lightingPreviewAlpha = await readPngPixel(lightingPreviewImage, 650, 650);
+        await page.locator('#msToggleGuides').click();
 
         await page.locator('[data-view="templates"]').click();
         while (await page.locator('.ms-template-card.is-selected').count()) await page.locator('.ms-template-card.is-selected').first().click();
@@ -605,12 +628,62 @@ async function mockStorage(route) {
         assert(outputForeground[0] > outputForeground[2], 'Foreground poligonu çıktıda clipPolygon’dan bağımsız ve ürünün önünde kalmalı');
         assert(clipOutput.template_snapshot.layers.every(layer => !String(layer.type).includes('helper')), 'Clip yardımcı çizgileri nihai çıktıya girmemeli');
 
+        await page.locator('.ms-product-card').filter({ hasText: 'lighting-test-product.png' }).locator('.ms-product-select').click();
+        await page.locator('#msOutputName').fill('Lighting Render Test');
+        await page.locator('#msGenerateBtn').click();
+        for(let attempt=0;attempt<100&&!db.outputs.some(output=>output.name==='Lighting Render Test');attempt+=1)await page.waitForTimeout(100);
+        const lightingOutput = db.outputs.find(output => output.name === 'Lighting Render Test');
+        assert(lightingOutput,'Işık ayarlı kalıcı çıktı oluşturulmalı');
+        const lightingOutputBytes = db.storageBodies.get(lightingOutput.export_path);
+        const lightingOutputDark = await readPngPixel(lightingOutputBytes, 800, 800);
+        const lightingOutputLight = await readPngPixel(lightingOutputBytes, 1200, 800);
+        const lightingOutputAlpha = await readPngPixel(lightingOutputBytes, 650, 650);
+        const channelDistance=(left,right)=>Math.max(...left.slice(0,3).map((value,index)=>Math.abs(value-right[index])));
+        assert(channelDistance(lightingPreviewDark,lightingOutputDark)<18, 'Önizleme ve 2000×2000 çıktı koyu pikselde aynı ışık filtresini kullanmalı');
+        assert(channelDistance(lightingPreviewLight,lightingOutputLight)<18, 'Önizleme ve 2000×2000 çıktı açık pikselde aynı ışık filtresini kullanmalı');
+        assert(channelDistance(lightingPreviewAlpha,lightingOutputAlpha)<8, 'Şeffaf ürün pikselinin alfa sonucu önizleme ve çıktıda aynı kalmalı');
+
         await page.locator('[data-view="templates"]').click();
         await page.locator('.ms-template-card').filter({ hasText: 'Test JSON Import Template' }).getByRole('button', { name: 'Aç/Düzenle' }).click();
         await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 3);
 
         await page.locator('.ms-layer').filter({ hasText: 'Ön Hero' }).click();
         assert(await page.locator('#msPerspectiveToggle').isChecked(), 'İçe aktarılan slot perspektif aracıyla düzenlenebilir olmalı');
+        assert(await page.locator('.ms-lighting-panel').isVisible(), 'Renk ve Işık Uyarlaması paneli seçili slotta görünmeli');
+        db.fixtureBodies.set('lighting-manual-product.png', lightingProductPng);
+        await page.locator('#msEditorProductInput').setInputFiles({ name: 'lighting-manual-product.png', mimeType: 'image/png', buffer: lightingProductPng });
+        await page.getByText(/tüm slotlarda önizlemeye alındı/).waitFor();
+        if ((await page.locator('#msToggleGuides').textContent()).includes('Açık')) await page.locator('#msToggleGuides').click();
+        const captureLightingPixels=async()=>{await page.waitForTimeout(220);const image=await page.locator('#mockupCanvasHost').screenshot();return {dark:await readPngPixel(image,800,800),light:await readPngPixel(image,1200,800),alpha:await readPngPixel(image,650,650)};};
+        const rgbSum=(pixel)=>pixel[0]+pixel[1]+pixel[2];
+        const colorSpread=(pixel)=>Math.max(...pixel.slice(0,3))-Math.min(...pixel.slice(0,3));
+        const setLighting=async(key,value)=>{await lightingNumber(key).fill(String(value));await lightingNumber(key).press('Tab');};
+        await page.locator('#msLightingReset').click();
+        const neutralPixels=await captureLightingPixels();
+        await setLighting('temperature',100);const warmPixels=await captureLightingPixels();
+        assert(warmPixels.dark[0]-warmPixels.dark[2]>neutralPixels.dark[0]-neutralPixels.dark[2], 'Pozitif sıcaklık pikseli daha sıcak yapmalı');
+        await setLighting('temperature',-100);const coolPixels=await captureLightingPixels();
+        assert(coolPixels.dark[2]-coolPixels.dark[0]>neutralPixels.dark[2]-neutralPixels.dark[0], 'Negatif sıcaklık pikseli daha soğuk yapmalı');
+        await page.locator('#msUndoBtn').click();
+        await page.waitForFunction(() => Number(document.querySelector('[data-lighting-key="temperature"][type="number"]')?.value) === 100);
+        assert.strictEqual(Number(await lightingNumber('temperature').inputValue()),100,'Manuel ışık ayarı Undo ile geri alınmalı');
+        await page.locator('#msRedoBtn').click();
+        await page.waitForFunction(() => Number(document.querySelector('[data-lighting-key="temperature"][type="number"]')?.value) === -100);
+        assert.strictEqual(Number(await lightingNumber('temperature').inputValue()),-100,'Manuel ışık ayarı Redo ile yinelenmeli');
+        await page.locator('#msLightingReset').click();await setLighting('tint',100);const tintPixels=await captureLightingPixels();
+        assert(tintPixels.dark[0]+tintPixels.dark[2]-2*tintPixels.dark[1]>neutralPixels.dark[0]+neutralPixels.dark[2]-2*neutralPixels.dark[1], 'Tint gerçek RGB sonucunu değiştirmeli');
+        await page.locator('#msLightingReset').click();await setLighting('exposure',1);const exposurePixels=await captureLightingPixels();
+        assert(rgbSum(exposurePixels.dark)>rgbSum(neutralPixels.dark),'Pozlama gerçek render sonucunu değiştirmeli');
+        await page.locator('#msLightingReset').click();await setLighting('contrast',1.5);const contrastPixels=await captureLightingPixels();
+        assert(rgbSum(contrastPixels.dark)<rgbSum(neutralPixels.dark)&&rgbSum(contrastPixels.light)>=rgbSum(neutralPixels.light),'Kontrast koyu ve açık tonları ayırmalı');
+        await page.locator('#msLightingReset').click();await setLighting('saturation',2);const saturationPixels=await captureLightingPixels();
+        assert(colorSpread(saturationPixels.dark)>colorSpread(neutralPixels.dark),'Doygunluk gerçek render sonucunu değiştirmeli');
+        await page.locator('#msLightingReset').click();await setLighting('highlights',100);const highlightPixels=await captureLightingPixels();
+        assert(rgbSum(highlightPixels.light)-rgbSum(neutralPixels.light)>rgbSum(highlightPixels.dark)-rgbSum(neutralPixels.dark),'Highlights açık tonları daha güçlü etkilemeli');
+        await page.locator('#msLightingReset').click();await setLighting('shadows',100);const shadowPixels=await captureLightingPixels();
+        assert(rgbSum(shadowPixels.dark)-rgbSum(neutralPixels.dark)>rgbSum(shadowPixels.light)-rgbSum(neutralPixels.light),'Shadows koyu tonları daha güçlü etkilemeli');
+        assert(channelDistance(shadowPixels.alpha,neutralPixels.alpha)<8,'Işık filtreleri şeffaf PNG alfa alanını bozmamalı');
+        await page.locator('#msToggleGuides').click();
         assert.match(await page.locator('.ms-clip-tools').textContent(), /4 nokta • Kapalı/, 'Kaydedilip açılan clipPolygon editörde korunmalı');
         await page.locator('#msClipUndoPointBtn').click();
         await page.getByText(/3 nokta • Çiziliyor/).waitFor();
@@ -622,9 +695,12 @@ async function mockStorage(route) {
         await page.getByText(/4 nokta • Kapalı/).waitFor();
         await controlNumber('blur').fill('7'); await controlNumber('blur').press('Tab');
         assert.strictEqual(await controlNumber('blur').inputValue(), '7', 'İçe aktarılan slot mevcut ayar panelinden değiştirilebilmeli');
+        await setLighting('temperature',37);await setLighting('tint',4);
         await page.locator('#msResetPerspectiveBtn').click();
         await page.locator('#msDuplicateLayer').click();
         await page.getByText(/Slot 2 çoğaltıldı/).waitFor();
+        assert.strictEqual(Number(await lightingNumber('temperature').inputValue()),37,'Slot çoğaltılınca ışık değerleri kopyalanmalı');
+        assert.strictEqual(Number(await lightingNumber('tint').inputValue()),4,'Çoğaltılan slot bağımsız ışık değerlerini taşımalı');
         assert.match(await page.locator('.ms-clip-tools').textContent(), /4 nokta • Kapalı/, 'Slot çoğaltılınca clipPolygon kopyalanmalı');
         await page.locator('#msClipUndoPointBtn').click();
         await page.getByText(/3 nokta • Çiziliyor/).waitFor();
@@ -634,6 +710,13 @@ async function mockStorage(route) {
         await page.locator('#msJsonValidateBtn').click();
         await page.locator('#msJsonCreateBtn').click();
         await page.getByText(/1 slot JSON’dan oluşturuldu/).waitFor();
+        await page.locator('.ms-layer[data-id="slot_01"]').click();
+        await page.locator('.ms-layer').filter({ hasText: 'Slot 2' }).click({ modifiers: ['Control'] });
+        assert.match(await page.locator('#msInspector').textContent(), /Seçili 2 Slot/,'Çoklu slot ışık uygulaması için iki slot seçilebilmeli');
+        await lightingNumber('temperature').fill('22');
+        await lightingNumber('tint').fill('-6');
+        await page.locator('#msLightingApply').click();
+        await page.getByText(/2 seçili slota uygulandı/).waitFor();
         await page.locator('#msSaveBtn').click();
         await page.getByText(/Şablon v2 olarak kaydedildi/).waitFor();
         const duplicateSaved = db.templates.find(template => template.name === 'Test JSON Import Template');
@@ -646,7 +729,17 @@ async function mockStorage(route) {
         const legacyJsonSlot = duplicateSaved.document.layers.find(layer => layer.type === 'product_slot' && layer.id !== 'slot_01' && layer.id !== copiedClipSlot.id);
         assert.strictEqual(editedImportedSlot.clipPolygon.points.length, 4, 'Kopyadaki düzenleme kaynak clipPolygon referansını değiştirmemeli');
         assert.strictEqual(copiedClipSlot.clipPolygon.points.length, 3, 'Çoğaltılmış slotun clipPolygon verisi bağımsız düzenlenebilmeli');
+        assert.strictEqual(editedImportedSlot.frame.relighting.temperature,22,'Toplu ışık ayarı ilk seçili slota uygulanmalı');
+        assert.strictEqual(copiedClipSlot.frame.relighting.temperature,22,'Toplu ışık ayarı ikinci seçili slota uygulanmalı');
+        assert.strictEqual(editedImportedSlot.frame.relighting.tint,-6,'Toplu tint ayarı seçili slotlarda korunmalı');
         assert.strictEqual(legacyJsonSlot.clipPolygon, undefined, 'clipPolygon içermeyen eski JSON davranışı korunmalı');
+        assert.deepStrictEqual(legacyJsonSlot.frame.relighting, { temperature: 0, tint: 0, exposure: 0, contrast: 1, saturation: 1, highlights: 0, shadows: 0 }, 'Işık alanı olmayan eski JSON nötr değerlerle açılmalı');
+
+        await page.locator('[data-view="templates"]').click();
+        await page.locator('.ms-template-card').filter({ hasText: 'Test JSON Import Template' }).getByRole('button', { name: 'Aç/Düzenle' }).click();
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 6);
+        await page.locator('.ms-layer[data-id="slot_01"]').click();
+        assert.strictEqual(Number(await lightingNumber('temperature').inputValue()),22,'Şablon yeniden açıldığında ışık değerleri korunmalı');
 
         await page.locator('[data-view="templates"]').click();
         await page.locator('#msNewTemplateBtn').click();
@@ -656,10 +749,13 @@ async function mockStorage(route) {
                 slot.foregroundPolygons = [];
                 return slot;
             });
+            const variableDocument=JSON.parse(slotImportDocument(variableSlots));
+            if(count===7)variableDocument.slots[2].relighting={temperature:'çok sıcak',exposure:0.5};
             await page.locator('#msJsonImportBtn').click();
-            await page.locator('#msJsonInput').fill(slotImportDocument(variableSlots));
+            await page.locator('#msJsonInput').fill(JSON.stringify(variableDocument));
             await page.locator('#msJsonValidateBtn').click();
             assert.match(await page.locator('#msJsonValidation').textContent(), new RegExp(`${count} slot bulundu`), `${count} slotlu JSON doğrulanmalı`);
+            if(count===7){assert.match(await page.locator('#msJsonValidation').textContent(), /slots\[2\]\.relighting\.temperature/, 'Geçersiz slot ışık alanı açıkça belirtilmeli');assert(!(await page.locator('#msJsonCreateBtn').isDisabled()),'Geçersiz tek ışık alanı diğer slotların içe aktarımını engellememeli');}
             await page.locator('#msJsonCreateBtn').click();
             await page.getByText(new RegExp(`${count} slot JSON’dan oluşturuldu`)).waitFor();
             assert.strictEqual(await page.locator('.ms-layer').count(), count, `JSON slots.length=${count} ise tam ${count} slot oluşturulmalı`);
