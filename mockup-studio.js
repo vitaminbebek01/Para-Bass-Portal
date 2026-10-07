@@ -4,6 +4,18 @@
     const API = '/api/mockup-studio';
     const SIZE = 2000;
     const PRODUCT_TYPES = ['product_box_clean', 'product_only_clean'];
+    const SLOT_JSON_SAMPLE = {
+        format: 'parabass-slots', version: 1,
+        canvas: { width: 2000, height: 2000, coordinateSystem: 'normalized_0_1000' },
+        slots: [{
+            id: 'slot_01', name: 'Ön Hero',
+            perspectiveCorners: { topLeft: [220, 180], topRight: [520, 210], bottomRight: [500, 520], bottomLeft: [200, 490] },
+            foregroundPolygons: [{ label: 'front_box_edge', points: [[200, 490], [500, 520], [495, 570], [195, 540]] }],
+            effects: { blur: 0, opacity: 1, brightness: 1 },
+            shadow: { enabled: true, color: '#4B3828', opacity: 0.22, blur: 14, offsetX: 5, offsetY: 8 },
+            depthOrder: 1
+        }]
+    };
     const state = {
         initialized: false,
         view: 'templates',
@@ -375,6 +387,7 @@
                     <button id="msUndoBtn" class="ms-btn">↶ Geri Al</button>
                     <button id="msRedoBtn" class="ms-btn">↷ Yinele</button>
                     <button id="msSaveBtn" class="ms-btn ms-btn-primary">Sürüm Kaydet</button>
+                    <button id="msJsonImportBtn" class="ms-btn">JSON’dan Slot Oluştur</button>
                     <button id="msToggleDrawer" class="ms-btn">☰ Varlıklar ve Katmanlar</button>
                     <button id="msToggleGuides" class="ms-btn">Düzenleme Çizgileri: Açık</button>
                     <button id="msToggleGrid" class="ms-btn">Izgara: Kapalı</button>
@@ -439,6 +452,17 @@
             <section id="msViewCreate" class="ms-view" hidden></section>
             <section id="msViewOutputs" class="ms-view" hidden></section>
             <div id="msOutputLightbox" class="ms-lightbox" hidden></div>
+            <div id="msJsonImportModal" class="ms-json-modal" hidden>
+                <div class="ms-json-dialog" role="dialog" aria-modal="true" aria-labelledby="msJsonImportTitle">
+                    <div class="ms-json-head"><div><strong id="msJsonImportTitle">JSON’dan Slot Oluştur</strong><small>parabass-slots v1 JSON’unu doğrulayıp mevcut tuvale ekler.</small></div><button id="msJsonCancelTop" class="ms-btn" type="button">✕</button></div>
+                    <div class="ms-json-body">
+                        <label for="msJsonInput">Slot JSON</label>
+                        <textarea id="msJsonInput" spellcheck="false" placeholder="JSON’u buraya yapıştırın"></textarea>
+                        <div id="msJsonValidation" class="ms-json-validation">Henüz doğrulanmadı.</div>
+                    </div>
+                    <div class="ms-json-actions"><button id="msJsonExampleBtn" class="ms-btn" type="button">Örnek JSON’u Kopyala</button><span></span><button id="msJsonCancelBtn" class="ms-btn" type="button">İptal</button><button id="msJsonValidateBtn" class="ms-btn" type="button">Doğrula</button><button id="msJsonCreateBtn" class="ms-btn ms-btn-primary" type="button" disabled>Slotları Oluştur</button></div>
+                </div>
+            </div>
             <div id="msRenderHost" style="position:fixed; left:-10000px; top:0; width:2000px; height:2000px;"></div>
         `;
     }
@@ -456,6 +480,7 @@
         document.getElementById('msUndoBtn').addEventListener('click', undo);
         document.getElementById('msRedoBtn').addEventListener('click', redo);
         document.getElementById('msSaveBtn').addEventListener('click', saveEditor);
+        document.getElementById('msJsonImportBtn').addEventListener('click', openJsonImport);
         document.getElementById('msToggleDrawer').addEventListener('click', toggleAssetsDrawer);
         document.getElementById('msToggleGuides').addEventListener('click', toggleGuides);
         document.getElementById('msToggleGrid').addEventListener('click', toggleGrid);
@@ -471,6 +496,13 @@
         document.getElementById('msPreviewAllBtn').addEventListener('click', previewProductInAllSlots);
         document.getElementById('msAddSlotBtn').addEventListener('click', previewProductInSelectedSlots);
         document.getElementById('msRemovePreviewBtn').addEventListener('click', removePreviewProduct);
+        document.getElementById('msJsonCancelTop').addEventListener('click', closeJsonImport);
+        document.getElementById('msJsonCancelBtn').addEventListener('click', closeJsonImport);
+        document.getElementById('msJsonValidateBtn').addEventListener('click', validateJsonImportFromModal);
+        document.getElementById('msJsonCreateBtn').addEventListener('click', createSlotsFromJsonModal);
+        document.getElementById('msJsonExampleBtn').addEventListener('click', copyJsonExample);
+        document.getElementById('msJsonInput').addEventListener('input', invalidateJsonImport);
+        document.getElementById('msJsonImportModal').addEventListener('click', (event) => { if (event.target.id === 'msJsonImportModal') closeJsonImport(); });
         window.addEventListener('resize', resizeStage);
         document.addEventListener('keydown', handleKeyboard);
     }
@@ -755,6 +787,208 @@
     function toggleAssetsDrawer(){state.drawerOpen=!state.drawerOpen;renderEditor();window.setTimeout(resizeStage,0);}
     function toggleGuides(){state.guidesVisible=!state.guidesVisible;renderEditor();renderSelectionMarkers();}
     function toggleGrid(){state.gridVisible=!state.gridVisible;renderEditor();renderSelectionMarkers();}
+
+    function openJsonImport() {
+        const modal = document.getElementById('msJsonImportModal');
+        if (!modal) return;
+        modal.hidden = false;
+        invalidateJsonImport();
+        document.getElementById('msJsonInput').focus();
+    }
+
+    function closeJsonImport() {
+        const modal = document.getElementById('msJsonImportModal');
+        if (modal) modal.hidden = true;
+    }
+
+    function invalidateJsonImport() {
+        const modal = document.getElementById('msJsonImportModal');
+        if (!modal) return;
+        modal._slotValidation = null;
+        document.getElementById('msJsonCreateBtn').disabled = true;
+        document.getElementById('msJsonValidation').innerHTML = 'Henüz doğrulanmadı.';
+    }
+
+    function addUnsupportedWarnings(value, allowed, path, warnings) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+        Object.keys(value).filter((key) => !allowed.includes(key)).forEach((key) => warnings.push(`${path}.${key}: desteklenmeyen alan; içe aktarılmayacak.`));
+    }
+
+    function validateJsonPoint(point, path, errors) {
+        if (!Array.isArray(point) || point.length !== 2) {
+            errors.push(`${path}: [x, y] biçiminde olmalıdır.`);
+            return;
+        }
+        point.forEach((value, axis) => {
+            if (!Number.isFinite(value)) errors.push(`${path}[${axis}]: sonlu bir sayı olmalıdır.`);
+            else if (value < 0 || value > 1000) errors.push(`${path}[${axis}]: 0–1000 aralığında olmalıdır.`);
+        });
+    }
+
+    function validateJsonNumber(value, path, min, max, errors) {
+        if (!Number.isFinite(value)) errors.push(`${path}: sonlu bir sayı olmalıdır.`);
+        else if (value < min || value > max) errors.push(`${path}: ${min}–${max} aralığında olmalıdır.`);
+    }
+
+    function validateSlotJson(text) {
+        const result = { parsed: null, found: 0, validSlots: [], invalidSlots: [], errors: [], warnings: [] };
+        try { result.parsed = JSON.parse(text); }
+        catch (error) { result.errors.push(`JSON okunamadı: ${error.message}`); return result; }
+        const root = result.parsed;
+        if (!root || typeof root !== 'object' || Array.isArray(root)) { result.errors.push('JSON kök değeri bir nesne olmalıdır.'); return result; }
+        addUnsupportedWarnings(root, ['format', 'version', 'canvas', 'slots'], 'JSON', result.warnings);
+        if (root.format !== 'parabass-slots') result.errors.push('format değeri “parabass-slots” olmalıdır.');
+        if (root.version !== 1) result.errors.push('Yalnızca version 1 destekleniyor.');
+        if (!root.canvas || typeof root.canvas !== 'object' || Array.isArray(root.canvas)) result.errors.push('canvas nesnesi zorunludur.');
+        else {
+            addUnsupportedWarnings(root.canvas, ['width', 'height', 'coordinateSystem'], 'canvas', result.warnings);
+            validateJsonNumber(root.canvas.width, 'canvas.width', 1, 100000, result.errors);
+            validateJsonNumber(root.canvas.height, 'canvas.height', 1, 100000, result.errors);
+            if (root.canvas.coordinateSystem !== 'normalized_0_1000') result.errors.push('canvas.coordinateSystem “normalized_0_1000” olmalıdır.');
+        }
+        if (!Array.isArray(root.slots) || !root.slots.length) { result.errors.push('slots dizisi boş olamaz.'); return result; }
+        if (root.slots.length > 100) result.errors.push('Tek seferde en fazla 100 slot içe aktarılabilir.');
+        result.found = root.slots.length;
+        const seenIds = new Set();
+        const existingIds = new Set(state.editor.document.layers.map((layer) => layer.id));
+        root.slots.forEach((slot, index) => {
+            const slotErrors = [], prefix = `slots[${index}]`;
+            if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+                result.invalidSlots.push({ index, errors: [`${prefix}: bir nesne olmalıdır.`] });
+                return;
+            }
+            addUnsupportedWarnings(slot, ['id', 'name', 'perspectiveCorners', 'foregroundPolygons', 'effects', 'shadow', 'depthOrder'], prefix, result.warnings);
+            if (typeof slot.id !== 'string' || !slot.id.trim()) slotErrors.push(`${prefix}.id: boş olmayan bir metin olmalıdır.`);
+            else if (!/^[A-Za-z0-9_-]{1,120}$/.test(slot.id)) slotErrors.push(`${prefix}.id: yalnızca harf, sayı, _ ve - içerebilir.`);
+            else if (seenIds.has(slot.id)) result.warnings.push(`${prefix}.id: “${slot.id}” tekrar ediyor; güvenli benzersiz ID üretilecek.`);
+            else if (existingIds.has(slot.id)) result.warnings.push(`${prefix}.id: “${slot.id}” mevcut bir katmanla çakışıyor; güvenli benzersiz ID üretilecek.`);
+            if (typeof slot.id === 'string') seenIds.add(slot.id);
+            if (slot.name != null && (typeof slot.name !== 'string' || slot.name.length > 120)) slotErrors.push(`${prefix}.name: en fazla 120 karakterlik metin olmalıdır.`);
+            const corners = slot.perspectiveCorners;
+            if (!corners || typeof corners !== 'object' || Array.isArray(corners)) slotErrors.push(`${prefix}.perspectiveCorners: dört köşe nesnesi zorunludur.`);
+            else {
+                addUnsupportedWarnings(corners, ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'], `${prefix}.perspectiveCorners`, result.warnings);
+                ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].forEach((key) => validateJsonPoint(corners[key], `${prefix}.perspectiveCorners.${key}`, slotErrors));
+            }
+            if (slot.foregroundPolygons != null && !Array.isArray(slot.foregroundPolygons)) slotErrors.push(`${prefix}.foregroundPolygons: dizi olmalıdır.`);
+            else (slot.foregroundPolygons || []).forEach((polygon, polygonIndex) => {
+                const polygonPath = `${prefix}.foregroundPolygons[${polygonIndex}]`;
+                if (!polygon || typeof polygon !== 'object' || Array.isArray(polygon)) { slotErrors.push(`${polygonPath}: bir nesne olmalıdır.`); return; }
+                addUnsupportedWarnings(polygon, ['label', 'points'], polygonPath, result.warnings);
+                if (polygon.label != null && typeof polygon.label !== 'string') slotErrors.push(`${polygonPath}.label: metin olmalıdır.`);
+                if (!Array.isArray(polygon.points) || polygon.points.length < 3) slotErrors.push(`${polygonPath}.points: en az 3 nokta içermelidir.`);
+                else if (polygon.points.length > 500) slotErrors.push(`${polygonPath}.points: en fazla 500 nokta içerebilir.`);
+                else polygon.points.forEach((point, pointIndex) => validateJsonPoint(point, `${polygonPath}.points[${pointIndex}]`, slotErrors));
+            });
+            if (slot.effects != null && (!slot.effects || typeof slot.effects !== 'object' || Array.isArray(slot.effects))) slotErrors.push(`${prefix}.effects: bir nesne olmalıdır.`);
+            else if (slot.effects) {
+                addUnsupportedWarnings(slot.effects, ['blur', 'opacity', 'brightness', 'contrast', 'saturation', 'hue', 'sharpen'], `${prefix}.effects`, result.warnings);
+                const effectRanges = { blur: [0, 80], opacity: [0, 1], brightness: [-100, 100], contrast: [-100, 100], saturation: [-100, 100], hue: [-180, 180], sharpen: [0, 20] };
+                Object.entries(effectRanges).forEach(([key, range]) => { if (slot.effects[key] != null) validateJsonNumber(slot.effects[key], `${prefix}.effects.${key}`, range[0], range[1], slotErrors); });
+            }
+            if (slot.shadow != null && (!slot.shadow || typeof slot.shadow !== 'object' || Array.isArray(slot.shadow))) slotErrors.push(`${prefix}.shadow: bir nesne olmalıdır.`);
+            else if (slot.shadow) {
+                addUnsupportedWarnings(slot.shadow, ['enabled', 'color', 'opacity', 'blur', 'offsetX', 'offsetY', 'angle', 'distance'], `${prefix}.shadow`, result.warnings);
+                if (slot.shadow.enabled != null && typeof slot.shadow.enabled !== 'boolean') slotErrors.push(`${prefix}.shadow.enabled: true veya false olmalıdır.`);
+                if (slot.shadow.color != null && !/^#[0-9a-fA-F]{6}$/.test(slot.shadow.color)) slotErrors.push(`${prefix}.shadow.color: #RRGGBB biçiminde olmalıdır.`);
+                [['opacity', 0, 1], ['blur', 0, 120], ['offsetX', -300, 300], ['offsetY', -300, 300], ['angle', 0, 360], ['distance', 0, 500]].forEach(([key, min, max]) => { if (slot.shadow[key] != null) validateJsonNumber(slot.shadow[key], `${prefix}.shadow.${key}`, min, max, slotErrors); });
+            }
+            if (slot.depthOrder != null) validateJsonNumber(slot.depthOrder, `${prefix}.depthOrder`, -100000, 100000, slotErrors);
+            if (slotErrors.length) result.invalidSlots.push({ index, errors: slotErrors });
+            else result.validSlots.push({ slot, index });
+        });
+        if (result.validSlots.some((item) => (item.slot.foregroundPolygons || []).length) && !state.editor.document.layers.some((layer) => layer.type === 'scene_background')) result.warnings.push('Foreground poligonları için sahne bulunamadı; noktalar korunacak ancak sahne yüklenene kadar görüntü oluşmayacak.');
+        return result;
+    }
+
+    function renderJsonValidation(result) {
+        const root = document.getElementById('msJsonValidation');
+        const errorItems = [...result.errors, ...result.invalidSlots.flatMap((item) => item.errors)];
+        root.innerHTML = `<div class="ms-json-summary"><strong>${result.found} slot bulundu</strong><span class="is-valid">${result.validSlots.length} geçerli</span><span class="${result.invalidSlots.length || result.errors.length ? 'is-invalid' : ''}">${result.invalidSlots.length} geçersiz</span></div>${errorItems.length ? `<ul class="ms-json-errors">${errorItems.map((message) => `<li>${esc(message)}</li>`).join('')}</ul>` : ''}${result.warnings.length ? `<div class="ms-json-warnings"><strong>Uyarılar</strong><ul>${result.warnings.map((message) => `<li>${esc(message)}</li>`).join('')}</ul></div>` : ''}`;
+        document.getElementById('msJsonCreateBtn').disabled = Boolean(result.errors.length || result.invalidSlots.length || !result.validSlots.length);
+    }
+
+    function validateJsonImportFromModal() {
+        const modal = document.getElementById('msJsonImportModal');
+        const result = validateSlotJson(document.getElementById('msJsonInput').value);
+        modal._slotValidation = result;
+        renderJsonValidation(result);
+        return result;
+    }
+
+    function uniqueImportedId(preferred, used) {
+        if (preferred && !used.has(preferred)) { used.add(preferred); return preferred; }
+        let generated = uid();
+        while (used.has(generated)) generated = uid();
+        used.add(generated);
+        return generated;
+    }
+
+    function normalizedJsonPoint(point, width, height) {
+        return { x: point[0] / 1000 * width, y: point[1] / 1000 * height };
+    }
+
+    async function createSlotsFromJsonModal() {
+        const result = validateJsonImportFromModal();
+        if (result.errors.length || result.invalidSlots.length || !result.validSlots.length) return setStatus('JSON hataları düzeltilmeden slotlar oluşturulamaz.', true);
+        const before = editorSnapshot();
+        const canvasWidth = Number(state.editor.document.canvas.width) || SIZE;
+        const canvasHeight = Number(state.editor.document.canvas.height) || SIZE;
+        const usedIds = new Set(state.editor.document.layers.map((layer) => layer.id));
+        const scene = state.editor.document.layers.find((layer) => layer.type === 'scene_background');
+        const sceneAsset = scene ? getEditorAsset(scene.assetId) : null;
+        const ordered = result.validSlots.slice().sort((a, b) => (Number(a.slot.depthOrder) || 0) - (Number(b.slot.depthOrder) || 0) || a.index - b.index);
+        const slotLayers = [], polygonLayers = [];
+        ordered.forEach(({ slot }, slotIndex) => {
+            const cornerSource = slot.perspectiveCorners;
+            const corners = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].map((key) => normalizedJsonPoint(cornerSource[key], canvasWidth, canvasHeight));
+            const xs = corners.map((point) => point.x), ys = corners.map((point) => point.y);
+            const layer = makeLayer('product_slot', null, (slot.name || `Slot ${state.editor.document.layers.filter((item) => item.type === 'product_slot').length + slotIndex + 1}`).trim());
+            layer.id = uniqueImportedId(slot.id, usedIds);
+            Object.assign(layer.frame, {
+                x: (Math.min(...xs) + Math.max(...xs)) / 2,
+                y: (Math.min(...ys) + Math.max(...ys)) / 2,
+                width: Math.max(40, Math.max(...xs) - Math.min(...xs)),
+                height: Math.max(40, Math.max(...ys) - Math.min(...ys)),
+                perspective: { enabled: true, corners }
+            });
+            ['blur', 'opacity', 'brightness', 'contrast', 'saturation', 'hue', 'sharpen'].forEach((key) => { if (slot.effects && slot.effects[key] != null) layer.frame[key] = slot.effects[key]; });
+            if (slot.shadow) {
+                const supportedShadow = {};
+                ['enabled', 'color', 'opacity', 'blur', 'offsetX', 'offsetY', 'angle', 'distance'].forEach((key) => { if (slot.shadow[key] != null) supportedShadow[key] = slot.shadow[key]; });
+                layer.frame.shadow = normalizeShadow(supportedShadow);
+            }
+            layer.visible = true; layer.locked = false;
+            slotLayers.push(layer);
+            (slot.foregroundPolygons || []).forEach((polygon, polygonIndex) => {
+                const polygonLayer = makeLayer('foreground_polygon', sceneAsset, polygon.label || `${layer.name} Foreground ${polygonIndex + 1}`);
+                polygonLayer.id = uniqueImportedId(null, usedIds);
+                polygonLayer.visible = true; polygonLayer.locked = false;
+                polygonLayer.geometry = normalizePolygonGeometry({ sourceAssetId: sceneAsset ? sceneAsset.id : null, points: polygon.points.map((point) => normalizedJsonPoint(point, canvasWidth, canvasHeight)), closed: true }, sceneAsset ? sceneAsset.id : null);
+                polygonLayers.push(polygonLayer);
+            });
+        });
+        let insertAt = state.editor.document.layers.findIndex((layer) => ['foreground_mask', 'foreground_polygon', 'optional_graphic', 'optional_text_or_graphic'].includes(layer.type));
+        if (insertAt < 0) insertAt = state.editor.document.layers.length;
+        state.editor.document.layers.splice(insertAt, 0, ...slotLayers, ...polygonLayers);
+        state.selectedLayerIds = new Set(slotLayers.map((layer) => layer.id));
+        state.selectedLayerId = slotLayers[slotLayers.length - 1].id;
+        state.polygonDrawingLayerId = null;
+        recordHistory(before);
+        await rebuildCanvas();
+        renderEditor();
+        closeJsonImport();
+        setStatus(`${slotLayers.length} slot JSON’dan oluşturuldu${polygonLayers.length ? `; ${polygonLayers.length} foreground poligonu eklendi` : ''}.`, false);
+    }
+
+    async function copyJsonExample() {
+        const text = JSON.stringify(SLOT_JSON_SAMPLE, null, 2);
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+            else { const input = document.getElementById('msJsonInput'); input.value = text; input.select(); document.execCommand('copy'); invalidateJsonImport(); }
+            setStatus('Örnek slot JSON’u panoya kopyalandı.', false);
+        } catch (error) { setStatus('Örnek JSON kopyalanamadı: ' + error.message, true); }
+    }
 
     function editorSnapshot() {
         return JSON.stringify({ name: state.editor.name, document: state.editor.document });

@@ -7,6 +7,15 @@ const baseUrl = process.env.MOCKUP_TEST_URL || 'http://localhost:8000';
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69d9WQAAAABJRU5ErkJggg==', 'base64');
 const largePng = Buffer.concat([png, Buffer.alloc(20 * 1024 * 1024 - png.length)]);
 const now = () => new Date().toISOString();
+const slotImportDocument = (slots) => JSON.stringify({ format: 'parabass-slots', version: 1, canvas: { width: 2000, height: 2000, coordinateSystem: 'normalized_0_1000' }, slots });
+const importedSlot = (id, index = 0) => ({
+    id, name: index ? `JSON Slot ${index + 1}` : 'Ön Hero',
+    perspectiveCorners: { topLeft: [220 + index * 8, 180], topRight: [520 + index * 8, 210], bottomRight: [500 + index * 8, 520], bottomLeft: [200 + index * 8, 490] },
+    foregroundPolygons: index ? [] : [{ label: 'front_box_edge', points: [[200, 490], [500, 520], [495, 570], [195, 540]] }],
+    effects: { blur: 6, opacity: 0.82, brightness: 12 },
+    shadow: { enabled: true, color: '#4B3828', opacity: 0.22, blur: 14, offsetX: 5, offsetY: 8 },
+    depthOrder: index ? 9 - index : 1
+});
 
 const presetFrame = (x, y, width, height, rotation = 0) => ({ x, y, width, height, rotation });
 const gridPreset = (id, name, cols, rows) => ({ id, name, is_system: true, created_at: now(), slots: Array.from({ length: cols * rows }, (_, index) => ({ order: index, frame: presetFrame(300 + (index % cols) * (1400 / Math.max(1, cols - 1)), 300 + Math.floor(index / cols) * (1400 / Math.max(1, rows - 1)), cols === 3 ? 430 : 620, cols === 3 ? 430 : 620) })) });
@@ -468,6 +477,101 @@ async function mockStorage(route) {
         await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
         const multiSaved = db.templates.find(template => template.name === 'Test Multi Edit Template');
         assert.strictEqual(multiSaved.document.layers.filter(layer => layer.type === 'product_slot' && layer.frame.blur === 4 && layer.frame.shadow.enabled).length, 6, 'Toplu blur ve gölge seçili slotların tamamına kaydedilmeli');
+
+        await page.locator('[data-view="templates"]').click();
+        await page.locator('#msNewTemplateBtn').click();
+        await page.locator('#msSceneInput').setInputFiles({ name: 'json-import-scene.png', mimeType: 'image/png', buffer: png });
+        await page.getByText(/kaydetmeden slot ekleyebilirsiniz/).waitFor();
+        const initialJsonLayerCount = await page.locator('.ms-layer').count();
+        await page.locator('#msJsonImportBtn').click();
+        await page.locator('#msJsonInput').fill('{"format":"parabass-slots","version":1,"canvas":{"width":2000,"height":2000,"coordinateSystem":"normalized_0_1000"},"slots":[{"id":"bad","perspectiveCorners":{"topLeft":[0,0]}}]}');
+        await page.locator('#msJsonValidateBtn').click();
+        assert(await page.locator('#msJsonCreateBtn').isDisabled(), 'Geçersiz JSON için oluşturma kapalı kalmalı');
+        assert.match(await page.locator('#msJsonValidation').textContent(), /bottomRight/, 'Eksik perspektif köşesi Türkçe doğrulama hatası göstermeli');
+        assert.strictEqual(await page.locator('.ms-layer').count(), initialJsonLayerCount, 'Geçersiz JSON mevcut şablonu değiştirmemeli');
+        await page.locator('#msJsonCancelBtn').click();
+
+        const singleJson = JSON.parse(slotImportDocument([importedSlot('slot_01')]));
+        singleJson.slots[0].effects.temperature = 4200;
+        await page.locator('#msJsonImportBtn').click();
+        await page.locator('#msJsonInput').fill(JSON.stringify(singleJson));
+        await page.locator('#msJsonValidateBtn').click();
+        assert.match(await page.locator('#msJsonValidation').textContent(), /1 slot bulundu/);
+        assert.match(await page.locator('#msJsonValidation').textContent(), /1 geçerli/);
+        assert.match(await page.locator('#msJsonValidation').textContent(), /0 geçersiz/);
+        assert.match(await page.locator('#msJsonValidation').textContent(), /desteklenmeyen alan/, 'Desteklenmeyen alan uyarı olarak gösterilmeli');
+        await page.locator('#msJsonCreateBtn').click();
+        await page.getByText(/1 slot JSON’dan oluşturuldu; 1 foreground poligonu eklendi/).waitFor();
+        assert.strictEqual(await page.locator('.ms-layer').count(), 3, 'Tek slot ve foreground poligonu mevcut katmanlara eklenmeli');
+        await page.locator('#msUndoBtn').click();
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 1);
+        assert.strictEqual(await page.locator('.ms-layer').count(), 1, 'Tek Undo tüm JSON içe aktarmayı kaldırmalı');
+        await page.locator('#msRedoBtn').click();
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 3);
+        await page.locator('#msEditorName').fill('Test JSON Import Template');
+        await page.locator('#msEditorName').press('Tab');
+        await page.locator('#msSaveBtn').click();
+        await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
+        const importedV1 = db.versions.find(version => version.template_name === 'Test JSON Import Template' && version.version_number === 1).snapshot;
+        const importedV1Slot = importedV1.layers.find(layer => layer.type === 'product_slot');
+        assert.strictEqual(importedV1Slot.id, 'slot_01', 'Çakışmayan JSON slot ID korunmalı');
+        assert.deepStrictEqual(importedV1Slot.frame.perspective.corners[0], { x: 440, y: 360 }, 'Normalize perspektif koordinatları 2000×2000 tuvale çevrilmeli');
+        assert.deepStrictEqual(importedV1Slot.frame.perspective.corners[2], { x: 1000, y: 1040 }, 'Dört perspektif köşesi doğru sırada aktarılmalı');
+        assert.strictEqual(importedV1Slot.frame.blur, 6, 'Blur aktarılmalı');
+        assert.strictEqual(importedV1Slot.frame.opacity, 0.82, 'Opaklık aktarılmalı');
+        assert.strictEqual(importedV1Slot.frame.temperature, undefined, 'Desteklenmeyen efekt slot verisine aktarılmamalı');
+        assert.strictEqual(importedV1Slot.frame.shadow.color, '#4B3828', 'Gölge rengi aktarılmalı');
+        assert.strictEqual(importedV1Slot.frame.shadow.offsetX, 5, 'Gölge X ofseti aktarılmalı');
+        const importedPolygon = importedV1.layers.find(layer => layer.type === 'foreground_polygon');
+        assert(importedPolygon && importedPolygon.geometry.closed, 'Foreground poligonu mevcut kapalı poligon yapısına aktarılmalı');
+        assert.deepStrictEqual(importedPolygon.geometry.points[0], { x: 400, y: 980 }, 'Poligon normalize koordinatları tuvale çevrilmeli');
+
+        await page.locator('.ms-layer').filter({ hasText: 'Ön Hero' }).click();
+        assert(await page.locator('#msPerspectiveToggle').isChecked(), 'İçe aktarılan slot perspektif aracıyla düzenlenebilir olmalı');
+        await controlNumber('blur').fill('7'); await controlNumber('blur').press('Tab');
+        assert.strictEqual(await controlNumber('blur').inputValue(), '7', 'İçe aktarılan slot mevcut ayar panelinden değiştirilebilmeli');
+        await page.locator('#msResetPerspectiveBtn').click();
+
+        await page.locator('#msJsonImportBtn').click();
+        await page.locator('#msJsonInput').fill(slotImportDocument([importedSlot('slot_01')]));
+        await page.locator('#msJsonValidateBtn').click();
+        await page.locator('#msJsonCreateBtn').click();
+        await page.getByText(/1 slot JSON’dan oluşturuldu/).waitFor();
+        await page.locator('#msSaveBtn').click();
+        await page.getByText(/Şablon v2 olarak kaydedildi/).waitFor();
+        const duplicateSaved = db.templates.find(template => template.name === 'Test JSON Import Template');
+        const duplicateIds = duplicateSaved.document.layers.filter(layer => layer.type === 'product_slot').map(layer => layer.id);
+        assert.strictEqual(new Set(duplicateIds).size, duplicateIds.length, 'Mevcut ID ile çakışan slot için benzersiz ID üretilmeli');
+        const editedImportedSlot = duplicateSaved.document.layers.find(layer => layer.id === 'slot_01');
+        assert.strictEqual(editedImportedSlot.frame.blur, 7, 'İçe aktarılan slotun ayar paneli değişikliği snapshotta korunmalı');
+        assert.deepStrictEqual(editedImportedSlot.frame.perspective.corners[0], { x: 400, y: 360 }, 'İçe aktarılan slot mevcut perspektif aracıyla düzenlenebilmeli');
+
+        await page.locator('[data-view="templates"]').click();
+        await page.locator('#msNewTemplateBtn').click();
+        const nineSlots = Array.from({ length: 9 }, (_, index) => {
+            const slot = importedSlot(`json_slot_${index + 1}`, index);
+            slot.foregroundPolygons = [];
+            slot.depthOrder = 9 - index;
+            return slot;
+        });
+        await page.locator('#msJsonImportBtn').click();
+        await page.locator('#msJsonInput').fill(slotImportDocument(nineSlots));
+        await page.locator('#msJsonValidateBtn').click();
+        assert.match(await page.locator('#msJsonValidation').textContent(), /9 slot bulundu/);
+        await page.locator('#msJsonCreateBtn').click();
+        await page.getByText(/9 slot JSON’dan oluşturuldu/).waitFor();
+        assert.strictEqual(await page.locator('.ms-layer').filter({ hasText: /JSON Slot|Ön Hero/ }).count(), 9, 'Dokuz slotlu JSON dokuz mevcut slot katmanı oluşturmalı');
+        await page.locator('#msEditorName').fill('Test JSON Nine Slots');
+        await page.locator('#msEditorName').press('Tab');
+        await page.locator('#msSaveBtn').click();
+        await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
+        const nineSaved = db.templates.find(template => template.name === 'Test JSON Nine Slots');
+        assert.strictEqual(nineSaved.slot_count, 9, 'Dokuz içe aktarılan slot şablon snapshotına kaydedilmeli');
+        assert.strictEqual(nineSaved.document.layers.filter(layer => layer.type === 'product_slot')[0].name, 'JSON Slot 9', 'depthOrder katman sırasına aktarılmalı');
+        await page.locator('[data-view="templates"]').click();
+        await page.locator('.ms-template-card').filter({ hasText: 'Test JSON Nine Slots' }).getByRole('button', { name: 'Aç/Düzenle' }).click();
+        await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 9);
+        assert.strictEqual(await page.locator('.ms-layer').count(), 9, 'Şablon yeniden açılınca JSON slotları korunmalı');
 
         await page.locator('#tabAiNew').click();
         assert(await page.locator('#aiNewSection').isVisible(), 'Yeni Görsel Üret görünür olmalı');

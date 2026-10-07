@@ -337,6 +337,25 @@
 .ms-control-inputs input[type="color"] { width: 48px; height: 32px; padding: 2px; }
 .ms-control-reset { min-height: 28px; padding: 4px 6px; border: 0; border-radius: 4px; background: #edf0f3; color: #52616d; cursor: pointer; font-size: 9px; font-weight: 700; }
 
+.ms-json-modal { position: fixed; z-index: 10020; inset: 0; display: grid; place-items: center; padding: 20px; box-sizing: border-box; background: rgba(20,28,35,.72); }
+.ms-json-modal[hidden] { display: none; }
+.ms-json-dialog { display: flex; flex-direction: column; width: min(760px,96vw); max-height: min(860px,94vh); overflow: hidden; border-radius: 10px; background: #fff; box-shadow: 0 24px 70px rgba(0,0,0,.4); }
+.ms-json-head,.ms-json-actions { display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: #f7f9fb; }
+.ms-json-head { justify-content: space-between; border-bottom: 1px solid var(--ms-border); }
+.ms-json-head strong,.ms-json-head small { display: block; }
+.ms-json-head small { margin-top: 3px; color: var(--ms-muted); font-size: 11px; }
+.ms-json-body { min-height: 0; padding: 14px; overflow-y: auto; }
+.ms-json-body > label { display: block; margin-bottom: 6px; color: #405463; font-size: 12px; font-weight: 800; }
+.ms-json-body textarea { width: 100%; min-height: 300px; padding: 10px; box-sizing: border-box; border: 1px solid var(--ms-border); border-radius: 7px; resize: vertical; font: 12px/1.45 Consolas,Monaco,monospace; }
+.ms-json-validation { margin-top: 10px; padding: 10px; border: 1px solid var(--ms-border); border-radius: 7px; color: var(--ms-muted); font-size: 11px; }
+.ms-json-summary { display: flex; flex-wrap: wrap; gap: 10px; color: #405463; }
+.ms-json-summary .is-valid { color: #16713a; font-weight: 800; }
+.ms-json-summary .is-invalid,.ms-json-errors { color: #a12a2a; }
+.ms-json-errors,.ms-json-warnings ul { margin: 8px 0 0; padding-left: 18px; }
+.ms-json-warnings { margin-top: 9px; padding-top: 9px; border-top: 1px solid #e6dcae; color: #745c00; }
+.ms-json-actions { border-top: 1px solid var(--ms-border); }
+.ms-json-actions > span { flex: 1; }
+
 @media (max-width: 1050px) {
     .ms-layout { grid-template-columns: 190px minmax(320px, 1fr); }
     .ms-layout.is-drawer-closed { grid-template-columns: minmax(320px, 1fr); }
@@ -350,6 +369,12 @@
 }
 
 @media (max-width: 760px) {
+    .ms-json-modal { padding: 8px; }
+    .ms-json-dialog { max-height: 96vh; }
+    .ms-json-body textarea { min-height: 220px; }
+    .ms-json-actions { align-items: stretch; flex-direction: column; }
+    .ms-json-actions > span { display: none; }
+    .ms-json-actions .ms-btn { width: 100%; }
     .ms-layout { display: flex; flex-direction: column; }
     .ms-layout.is-drawer-closed { display: block; }
     .ms-layout > .ms-panel { width: 100%; }
