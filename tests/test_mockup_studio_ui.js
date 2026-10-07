@@ -123,6 +123,10 @@ async function mockApi(route) {
         if (body.action === 'rename_slot_preset') {
             const preset = db.presets.find(item => item.id === body.id); preset.name = body.name; return json(route, { preset });
         }
+        if (body.action === 'delete_outputs') {
+            body.ids.forEach(id => { const output = db.outputs.find(item => item.id === id); if (output) output.deleted_at = now(); });
+            return json(route, { success: true, deleted_ids: body.ids, soft_deleted: true });
+        }
     }
     if (method === 'DELETE' && url.searchParams.get('resource') === 'product') {
         const id = url.searchParams.get('id');
@@ -401,6 +405,16 @@ async function mockStorage(route) {
         const zipBytes = fs.readFileSync(await zipDownload.path());
         assert.strictEqual((zipBytes.toString('latin1').match(/PK\x03\x04/g) || []).length, 10, 'ZIP içinde 10 PNG dosya girdisi bulunmalı');
         await page.getByText('10 çıktı indirildi.').waitFor();
+        await page.locator('#msClearOutputSelection').click();
+        await page.locator('.ms-output-check input').nth(0).check();
+        await page.locator('.ms-output-check input').nth(1).check();
+        await page.locator('.ms-output-check input').nth(2).check();
+        page.once('dialog', dialog => dialog.accept());
+        await page.locator('#msDeleteSelected').click();
+        await page.getByText('3 çıktı yumuşak silindi. Şablonlar ve ürünler korundu.').waitFor();
+        assert.strictEqual(await page.locator('.ms-output-card').count(), 7, 'Toplu silinen 3 çıktı listeden hemen kalkmalı');
+        assert.strictEqual(db.outputs.filter(output => !output.deleted_at).length, 7, 'Yalnız seçilen çıktı kayıtları yumuşak silinmeli');
+        assert.strictEqual(db.templates.length, 3, 'Toplu çıktı silme şablonları etkilememeli');
 
         await page.locator('[data-view="templates"]').click();
         await page.locator('#msNewTemplateBtn').click();
@@ -425,6 +439,35 @@ async function mockStorage(route) {
         await page.locator('#msApplyPresetBtn').click();
         await page.getByText(/Test 3x3 \+ Hero: 10 slot uygulandı/).waitFor();
         assert.strictEqual(await page.locator('.ms-layer').filter({ hasText: /Slot \d/ }).count(), 10, 'Sayfa yenilendikten sonra özel dizilim tekrar uygulanmalı');
+        const multiSlots = page.locator('.ms-layer').filter({ hasText: /Slot \d/ });
+        await multiSlots.nth(0).click();
+        for (let index = 1; index < 6; index += 1) await multiSlots.nth(index).click({ modifiers: ['Control'] });
+        await page.getByText('Seçili 6 Slot').waitFor();
+        const bulkBlur = page.locator('[data-bulk-key="blur"][type="number"]');
+        await bulkBlur.fill('4'); await bulkBlur.press('Tab');
+        await page.locator('#msBulkShadowToggle').check();
+        await page.locator('[data-align="distributeX"]').click();
+        await page.locator('#msToggleGrid').click();
+        await page.locator('#msBulkSnap').click();
+        const groupCanvas = page.locator('#mockupCanvasHost canvas').last();
+        const groupBox = await groupCanvas.boundingBox();
+        await page.mouse.move(groupBox.x + groupBox.width * .5, groupBox.y + groupBox.height * .56);
+        await page.mouse.down(); await page.mouse.move(groupBox.x + groupBox.width * .53, groupBox.y + groupBox.height * .58, { steps: 5 }); await page.mouse.up();
+        await page.waitForTimeout(200);
+        await page.locator('#msToggleGuides').click();
+        assert.match(await page.locator('#msToggleGuides').textContent(), /Kapalı/, 'Düzenleme çizgileri kapanabilmeli');
+        await page.locator('#msToggleGuides').click();
+        assert.match(await page.locator('#msToggleGuides').textContent(), /Açık/, 'Düzenleme çizgileri tekrar açılabilmeli');
+        await page.locator('#msToggleDrawer').click();
+        assert(await page.locator('.ms-layout').evaluate(element => element.classList.contains('is-drawer-closed')), 'Varlıklar ve katmanlar drawer olarak kapanabilmeli');
+        assert(await page.locator('.ms-canvas-panel').isVisible(), 'Drawer kapalıyken tuval görünür kalmalı');
+        await page.locator('#msToggleDrawer').click();
+        await page.locator('#msEditorName').fill('Test Multi Edit Template');
+        await page.locator('#msEditorName').press('Tab');
+        await page.locator('#msSaveBtn').click();
+        await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
+        const multiSaved = db.templates.find(template => template.name === 'Test Multi Edit Template');
+        assert.strictEqual(multiSaved.document.layers.filter(layer => layer.type === 'product_slot' && layer.frame.blur === 4 && layer.frame.shadow.enabled).length, 6, 'Toplu blur ve gölge seçili slotların tamamına kaydedilmeli');
 
         await page.locator('#tabAiNew').click();
         assert(await page.locator('#aiNewSection').isVisible(), 'Yeni Görsel Üret görünür olmalı');

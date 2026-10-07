@@ -39,6 +39,11 @@
         createVersions: [],
         createVersionId: null,
         createProductId: null,
+        guidesVisible: true,
+        gridVisible: false,
+        gridSize: 25,
+        drawerOpen: true,
+        groupDrag: null,
         busy: false
     };
 
@@ -370,10 +375,14 @@
                     <button id="msUndoBtn" class="ms-btn">↶ Geri Al</button>
                     <button id="msRedoBtn" class="ms-btn">↷ Yinele</button>
                     <button id="msSaveBtn" class="ms-btn ms-btn-primary">Sürüm Kaydet</button>
+                    <button id="msToggleDrawer" class="ms-btn">☰ Varlıklar ve Katmanlar</button>
+                    <button id="msToggleGuides" class="ms-btn">Düzenleme Çizgileri: Açık</button>
+                    <button id="msToggleGrid" class="ms-btn">Izgara: Kapalı</button>
+                    <select id="msGridSize" class="ms-select" aria-label="Izgara boyutu"><option value="10">10 px</option><option value="25" selected>25 px</option><option value="50">50 px</option></select>
                     <span id="msVersionBadge" class="ms-version-badge">Kaydedilmedi</span>
                 </div>
                 <div class="ms-layout">
-                    <aside class="ms-panel">
+                    <aside id="msAssetsDrawer" class="ms-panel ms-assets-drawer">
                         <div class="ms-panel-title">Varlıklar ve Katmanlar</div>
                         <div class="ms-panel-body">
                             <div class="ms-section ms-section-first">
@@ -447,6 +456,10 @@
         document.getElementById('msUndoBtn').addEventListener('click', undo);
         document.getElementById('msRedoBtn').addEventListener('click', redo);
         document.getElementById('msSaveBtn').addEventListener('click', saveEditor);
+        document.getElementById('msToggleDrawer').addEventListener('click', toggleAssetsDrawer);
+        document.getElementById('msToggleGuides').addEventListener('click', toggleGuides);
+        document.getElementById('msToggleGrid').addEventListener('click', toggleGrid);
+        document.getElementById('msGridSize').addEventListener('change', (event) => { state.gridSize=Number(event.target.value)||25; renderSelectionMarkers(); });
         document.getElementById('msApplyPresetBtn').addEventListener('click', applySelectedPreset);
         document.getElementById('msSavePresetBtn').addEventListener('click', saveCurrentSlotPreset);
         document.getElementById('msSceneInput').addEventListener('change', (e) => editorUpload(e, 'scene_background'));
@@ -727,12 +740,21 @@
         if (!name) return;
         name.value = state.editor.name;
         document.getElementById('msVersionBadge').textContent = state.editor.persisted ? 'Kayıtlı v' + state.editor.currentVersion : 'Kaydedilmedi';
+        const layout=document.querySelector('.ms-layout'); if(layout)layout.classList.toggle('is-drawer-closed',!state.drawerOpen);
+        const drawerButton=document.getElementById('msToggleDrawer'); if(drawerButton)drawerButton.textContent=state.drawerOpen?'☰ Varlıklar ve Katmanlar':'☰ Paneli Aç';
+        const guidesButton=document.getElementById('msToggleGuides'); if(guidesButton)guidesButton.textContent=`Düzenleme Çizgileri: ${state.guidesVisible?'Açık':'Kapalı'}`;
+        const gridButton=document.getElementById('msToggleGrid'); if(gridButton)gridButton.textContent=`Izgara: ${state.gridVisible?'Açık':'Kapalı'}`;
+        const gridSize=document.getElementById('msGridSize'); if(gridSize)gridSize.value=String(state.gridSize);
         renderEditorAssets();
         renderLayers();
         renderInspector();
         renderPresetSelect();
         updateHistoryButtons();
     }
+
+    function toggleAssetsDrawer(){state.drawerOpen=!state.drawerOpen;renderEditor();window.setTimeout(resizeStage,0);}
+    function toggleGuides(){state.guidesVisible=!state.guidesVisible;renderEditor();renderSelectionMarkers();}
+    function toggleGrid(){state.gridVisible=!state.gridVisible;renderEditor();renderSelectionMarkers();}
 
     function editorSnapshot() {
         return JSON.stringify({ name: state.editor.name, document: state.editor.document });
@@ -1056,10 +1078,9 @@
         const before = editorSnapshot(); layer.name = name.trim(); recordHistory(before); renderLayers();
     }
     function toggleLayer(layer, key) {
-        const before = editorSnapshot(); layer[key] = !layer[key]; recordHistory(before);
-        const node = state.nodes.get(layer.id);
-        if (node) { node.visible(layer.visible); node.draggable(!layer.locked && layer.type !== 'scene_background' && layer.type !== 'foreground_polygon' && !(layer.type === 'product_slot' && layer.frame.perspective && layer.frame.perspective.enabled)); }
-        selectLayer(layer.id); renderLayers(); state.stage.batchDraw();
+        const targets=layer.type==='product_slot'&&state.selectedLayerIds.has(layer.id)?selectedSlotLayers():[layer];
+        const before = editorSnapshot(); targets.forEach((item)=>{item[key]=!layer[key];const node=state.nodes.get(item.id);if(node){node.visible(item.visible);node.draggable(!item.locked&&item.type!=='scene_background'&&item.type!=='foreground_polygon'&&!(item.type==='product_slot'&&item.frame.perspective&&item.frame.perspective.enabled));}});recordHistory(before);
+        selectLayer(layer.id,false,true); renderLayers(); state.stage.batchDraw();
     }
     function reorderLayer(sourceId, targetId) {
         if (!sourceId || sourceId === targetId) return;
@@ -1121,12 +1142,14 @@
         if (!asset && layer.type !== 'product_slot') return null;
         try {
             const image = asset ? await loadImage(assetUrl(asset.storagePath)) : null;
-            const node = image ? makeImageNode(image, layer, layer.frame) : new Konva.Rect({ x: layer.frame.x, y: layer.frame.y, width: layer.frame.width, height: layer.frame.height, offsetX: layer.frame.width/2, offsetY: layer.frame.height/2, rotation: layer.frame.rotation||0, fill:'rgba(0,0,0,0)', draggable:!layer.locked });
+            const node = image ? makeImageNode(image, layer, layer.frame) : new Konva.Rect({ x: layer.frame.x, y: layer.frame.y, width: layer.frame.width, height: layer.frame.height, offsetX: layer.frame.width/2, offsetY: layer.frame.height/2, rotation: layer.frame.rotation||0, fill:'rgba(0,0,0,0.01)', draggable:!layer.locked });
             node.setAttr('mockupLayerId', layer.id);
+            node.on('mousedown touchstart', (event) => { if(layer.type==='product_slot'&&!state.selectedLayerIds.has(layer.id))selectLayer(layer.id,Boolean(event.evt&&(event.evt.ctrlKey||event.evt.metaKey))); });
             node.on('click tap', (event) => { event.cancelBubble = true; selectLayer(layer.id, Boolean(event.evt && (event.evt.ctrlKey || event.evt.metaKey))); });
-            node.on('dragstart', () => node.setAttr('historyBefore', editorSnapshot()));
-            node.on('dragmove transform', renderSelectionMarkers);
-            node.on('dragend', () => { updateFrameFromNode(layer, node, false); recordHistory(node.getAttr('historyBefore')); renderInspector(); renderSelectionMarkers(); });
+            node.on('dragstart', () => beginGroupDrag(layer,node));
+            node.on('dragmove', () => moveGroupDrag(layer,node));
+            node.on('dragend', () => endGroupDrag(layer,node));
+            node.on('transform', renderSelectionMarkers);
             node.on('transformstart', () => node.setAttr('historyBefore', editorSnapshot()));
             node.on('transformend', () => { updateFrameFromNode(layer, node, true); recordHistory(node.getAttr('historyBefore')); renderInspector(); renderSelectionMarkers(); });
             state.contentLayer.add(node); state.nodes.set(layer.id, node); return node;
@@ -1249,6 +1272,9 @@
         state.selectionMarkers.clear();
         state.perspectiveHandles.forEach((marker) => marker.destroy()); state.perspectiveHandles.clear();
         state.polygonHandles.forEach((marker) => marker.destroy()); state.polygonHandles.clear();
+        state.transformer.visible(state.guidesVisible);
+        if (!state.guidesVisible) { state.uiLayer.batchDraw(); return; }
+        renderEditorGrid();
         state.editor.document.layers.forEach((layer) => {
             if (layer.type !== 'product_slot' || layer.visible === false) return;
             const node = state.nodes.get(layer.id);
@@ -1275,6 +1301,34 @@
         if (selectedPolygon && state.nodes.get(selectedPolygon.id)) renderPolygonControls(selectedPolygon);
         state.transformer.moveToTop(); state.uiLayer.batchDraw();
     }
+
+    function renderEditorGrid() {
+        if (!state.gridVisible) return;
+        const group=new Konva.Group({listening:false,name:'ms-editor-grid'}),step=Math.max(10,Number(state.gridSize)||25);
+        for(let value=0;value<=SIZE;value+=step){group.add(new Konva.Line({points:[value,0,value,SIZE],stroke:'#6c7c89',strokeWidth:value%100===0?2:1,opacity:value%100===0?.22:.1}));group.add(new Konva.Line({points:[0,value,SIZE,value],stroke:'#6c7c89',strokeWidth:value%100===0?2:1,opacity:value%100===0?.22:.1}));}
+        state.uiLayer.add(group);state.selectionMarkers.set('grid',group);group.moveToBottom();
+    }
+
+    function selectedSlotLayers(){return state.editor.document.layers.filter((layer)=>layer.type==='product_slot'&&state.selectedLayerIds.has(layer.id));}
+    function translateSlot(layer,dx,dy){layer.frame.x+=dx;layer.frame.y+=dy;if(layer.frame.perspective&&layer.frame.perspective.corners)layer.frame.perspective.corners.forEach((point)=>{point.x+=dx;point.y+=dy;});const node=state.nodes.get(layer.id);if(layer.frame.perspective&&layer.frame.perspective.enabled)refreshSpecialNode(layer);else if(node)node.position({x:layer.frame.x,y:layer.frame.y});}
+    function beginGroupDrag(layer,node){
+        if(layer.type!=='product_slot'){node.setAttr('historyBefore',editorSnapshot());return;}
+        if(!state.selectedLayerIds.has(layer.id))state.selectedLayerIds=new Set([layer.id]);
+        const slots=selectedSlotLayers();state.groupDrag={before:editorSnapshot(),sourceId:layer.id,startX:node.x(),startY:node.y(),slots:slots.map((item)=>({id:item.id,x:item.frame.x,y:item.frame.y,corners:item.frame.perspective&&item.frame.perspective.corners?clone(item.frame.perspective.corners):null}))};
+    }
+    function moveGroupDrag(layer,node){
+        const group=state.groupDrag;if(!group||group.sourceId!==layer.id)return;
+        let dx=node.x()-group.startX,dy=node.y()-group.startY;
+        if(state.gridVisible){const step=Math.max(10,Number(state.gridSize)||25);dx=Math.round((group.slots.find((item)=>item.id===layer.id).x+dx)/step)*step-group.slots.find((item)=>item.id===layer.id).x;dy=Math.round((group.slots.find((item)=>item.id===layer.id).y+dy)/step)*step-group.slots.find((item)=>item.id===layer.id).y;}
+        group.slots.forEach((origin)=>{const item=state.editor.document.layers.find((candidate)=>candidate.id===origin.id);if(!item)return;item.frame.x=origin.x+dx;item.frame.y=origin.y+dy;if(origin.corners)item.frame.perspective.corners=origin.corners.map((point)=>({x:point.x+dx,y:point.y+dy}));const target=state.nodes.get(item.id);if(item.frame.perspective&&item.frame.perspective.enabled)refreshSpecialNode(item);else if(target)target.position({x:item.frame.x,y:item.frame.y});});
+        renderSelectionMarkers();renderSmartGuides(selectedSlotLayers());state.uiLayer.batchDraw();
+    }
+    function endGroupDrag(layer,node){
+        const group=state.groupDrag;if(group&&group.sourceId===layer.id){recordHistory(group.before);const count=group.slots.length;state.groupDrag=null;if(count>1)setStatus(`${count} slot birlikte taşındı.`,false);}else{updateFrameFromNode(layer,node,false);recordHistory(node.getAttr('historyBefore'));}
+        renderInspector();renderSelectionMarkers();
+    }
+    function renderSmartGuides(moving){
+        if(!state.guidesVisible||!moving.length)return;const others=state.editor.document.layers.filter((layer)=>layer.type==='product_slot'&&!state.selectedLayerIds.has(layer.id)&&layer.visible!==false),first=moving[0];if(!others.length||!first)return;const f=first.frame,threshold=12;for(const other of others){const o=other.frame;for(const [value,target,vertical] of [[f.x,o.x,true],[f.y,o.y,false],[f.x-f.width/2,o.x-o.width/2,true],[f.y-f.height/2,o.y-o.height/2,false]]){if(Math.abs(value-target)>threshold)continue;const line=new Konva.Line({points:vertical?[target,0,target,SIZE]:[0,target,SIZE,target],stroke:'#2d9cdb',strokeWidth:2,dash:[8,6],listening:false});state.uiLayer.add(line);state.selectionMarkers.set('guide-'+uid(),line);}}}
     function selectLayer(id, toggle, preserveSet) {
         if (!preserveSet) {
             const clicked = state.editor.document.layers.find((layer) => layer.id === id);
@@ -1296,6 +1350,7 @@
 
     function renderInspector() {
         const root = document.getElementById('msInspector'); if (!root || !state.editor) return;
+        const multiSlots=selectedSlotLayers();if(multiSlots.length>1){renderMultiInspector(root,multiSlots);return;}
         const layer = state.editor.document.layers.find((l) => l.id === state.selectedLayerId);
         if (!layer) { root.innerHTML = '<div class="ms-empty">Bir katman seçin.</div>'; return; }
         const f = layer.frame;
@@ -1333,6 +1388,19 @@
         const polygonReset = document.getElementById('msPolygonResetBtn'); if (polygonReset) polygonReset.addEventListener('click', () => resetPolygon(layer));
         document.getElementById('msRemoveLayer').addEventListener('click', () => removeLayer(layer));
     }
+    function bulkRangeField(label,key,value,min,max,suffix){const step=controlStep(key);return `<div class="ms-field"><label><span>${label}</span><span class="ms-field-value">${Math.round(value*10)/10}${suffix}</span></label><div class="ms-control-inputs"><input data-bulk-key="${key}" data-suffix="${suffix}" type="range" step="${step}" min="${min}" max="${max}" value="${value}"><input data-bulk-key="${key}" data-suffix="${suffix}" class="ms-control-number" type="number" step="${step}" min="${min}" max="${max}" value="${Math.round(value*10)/10}"><button type="button" class="ms-control-reset" data-bulk-reset="${key}">Sıfırla</button></div></div>`;}
+    function renderMultiInspector(root,slots){const sample=slots[0].frame;root.innerHTML=`<h4>Seçili ${slots.length} Slot</h4><div class="ms-section ms-section-first"><h4>TOPLU GÖRSEL AYARLAR</h4>${bulkRangeField('Opaklık','opacity',Math.round((sample.opacity==null?1:sample.opacity)*100),0,100,'%')}${bulkRangeField('Blur','blur',sample.blur||0,0,80,' px')}${bulkRangeField('Parlaklık','brightness',sample.brightness||0,-100,100,'%')}${bulkRangeField('Kontrast','contrast',sample.contrast||0,-100,100,'%')}${bulkRangeField('Doygunluk','saturation',sample.saturation||0,-100,100,'%')}<label class="ms-check"><input id="msBulkShadowToggle" type="checkbox" ${slots.every((layer)=>layer.frame.shadow&&layer.frame.shadow.enabled)?'checked':''}> Tümünde gölgeyi aç</label>${bulkRangeField('Gölge blur','shadowBlur',sample.shadow.blur||0,0,120,' px')}${bulkRangeField('Gölge opaklığı','shadowOpacity',Math.round((sample.shadow.opacity==null?.35:sample.shadow.opacity)*100),0,100,'%')}<label class="ms-check"><input id="msBulkVisible" type="checkbox" ${slots.every((layer)=>layer.visible)?'checked':''}> Tümünü görünür yap</label><label class="ms-check"><input id="msBulkLocked" type="checkbox" ${slots.every((layer)=>layer.locked)?'checked':''}> Tümünü kilitle</label></div><div class="ms-section"><h4>HİZALAMA VE DİZİLİM</h4><div class="ms-align-grid"><button data-align="left" class="ms-btn">Sola</button><button data-align="centerX" class="ms-btn">Yatay Orta</button><button data-align="right" class="ms-btn">Sağa</button><button data-align="top" class="ms-btn">Üste</button><button data-align="centerY" class="ms-btn">Dikey Orta</button><button data-align="bottom" class="ms-btn">Alta</button><button data-align="distributeX" class="ms-btn">Yatay Dağıt</button><button data-align="distributeY" class="ms-btn">Dikey Dağıt</button><button data-align="width" class="ms-btn">Aynı Genişlik</button><button data-align="height" class="ms-btn">Aynı Yükseklik</button><button data-align="front" class="ms-btn">Öne Al</button><button data-align="back" class="ms-btn">Arkaya Gönder</button></div><button id="msBulkSnap" class="ms-btn ms-full">Izgaraya Hizala</button></div>`;
+        root.querySelectorAll('[data-bulk-key]').forEach(bindBulkInput);root.querySelectorAll('[data-bulk-reset]').forEach((button)=>button.addEventListener('click',()=>applyBulkControl(button.dataset.bulkReset,CONTROL_DEFAULTS[button.dataset.bulkReset]??0)));document.getElementById('msBulkShadowToggle').addEventListener('change',(event)=>applyBulkFlag('shadow',event.target.checked));document.getElementById('msBulkVisible').addEventListener('change',(event)=>applyBulkFlag('visible',event.target.checked));document.getElementById('msBulkLocked').addEventListener('change',(event)=>applyBulkFlag('locked',event.target.checked));root.querySelectorAll('[data-align]').forEach((button)=>button.addEventListener('click',()=>alignSelectedSlots(button.dataset.align)));document.getElementById('msBulkSnap').addEventListener('click',snapSelectedSlots);
+    }
+    function syncBulkInputs(key,value){const root=document.getElementById('msInspector');if(!root)return;root.querySelectorAll(`[data-bulk-key="${key}"]`).forEach((input)=>{if(document.activeElement!==input||Number(input.value)!==value)input.value=Math.round(value*10)/10;});const label=root.querySelector(`[data-bulk-key="${key}"]`)?.closest('.ms-field')?.querySelector('.ms-field-value');if(label)label.textContent=Math.round(value*10)/10+(root.querySelector(`[data-bulk-key="${key}"]`)?.dataset.suffix||'');}
+    function applyBulkControl(key,value){const slots=selectedSlotLayers();if(!slots.length)return;const before=editorSnapshot();slots.forEach((layer)=>{setFrameControlValue(layer,key,value);updateNode(layer);});recordHistory(before);syncBulkInputs(key,value);renderInspector();}
+    function bindBulkInput(input){let before=null;const remember=()=>{if(!before)before=editorSnapshot();};input.addEventListener('pointerdown',remember);input.addEventListener('focus',remember);input.addEventListener('keydown',(event)=>{if(input.type==='range'&&event.shiftKey&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();remember();const direction=['ArrowRight','ArrowUp'].includes(event.key)?1:-1;input.value=String(Math.max(Number(input.min),Math.min(Number(input.max),Number(input.value)+direction*.1)));input.dispatchEvent(new Event('input',{bubbles:true}));}});input.addEventListener('input',()=>{const key=input.dataset.bulkKey,value=Number(input.value);selectedSlotLayers().forEach((layer)=>{setFrameControlValue(layer,key,value);updateNode(layer);});syncBulkInputs(key,value);});input.addEventListener('change',()=>{recordHistory(before);before=null;});}
+    function applyBulkFlag(key,value){const slots=selectedSlotLayers(),before=editorSnapshot();slots.forEach((layer)=>{if(key==='shadow'){layer.frame.shadow=normalizeShadow(layer.frame.shadow);layer.frame.shadow.enabled=value;}else layer[key]=value;const node=state.nodes.get(layer.id);if(node){node.visible(layer.visible);node.draggable(!layer.locked&&!(layer.frame.perspective&&layer.frame.perspective.enabled));}updateNode(layer);});recordHistory(before);renderInspector();renderLayers();}
+    function slotEdges(layer){const f=layer.frame;return {left:f.x-f.width/2,right:f.x+f.width/2,top:f.y-f.height/2,bottom:f.y+f.height/2,cx:f.x,cy:f.y};}
+    function alignSelectedSlots(action){const slots=selectedSlotLayers();if(slots.length<2)return;const before=editorSnapshot(),edges=slots.map(slotEdges);if(action==='front'||action==='back'){moveSelectedLayers(action);return;}if(action==='distributeX'||action==='distributeY'){const axis=action==='distributeX'?'x':'y',ordered=slots.slice().sort((a,b)=>a.frame[axis]-b.frame[axis]),start=ordered[0].frame[axis],end=ordered.at(-1).frame[axis],gap=(end-start)/(ordered.length-1);ordered.forEach((layer,index)=>{const delta=start+gap*index-layer.frame[axis];translateSlot(layer,axis==='x'?delta:0,axis==='y'?delta:0);});}else if(action==='width'||action==='height'){const key=action==='width'?'width':'height',target=slots[0].frame[key];slots.slice(1).forEach((layer)=>resizeSlot(layer,key,target));}else{const value=action==='left'?Math.min(...edges.map((edge)=>edge.left)):action==='right'?Math.max(...edges.map((edge)=>edge.right)):action==='top'?Math.min(...edges.map((edge)=>edge.top)):action==='bottom'?Math.max(...edges.map((edge)=>edge.bottom)):action==='centerX'?(Math.min(...edges.map((edge)=>edge.left))+Math.max(...edges.map((edge)=>edge.right)))/2:(Math.min(...edges.map((edge)=>edge.top))+Math.max(...edges.map((edge)=>edge.bottom)))/2;slots.forEach((layer)=>{const target=action==='left'?value+layer.frame.width/2:action==='right'?value-layer.frame.width/2:action==='top'?value+layer.frame.height/2:action==='bottom'?value-layer.frame.height/2:value;translateSlot(layer,action==='left'||action==='right'||action==='centerX'?target-layer.frame.x:0,action==='top'||action==='bottom'||action==='centerY'?target-layer.frame.y:0);});}recordHistory(before);syncOrder();renderInspector();}
+    function resizeSlot(layer,key,target){const current=layer.frame[key];if(current===target)return;const ratio=target/current;layer.frame[key]=target;if(layer.frame.perspective&&layer.frame.perspective.corners){const center={x:layer.frame.x,y:layer.frame.y};layer.frame.perspective.corners.forEach((point)=>{if(key==='width')point.x=center.x+(point.x-center.x)*ratio;else point.y=center.y+(point.y-center.y)*ratio;});refreshSpecialNode(layer);}else updateNode(layer);}
+    function snapSelectedSlots(){const slots=selectedSlotLayers();if(!slots.length)return;const before=editorSnapshot(),step=Math.max(10,Number(state.gridSize)||25);slots.forEach((layer)=>translateSlot(layer,Math.round(layer.frame.x/step)*step-layer.frame.x,Math.round(layer.frame.y/step)*step-layer.frame.y));recordHistory(before);renderSelectionMarkers();renderInspector();}
+    function moveSelectedLayers(direction){const selected=selectedSlotLayers();if(!selected.length)return;const before=editorSnapshot(),layers=state.editor.document.layers,ordered=layers.filter((layer)=>layer.type==='product_slot'),chosen=ordered.filter((layer)=>state.selectedLayerIds.has(layer.id)),other=ordered.filter((layer)=>!state.selectedLayerIds.has(layer.id)),next=direction==='front'?[...other,...chosen]:[...chosen,...other];let index=0;state.editor.document.layers=layers.map((layer)=>layer.type==='product_slot'?next[index++]:layer);recordHistory(before);syncOrder();renderLayers();renderInspector();}
     async function replaceLayerNode(layer) {
         const oldNode = state.nodes.get(layer.id); if (oldNode) oldNode.destroy(); state.nodes.delete(layer.id);
         await createNode(layer); syncOrder(); selectLayer(layer.id); renderEditor();
@@ -1609,8 +1677,8 @@
         const cached=state.outputUrlCache.get(output.export_path);if(!refresh&&cached&&cached.expires>Date.now())return cached.url;
         const data=await api(API+'?resource=asset_url&path='+encodeURIComponent(output.export_path));state.outputUrlCache.set(output.export_path,{url:data.url,expires:Date.now()+240000});return data.url;
     }
-    function renderOutputs(){const root=document.getElementById('msViewOutputs');if(!root)return;const available=new Set(state.outputs.map((output)=>output.id));state.selectedOutputIds=new Set([...state.selectedOutputIds].filter((id)=>available.has(id)));root.innerHTML=`<div class="ms-view-header"><div><h3>Çıktılar</h3><p>Görsele tıklayarak 2000×2000 büyük önizlemeyi açın.</p></div><span class="ms-selection-count">${state.selectedOutputIds.size} seçili</span></div><div class="ms-output-toolbar"><button id="msSelectAllOutputs" class="ms-btn">Tümünü Seç</button><button id="msClearOutputSelection" class="ms-btn">Seçimi Kaldır</button><select id="msDownloadMode" class="ms-select"><option value="zip">Tek ZIP dosyası indir</option><option value="files">Dosyaları tek tek indir</option></select><button id="msDownloadSelected" class="ms-btn ms-btn-primary" ${state.selectedOutputIds.size?'':'disabled'}>Seçilenleri İndir</button><span id="msDownloadProgress" class="ms-download-progress"></span></div><div id="msOutputGrid" class="ms-card-grid"></div>`;
-        document.getElementById('msSelectAllOutputs').addEventListener('click',()=>{state.selectedOutputIds=new Set(state.outputs.map((output)=>output.id));renderOutputs();});document.getElementById('msClearOutputSelection').addEventListener('click',()=>{state.selectedOutputIds.clear();renderOutputs();});document.getElementById('msDownloadSelected').addEventListener('click',downloadSelectedOutputs);
+    function renderOutputs(){const root=document.getElementById('msViewOutputs');if(!root)return;const available=new Set(state.outputs.map((output)=>output.id));state.selectedOutputIds=new Set([...state.selectedOutputIds].filter((id)=>available.has(id)));const selectedCount=state.selectedOutputIds.size;root.innerHTML=`<div class="ms-view-header"><div><h3>Çıktılar</h3><p>Görsele tıklayarak 2000×2000 büyük önizlemeyi açın.</p></div><span class="ms-selection-count">${selectedCount} seçili</span></div><div class="ms-output-toolbar"><button id="msSelectAllOutputs" class="ms-btn">Tümünü Seç</button><button id="msClearOutputSelection" class="ms-btn">Seçimi Kaldır</button><select id="msDownloadMode" class="ms-select"><option value="zip">Tek ZIP dosyası indir</option><option value="files">Dosyaları tek tek indir</option></select><button id="msDownloadSelected" class="ms-btn ms-btn-primary" ${selectedCount?'':'disabled'}>Seçilenleri İndir</button><button id="msDeleteSelected" class="ms-btn ms-btn-danger" ${selectedCount?'':'disabled'}>${selectedCount||0} Çıktıyı Sil</button><span id="msDownloadProgress" class="ms-download-progress"></span></div><div id="msOutputGrid" class="ms-card-grid"></div>`;
+        document.getElementById('msSelectAllOutputs').addEventListener('click',()=>{state.selectedOutputIds=new Set(state.outputs.map((output)=>output.id));renderOutputs();});document.getElementById('msClearOutputSelection').addEventListener('click',()=>{state.selectedOutputIds.clear();renderOutputs();});document.getElementById('msDownloadSelected').addEventListener('click',downloadSelectedOutputs);document.getElementById('msDeleteSelected').addEventListener('click',deleteSelectedOutputs);
         const grid=document.getElementById('msOutputGrid');if(!state.outputs.length){grid.innerHTML='<div class="ms-empty-card">Henüz kayıtlı çıktı yok.</div>';return;}state.outputs.forEach((output,index)=>{const card=document.createElement('article');card.className='ms-library-card ms-output-card'+(state.selectedOutputIds.has(output.id)?' is-selected':'');card.innerHTML=`<label class="ms-output-check"><input type="checkbox" ${state.selectedOutputIds.has(output.id)?'checked':''} aria-label="${esc(output.name)} seç"><span>✓</span></label><button class="ms-card-preview ms-output-open" aria-label="${esc(output.name)} büyük önizleme"><span class="ms-card-placeholder">2000×2000</span><img data-output-image alt="${esc(output.name)}" hidden></button><div class="ms-card-content"><h4>${esc(output.name)}</h4><p>${esc(output.template_name)} • v${output.template_version}</p><p>${esc(formatDate(output.created_at))}</p><div class="ms-card-actions"><button data-action="download" class="ms-btn ms-btn-primary ms-btn-small">İndir</button><button data-action="rename" class="ms-btn ms-btn-small">Adlandır</button><button data-action="rerun" class="ms-btn ms-btn-small">Tekrar Üret</button><button data-action="delete" class="ms-btn ms-btn-danger ms-btn-small">Sil</button></div></div>`;
             card.querySelector('.ms-output-check input').addEventListener('change',(event)=>{if(event.target.checked)state.selectedOutputIds.add(output.id);else state.selectedOutputIds.delete(output.id);renderOutputs();});card.querySelector('.ms-output-open').addEventListener('click',()=>openOutputLightbox(index));card.querySelector('[data-action="download"]').addEventListener('click',()=>downloadOutputFile(output));card.querySelector('[data-action="rename"]').addEventListener('click',()=>renameOutput(output));card.querySelector('[data-action="rerun"]').addEventListener('click',()=>rerunOutput(output));card.querySelector('[data-action="delete"]').addEventListener('click',()=>deleteOutput(output));grid.appendChild(card);getOutputUrl(output).then((url)=>{const image=card.querySelector('[data-output-image]');if(!image||!document.contains(image))return;image.src=url;image.hidden=false;card.querySelector('.ms-card-placeholder')?.remove();}).catch(()=>{});});}
     async function openOutputLightbox(index){state.lightboxIndex=(index+state.outputs.length)%state.outputs.length;const output=state.outputs[state.lightboxIndex],root=document.getElementById('msOutputLightbox');if(!output||!root)return;root.hidden=false;root.innerHTML=`<div class="ms-lightbox-dialog" role="dialog" aria-modal="true" aria-label="Çıktı önizleme"><div class="ms-lightbox-head"><div><strong>${esc(output.name)}</strong><small>2000×2000 PNG</small></div><button data-lightbox="close" class="ms-btn">✕ Kapat</button></div><div class="ms-lightbox-stage"><div class="ms-lightbox-loading">Görsel yükleniyor…</div><img alt="${esc(output.name)}" hidden></div><div class="ms-lightbox-controls"><button data-lightbox="prev" class="ms-btn">← Önceki</button><button data-lightbox="next" class="ms-btn">Sonraki →</button><label>Yakınlaştır <input id="msLightboxZoom" type="range" min="25" max="300" step="25" value="100"></label><button data-lightbox="fit" class="ms-btn">Ekrana Sığdır</button><button data-lightbox="download" class="ms-btn ms-btn-primary">İndir</button><button data-lightbox="rename" class="ms-btn">Yeniden Adlandır</button></div></div>`;
@@ -1626,6 +1694,7 @@
     async function downloadSelectedOutputs(){const selected=state.outputs.filter((output)=>state.selectedOutputIds.has(output.id));if(!selected.length)return;const mode=document.getElementById('msDownloadMode').value,used=new Map(),files=[];try{for(let index=0;index<selected.length;index++){const output=selected[index];setDownloadProgress(`${index+1}/${selected.length} hazırlanıyor…`);const blob=await fetchOutputBlob(output),base=safeName(output.name),count=(used.get(base)||0)+1;used.set(base,count);const name=base+(count>1?`-${count}`:'')+'.png';if(mode==='files')triggerDownload(blob,name);else files.push({name,data:await blob.arrayBuffer()});await new Promise((resolve)=>setTimeout(resolve,0));}if(mode==='zip')triggerDownload(makeZip(files),`mockup-ciktilari-${selected.length}.zip`);setDownloadProgress(`${selected.length} çıktı indirildi.`);}catch(error){setStatus('Toplu indirme tamamlanamadı: '+error.message,true);setDownloadProgress('');}}
     async function renameOutput(output){const name=window.prompt('Çıktının yeni adı:',output.name);if(name===null)return;if(!name.trim())return setStatus('Çıktı adı zorunludur.',true);try{await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'rename_output',id:output.id,name:name.trim()})});await loadOutputs();}catch(error){setStatus('Çıktı yeniden adlandırılamadı: '+error.message,true);}}
     async function deleteOutput(output){if(!window.confirm('“'+output.name+'” çıktısı kütüphaneden kaldırılsın mı? Dosya ilk aşamada fiziksel olarak silinmeyecektir.'))return;try{await api(API+'?resource=output&id='+encodeURIComponent(output.id),{method:'DELETE'});await loadOutputs();setStatus('Çıktı yumuşak silindi.',false);}catch(error){setStatus('Çıktı silinemedi: '+error.message,true);}}
+    async function deleteSelectedOutputs(){const ids=[...state.selectedOutputIds];if(!ids.length)return;if(!window.confirm(`${ids.length} seçili çıktı güvenli olarak kütüphaneden kaldırılsın mı? Şablonlar ve ürünler etkilenmez.`))return;setBusy(true);setDownloadProgress(`${ids.length} çıktı siliniyor…`);try{await api(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete_outputs',ids})});state.selectedOutputIds.clear();await loadOutputs();setStatus(`${ids.length} çıktı yumuşak silindi. Şablonlar ve ürünler korundu.`,false);}catch(error){setStatus('Seçilen çıktılar silinemedi: '+error.message,true);}finally{setBusy(false);setDownloadProgress('');}}
     async function rerunOutput(output){const product={id:output.product_asset_id,type:'product_box_clean',name:output.product_name||'Ürün',storagePath:output.product_path};await generateOutput({name:output.name+' Tekrar',templateId:output.template_id,templateName:output.template_name,templateVersion:output.template_version,snapshot:normalizeDocument(output.template_snapshot),product});showView('outputs');}
 
     installTabHook();

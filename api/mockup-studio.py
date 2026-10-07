@@ -149,6 +149,7 @@ class handler(BaseHTTPRequestHandler):
                 "finalize_upload": self.finalize_upload,
                 "create_output": self.create_output,
                 "rename_output": self.rename_output,
+                "delete_outputs": self.delete_outputs,
                 "save_slot_preset": self.save_slot_preset,
                 "duplicate_slot_preset": self.duplicate_slot_preset,
                 "rename_slot_preset": self.rename_slot_preset,
@@ -474,6 +475,18 @@ class handler(BaseHTTPRequestHandler):
             .eq("id", output_id).is_("deleted_at", "null").execute()
         )
         self.send_json(200, {"success": True, "output": (response.data or [None])[0]})
+
+    def delete_outputs(self, payload):
+        raw_ids = payload.get("ids")
+        if not isinstance(raw_ids, list) or not raw_ids or len(raw_ids) > 100:
+            raise ValueError("Silmek için 1–100 çıktı seçin.")
+        output_ids = [require_uuid(item, "çıktı kimliği") for item in raw_ids]
+        response = (
+            get_supabase().table("mockup_outputs")
+            .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
+            .in_("id", output_ids).is_("deleted_at", "null").execute()
+        )
+        self.send_json(200, {"success": True, "deleted_ids": [row.get("id") for row in (response.data or [])], "soft_deleted": True})
 
     @staticmethod
     def validate_preset_slots(raw_slots):

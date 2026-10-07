@@ -165,6 +165,11 @@
     gap: 14px;
     align-items: start;
 }
+.ms-layout.is-drawer-closed { grid-template-columns: minmax(360px, 1fr) 230px; }
+.ms-layout.is-drawer-closed .ms-assets-drawer { display: none; }
+.ms-assets-drawer { position: relative; z-index: 2; }
+.ms-align-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 5px; }
+.ms-align-grid .ms-btn { min-height: 30px; padding: 5px 6px; font-size: 10px; }
 
 .ms-panel {
     min-width: 0;
@@ -334,6 +339,7 @@
 
 @media (max-width: 1050px) {
     .ms-layout { grid-template-columns: 190px minmax(320px, 1fr); }
+    .ms-layout.is-drawer-closed { grid-template-columns: minmax(320px, 1fr); }
     .ms-inspector-panel { grid-column: 1 / -1; }
     .ms-inspector-panel { position: static; max-height: none; }
     .ms-inspector-panel .ms-panel-body { max-height: none; }
@@ -345,6 +351,7 @@
 
 @media (max-width: 760px) {
     .ms-layout { display: flex; flex-direction: column; }
+    .ms-layout.is-drawer-closed { display: block; }
     .ms-layout > .ms-panel { width: 100%; }
     .ms-canvas-panel { order: -1; }
     .ms-canvas-wrap { min-height: 320px; }
