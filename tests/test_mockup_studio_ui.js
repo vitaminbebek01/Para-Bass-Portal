@@ -2,11 +2,18 @@ const { chromium } = require('playwright');
 const crypto = require('crypto');
 const assert = require('assert');
 const fs = require('fs');
+const path = require('path');
 
 const baseUrl = process.env.MOCKUP_TEST_URL || 'http://localhost:8000';
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69d9WQAAAABJRU5ErkJggg==', 'base64');
 const largePng = Buffer.concat([png, Buffer.alloc(20 * 1024 * 1024 - png.length)]);
 const now = () => new Date().toISOString();
+const qaOutputDir = process.env.MOCKUP_QA_OUTPUT_DIR;
+const writeQaArtifact = (name, bytes) => {
+    if (!qaOutputDir) return;
+    fs.mkdirSync(qaOutputDir, { recursive: true });
+    fs.writeFileSync(path.join(qaOutputDir, name), bytes);
+};
 const slotImportDocument = (slots) => JSON.stringify({ format: 'parabass-slots', version: 1, canvas: { width: 2000, height: 2000, coordinateSystem: 'normalized_0_1000' }, slots });
 const importedSlot = (id, index = 0) => ({
     id, name: index ? `JSON Slot ${index + 1}` : 'Ön Hero',
@@ -210,6 +217,19 @@ async function mockStorage(route) {
     const readPngPixel = async (buffer, logicalX, logicalY) => page.evaluate(async ({ base64, logicalX, logicalY }) => {
         const image=new Image();image.src='data:image/png;base64,'+base64;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const context=canvas.getContext('2d');context.drawImage(image,0,0);const x=Math.max(0,Math.min(canvas.width-1,Math.round(logicalX/2000*(canvas.width-1)))),y=Math.max(0,Math.min(canvas.height-1,Math.round(logicalY/2000*(canvas.height-1))));return Array.from(context.getImageData(x,y,1,1).data);
     }, { base64: buffer.toString('base64'), logicalX, logicalY });
+    const analyzePerspectiveProducts = async (buffer) => page.evaluate(async (base64) => {
+        const image=new Image();image.src='data:image/png;base64,'+base64;await image.decode();
+        const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const context=canvas.getContext('2d');context.drawImage(image,0,0);
+        const pixels=context.getImageData(0,0,canvas.width,canvas.height).data,width=canvas.width,height=canvas.height,mask=new Uint8Array(width*height),seen=new Uint8Array(width*height);
+        for(let index=0;index<width*height;index+=1){const offset=index*4,r=pixels[offset],g=pixels[offset+1],b=pixels[offset+2];if(r>145&&r>g*1.35&&r>b*1.25)mask[index]=1;}
+        const components=[];
+        for(let start=0;start<mask.length;start+=1){if(!mask[start]||seen[start])continue;const queue=[start];seen[start]=1;let cursor=0,left=width,right=0,top=height,bottom=0,count=0;
+            while(cursor<queue.length){const current=queue[cursor++],x=current%width,y=Math.floor(current/width);left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);count+=1;
+                for(const next of [current-1,current+1,current-width,current+width]){if(next<0||next>=mask.length||seen[next]||!mask[next])continue;const nx=next%width;if(Math.abs(nx-x)>1)continue;seen[next]=1;queue.push(next);}}
+            if(count>100)components.push({left,right,top,bottom,count,width:right-left+1,height:bottom-top+1,cx:(left+right)/2,cy:(top+bottom)/2,nx:(left+right)/(2*width),ny:(top+bottom)/(2*height),nw:(right-left+1)/width,nh:(bottom-top+1)/height});
+        }
+        return components.sort((a,b)=>a.cy-b.cy||a.cx-b.cx);
+    }, buffer.toString('base64'));
 
     try {
         await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
@@ -824,6 +844,67 @@ async function mockStorage(route) {
         await page.locator('.ms-template-card').filter({ hasText: 'Test JSON Nine Slots' }).getByRole('button', { name: 'Aç/Düzenle' }).click();
         await page.waitForFunction(() => document.querySelectorAll('.ms-layer').length === 9);
         assert.strictEqual(await page.locator('.ms-layer').count(), 9, 'Şablon yeniden açılınca JSON slotları korunmalı');
+
+        await page.locator('[data-view="templates"]').click();
+        await page.locator('#msNewTemplateBtn').click();
+        const qaRows=[
+            {y:190,width:170,height:78,angles:[-7,0,7]},
+            {y:485,width:205,height:94,angles:[-6,1,8]},
+            {y:790,width:240,height:110,angles:[-5,2,9]}
+        ];
+        const qaCenters=[185,500,815];
+        const rotatePoint=(x,y,angle)=>{const radians=angle*Math.PI/180,cos=Math.cos(radians),sin=Math.sin(radians);return [x*cos-y*sin,x*sin+y*cos];};
+        const qaQuads=[];
+        qaRows.forEach((row,rowIndex)=>qaCenters.forEach((centerX,columnIndex)=>{
+            const angle=row.angles[columnIndex],halfWidth=row.width/2,halfHeight=row.height/2;
+            const local=[[-halfWidth*.82,-halfHeight],[halfWidth*.82,-halfHeight],[halfWidth,halfHeight],[-halfWidth,halfHeight]];
+            qaQuads.push(local.map(([x,y])=>{const [rx,ry]=rotatePoint(x,y,angle);return [centerX+rx,row.y+ry];}));
+        }));
+        const qaScenePng=Buffer.from(await page.evaluate((quads)=>{const canvas=document.createElement('canvas');canvas.width=2000;canvas.height=2000;const context=canvas.getContext('2d');
+            const gradient=context.createLinearGradient(0,0,0,2000);gradient.addColorStop(0,'#f4efe7');gradient.addColorStop(1,'#d7c4aa');context.fillStyle=gradient;context.fillRect(0,0,2000,2000);
+            const colors=[['#d9bf99','#a98057','#8d6948'],['#dfc8a5','#af865e','#94704e'],['#e6d1b0','#b98e64','#9d7652']];
+            quads.forEach((quad,index)=>{const points=quad.map(([x,y])=>[x*2,y*2]),row=Math.floor(index/3),depth=34+row*8;context.beginPath();context.moveTo(...points[0]);points.slice(1).forEach(point=>context.lineTo(...point));context.closePath();context.fillStyle=colors[row][0];context.fill();context.strokeStyle='rgba(94,62,35,.28)';context.lineWidth=3;context.stroke();
+                context.beginPath();context.moveTo(...points[3]);context.lineTo(...points[2]);context.lineTo(points[2][0],points[2][1]+depth);context.lineTo(points[3][0],points[3][1]+depth);context.closePath();context.fillStyle=colors[row][1];context.fill();
+                context.beginPath();context.moveTo(...points[1]);context.lineTo(...points[2]);context.lineTo(points[2][0],points[2][1]+depth);context.lineTo(points[1][0],points[1][1]+depth);context.closePath();context.fillStyle=colors[row][2];context.fill();});
+            return canvas.toDataURL('image/png').split(',')[1];
+        },qaQuads),'base64');
+        const qaHeartPng=Buffer.from(await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=360;canvas.height=320;const context=canvas.getContext('2d');context.clearRect(0,0,360,320);context.beginPath();context.moveTo(180,292);context.bezierCurveTo(145,250,30,180,30,95);context.bezierCurveTo(30,18,125,0,180,72);context.bezierCurveTo(235,0,330,18,330,95);context.bezierCurveTo(330,180,215,250,180,292);context.closePath();context.fillStyle='#d8424e';context.fill();context.lineWidth=10;context.strokeStyle='#9e2633';context.stroke();context.fillStyle='#f0c66a';context.fillRect(82,125,196,52);context.fillStyle='#3b211d';context.font='bold 38px Arial';context.textAlign='center';context.textBaseline='middle';context.fillText('LOVE',180,152);context.strokeStyle='rgba(255,255,255,.7)';context.lineWidth=5;context.beginPath();context.moveTo(92,92);context.quadraticCurveTo(132,45,164,82);context.stroke();return canvas.toDataURL('image/png').split(',')[1];}),'base64');
+        db.fixtureBodies.set('qa-nine-box-scene.png',qaScenePng);db.fixtureBodies.set('qa-heart-product.png',qaHeartPng);
+        await page.locator('#msSceneInput').setInputFiles({name:'qa-nine-box-scene.png',mimeType:'image/png',buffer:qaScenePng});
+        await page.getByText(/kaydetmeden slot ekleyebilirsiniz/).waitFor();
+        await page.locator('#msEditorProductInput').setInputFiles({name:'qa-heart-product.png',mimeType:'image/png',buffer:qaHeartPng});
+        await page.getByText(/tüm slotlarda önizlemeye alındı/).waitFor();
+        const qaSlots=qaQuads.map((quad,index)=>({id:`slot-${String(index+1).padStart(3,'0')}`,name:`QA Slot ${index+1}`,clipPolygon:quad,derivePerspectiveFromClip:true,fitMode:'contain',fitPaddingPercent:12,
+            foregroundPolygons:[{label:`box_front_${index+1}`,points:[quad[3],quad[2],[quad[2][0],quad[2][1]+10],[quad[3][0],quad[3][1]+10]]}],effects:{blur:0,opacity:1,brightness:0},shadow:{enabled:true,color:'#4b3324',opacity:.34,blur:13,offsetX:5,offsetY:9},depthOrder:index+1}));
+        await page.locator('#msJsonImportBtn').click();await page.locator('#msJsonInput').fill(slotImportDocument([qaSlots[0]]));await page.locator('#msJsonValidateBtn').click();await page.locator('#msJsonCreateBtn').click();await page.getByText(/1 slot JSON’dan oluşturuldu; 1 foreground poligonu eklendi/).waitFor();
+        if((await page.locator('#msToggleGrid').textContent()).includes('Açık'))await page.locator('#msToggleGrid').click();
+        if((await page.locator('#msToggleGuides').textContent()).includes('Açık'))await page.locator('#msToggleGuides').click();
+        await page.waitForTimeout(350);const slot001Preview=await page.locator('#mockupCanvasHost').screenshot(),slot001Products=await analyzePerspectiveProducts(slot001Preview);
+        assert.strictEqual(slot001Products.length,1,'slot-001 tek ürün olarak render edilmeli');assert(slot001Products[0].width/slot001Products[0].height>.9&&slot001Products[0].width/slot001Products[0].height<1.4,'slot-001 ürün oranını korumalı');
+        writeQaArtifact('mockup-perspective-slot-001-preview.png',slot001Preview);await page.locator('#msUndoBtn').click();await page.waitForFunction(()=>document.querySelectorAll('.ms-layer').length===1);
+        await page.locator('#msJsonImportBtn').click();await page.locator('#msJsonInput').fill(slotImportDocument(qaSlots));await page.locator('#msJsonValidateBtn').click();
+        assert.match(await page.locator('#msJsonValidation').textContent(),/9 slot bulundu/,'QA sahnesinin dokuz slotu doğrulanmalı');
+        await page.locator('#msJsonCreateBtn').click();await page.getByText(/9 slot JSON’dan oluşturuldu; 9 foreground poligonu eklendi/).waitFor();
+        await page.waitForTimeout(500);
+        const qaPreview=await page.locator('#mockupCanvasHost').screenshot();writeQaArtifact('mockup-perspective-new-preview.png',qaPreview);
+        const previewProducts=await analyzePerspectiveProducts(qaPreview);assert.strictEqual(previewProducts.length,9,'Önizlemede dokuz bağımsız kalp görünmeli');
+        await page.locator('#msEditorName').fill('QA Nine Box Perspective');await page.locator('#msEditorName').press('Tab');await page.locator('#msSaveBtn').click();await page.getByText(/Şablon v1 olarak kaydedildi/).waitFor();
+        const qaSaved=db.templates.find(template=>template.name==='QA Nine Box Perspective');
+        assert.strictEqual(qaSaved.document.layers.filter(layer=>layer.type==='product_slot'&&layer.frame.shadow.enabled).length,9,'Dokuz ürünün temas gölgesi açık kalmalı');
+        await page.locator('[data-view="templates"]').click();while(await page.locator('.ms-template-card.is-selected').count())await page.locator('.ms-template-card.is-selected').first().click();
+        await page.locator('.ms-template-card').filter({hasText:'QA Nine Box Perspective'}).click();await page.locator('[data-view="create"]').click();await page.waitForFunction(()=>document.querySelectorAll('#msCreateVersion option').length>0);
+        await page.locator('.ms-product-card').filter({hasText:'qa-heart-product.png'}).locator('.ms-product-select').click();await page.locator('#msOutputName').fill('QA Nine Box Perspective Output');await page.locator('#msGenerateBtn').click();
+        await page.getByText('1 kalıcı çıktı oluşturuldu.').waitFor({timeout:30000});
+        const qaOutput=db.outputs.find(output=>output.name==='QA Nine Box Perspective Output'),qaOutputBytes=db.storageBodies.get(qaOutput.export_path);assert(qaOutputBytes&&qaOutputBytes.length,'Dokuz slotlu 2000×2000 çıktı oluşmalı');
+        writeQaArtifact('mockup-perspective-new-2000x2000.png',qaOutputBytes);
+        const outputProducts=await analyzePerspectiveProducts(qaOutputBytes);assert.strictEqual(outputProducts.length,9,'2000×2000 çıktıda dokuz bağımsız kalp görünmeli');
+        const outputRows=[outputProducts.slice(0,3),outputProducts.slice(3,6),outputProducts.slice(6,9)];
+        outputRows.forEach((row,index)=>{const widths=row.map(item=>item.width),ratio=Math.max(...widths)/Math.min(...widths);assert(ratio<1.18,`Satır ${index+1} aynı fiziksel ölçüyü korumalı`);row.forEach(item=>assert(item.width/item.height>.9&&item.width/item.height<1.4,'Kalp gereksiz biçimde ezilmemeli veya uzatılmamalı'));});
+        const rowSizes=outputRows.map(row=>row.reduce((sum,item)=>sum+item.width*item.height,0)/row.length);assert(rowSizes[0]<rowSizes[1]&&rowSizes[1]<rowSizes[2],'Arka, orta ve ön sıra yalnız sahne derinliği kadar kademeli büyümeli');
+        previewProducts.forEach((preview,index)=>{const output=outputProducts[index],difference=Math.max(Math.abs(preview.nx-output.nx),Math.abs(preview.ny-output.ny),Math.abs(preview.nw-output.nw),Math.abs(preview.nh-output.nh));assert(difference<.012,'Önizleme ve 2000×2000 ortak render geometrisi eşleşmeli');});
+        const legacyBytes=Buffer.from(await page.evaluate(async({sceneBase64,productBase64,quads})=>{const load=async(base64)=>{const image=new Image();image.src='data:image/png;base64,'+base64;await image.decode();return image;},scene=await load(sceneBase64),product=await load(productBase64),canvas=document.createElement('canvas');canvas.width=2000;canvas.height=2000;const context=canvas.getContext('2d');context.drawImage(scene,0,0,2000,2000);
+            quads.forEach(quad=>{const points=quad.map(([x,y])=>({x:x*2,y:y*2})),tl=points[0],tr=points[1],bl=points[3];context.save();context.beginPath();context.moveTo(tl.x,tl.y);points.slice(1).forEach(point=>context.lineTo(point.x,point.y));context.closePath();context.clip();context.shadowColor='rgba(75,51,36,.34)';context.shadowBlur=13;context.shadowOffsetX=5;context.shadowOffsetY=9;context.transform((tr.x-tl.x)/product.width,(tr.y-tl.y)/product.width,(bl.x-tl.x)/product.height,(bl.y-tl.y)/product.height,tl.x,tl.y);context.drawImage(product,0,0);context.restore();});return canvas.toDataURL('image/png').split(',')[1];},{sceneBase64:qaScenePng.toString('base64'),productBase64:qaHeartPng.toString('base64'),quads:qaQuads}),'base64');
+        writeQaArtifact('mockup-perspective-legacy-baseline-2000x2000.png',legacyBytes);
 
         await page.locator('[data-view="templates"]').click();
         await page.locator('#msNewTemplateBtn').click();

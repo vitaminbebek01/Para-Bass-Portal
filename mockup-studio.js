@@ -320,13 +320,6 @@
         return crosses.every((value)=>value>1e-6);
     }
 
-    function quadAspect(corners) {
-        const distance=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y);
-        const width=(distance(corners[0],corners[1])+distance(corners[3],corners[2]))/2;
-        const height=(distance(corners[0],corners[3])+distance(corners[1],corners[2]))/2;
-        return Math.max(.001,width)/Math.max(.001,height);
-    }
-
     function solveLinearSystem(matrix, values) {
         const size = values.length;
         const rows = matrix.map((row, index) => row.slice().concat(values[index]));
@@ -366,23 +359,21 @@
         };
     }
 
-    function drawImageTriangle(context, image, source, target) {
-        const x0 = source[0].x, y0 = source[0].y, x1 = source[1].x, y1 = source[1].y, x2 = source[2].x, y2 = source[2].y;
-        const denominator = x0 * (y1 - y2) + x1 * (y2 - y0) + x2 * (y0 - y1);
-        if (Math.abs(denominator) < 1e-8) return;
-        const a = (target[0].x * (y1 - y2) + target[1].x * (y2 - y0) + target[2].x * (y0 - y1)) / denominator;
-        const c = (target[0].x * (x2 - x1) + target[1].x * (x0 - x2) + target[2].x * (x1 - x0)) / denominator;
-        const e = (target[0].x * (x1 * y2 - x2 * y1) + target[1].x * (x2 * y0 - x0 * y2) + target[2].x * (x0 * y1 - x1 * y0)) / denominator;
-        const b = (target[0].y * (y1 - y2) + target[1].y * (y2 - y0) + target[2].y * (y0 - y1)) / denominator;
-        const d = (target[0].y * (x2 - x1) + target[1].y * (x0 - x2) + target[2].y * (x1 - x0)) / denominator;
-        const f = (target[0].y * (x1 * y2 - x2 * y1) + target[1].y * (x2 * y0 - x0 * y2) + target[2].y * (x0 * y1 - x1 * y0)) / denominator;
-        context.save();
-        context.beginPath();
-        context.moveTo(target[0].x, target[0].y); context.lineTo(target[1].x, target[1].y); context.lineTo(target[2].x, target[2].y); context.closePath();
-        context.clip();
-        context.transform(a, b, c, d, e, f);
-        context.drawImage(image, 0, 0);
-        context.restore();
+    function perspectiveObjectPlacement(corners, crop, sourceWidth, sourceHeight) {
+        const homography = homographyForQuad(corners);
+        const center = mapHomography(homography, .5, .5);
+        const left = mapHomography(homography, 0, .5), right = mapHomography(homography, 1, .5);
+        const top = mapHomography(homography, .5, 0), bottom = mapHomography(homography, .5, 1);
+        const availableWidth = Math.hypot(right.x-left.x,right.y-left.y);
+        const availableHeight = Math.hypot(bottom.x-top.x,bottom.y-top.y);
+        const cropWidth = Math.max(1,crop.width*sourceWidth),cropHeight=Math.max(1,crop.height*sourceHeight);
+        const scale = Math.min(availableWidth/cropWidth,availableHeight/cropHeight);
+        return {
+            center,
+            angle: Math.atan2(right.y-left.y,right.x-left.x),
+            width: cropWidth*scale,
+            height: cropHeight*scale
+        };
     }
 
     function renderPerspectiveBitmap(image, frame) {
@@ -391,31 +382,18 @@
         const smartFit = normalizeSmartFit(frame.smartFit || {});
         const corners = insetQuad(perspective.corners, smartFit.padding);
         if(!validPerspectiveQuad(corners)){setStatus('Perspektif dörtgeni ters, kesişen veya geçersiz; ürün render edilmedi.',true);return canvas;}
-        const homography = homographyForQuad(corners);
         const crop = frame.fitMode==='contain' ? alphaBounds(image) : smartFit.crop;
         const sourceWidth=image.naturalWidth||image.width,sourceHeight=image.naturalHeight||image.height;
         const left = crop.x * sourceWidth, top = crop.y * sourceHeight;
         const width = crop.width * sourceWidth, height = crop.height * sourceHeight;
-        const sourceAspect=Math.max(.001,width)/Math.max(.001,height),targetAspect=quadAspect(corners);
-        const placement={x:0,y:0,width:1,height:1};
-        if(frame.fitMode==='contain'){
-            if(sourceAspect>targetAspect){placement.height=targetAspect/sourceAspect;placement.y=(1-placement.height)/2;}
-            else{placement.width=sourceAspect/targetAspect;placement.x=(1-placement.width)/2;}
-        }
-        const divisions = 14;
-        for (let row = 0; row < divisions; row += 1) {
-            for (let column = 0; column < divisions; column += 1) {
-                const u0 = column / divisions, v0 = row / divisions, u1 = (column + 1) / divisions, v1 = (row + 1) / divisions;
-                const source = {
-                    tl: { x: left + u0 * width, y: top + v0 * height }, tr: { x: left + u1 * width, y: top + v0 * height },
-                    br: { x: left + u1 * width, y: top + v1 * height }, bl: { x: left + u0 * width, y: top + v1 * height }
-                };
-                const du0=placement.x+u0*placement.width,dv0=placement.y+v0*placement.height,du1=placement.x+u1*placement.width,dv1=placement.y+v1*placement.height;
-                const target = { tl: mapHomography(homography, du0, dv0), tr: mapHomography(homography, du1, dv0), br: mapHomography(homography, du1, dv1), bl: mapHomography(homography, du0, dv1) };
-                drawImageTriangle(context, image, [source.tl, source.tr, source.br], [target.tl, target.tr, target.br]);
-                drawImageTriangle(context, image, [source.tl, source.br, source.bl], [target.tl, target.br, target.bl]);
-            }
-        }
+        const placement=perspectiveObjectPlacement(corners,crop,sourceWidth,sourceHeight);
+        const thickness=Math.max(1.5,Math.min(8,Math.min(placement.width,placement.height)*.018));
+        context.save();context.translate(placement.center.x,placement.center.y);context.rotate(placement.angle);
+        context.globalAlpha=.58;context.filter='brightness(0.42) saturate(0.72)';
+        for(let offset=thickness;offset>=1;offset-=1)context.drawImage(image,left,top,width,height,-placement.width/2,-placement.height/2+offset,placement.width,placement.height);
+        context.globalAlpha=1;context.filter='none';
+        context.drawImage(image,left,top,width,height,-placement.width/2,-placement.height/2,placement.width,placement.height);
+        context.restore();
         return canvas;
     }
 
